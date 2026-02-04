@@ -77,7 +77,7 @@ curl -X POST http://localhost:8888/api/intelligence/analyze-target \
 ```
 
 
-### Installation and Setting Up Guide for various AI Clients:
+### AI Clients:
 
 <details>
 <summary>Installation & Demo Video</summary>
