@@ -1,85 +1,65 @@
-FROM kalilinux/kali-rolling  
-  
-ENV DEBIAN_FRONTEND=noninteractive  
-ENV HEXSTRIKE_PORT=8888  
-  
-# Install system dependencies and build tools  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    build-essential \  
-    python3-dev \  
-    python3 python3-pip python3-venv \  
-    git curl wget sudo gnupg2 ca-certificates \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Network & Reconnaissance Tools (25+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    nmap masscan rustscan autorecon amass subfinder nuclei dnsenum \  
-    responder netexec enum4linux-ng enum4linux smbmap rpcclient \  
-    nbtscan arp-scan fierce theharvester \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Web Application Security Tools (40+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    gobuster dirb ffuf feroxbuster dirsearch nikto sqlmap wpscan \  
-    katana httpx dalfox jaeles hakrawler gau waybackurls wafw00f \  
-    arjun paramspider x8 wfuzz dotdotpwn xsser \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Authentication & Password Security Tools (12+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    hydra john hashcat medusa patator hash-identifier ophcrack \  
-    evil-winrm crackmapexec \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Binary Analysis & Reverse Engineering Tools (25+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    gdb radare2 binwalk ropgadget checksec strings objdump \  
-    readelf xxd hexdump file ltrace strace \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Cloud & Container Security Tools (20+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    prowler scout-suite trivy kube-hunter kube-bench \  
-    docker-bench-security checkov terrascan falco clair \  
-    awscli azure-cli gcloud kubectl helm \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# CTF & Forensics Tools (20+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    volatility3 foremost steghide exiftool photorec testdisk \  
-    scalpel bulk-extractor sleuthkit autopsy stegsolve zsteg outguess \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# OSINT & Intelligence Tools (20+ tools)  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    sherlock recon-ng maltego spiderfoot shodan-cli censys-cli \  
-    whois dig nslookup host dnsrecon sublist3r \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Browser Requirements  
-RUN apt-get update && apt-get install -y --no-install-recommends \  
-    chromium chromium-driver \  
-    && rm -rf /var/lib/apt/lists/*  
-  
-# Create virtual environment  
-RUN python3 -m venv /opt/hexstrike-venv  
-ENV PATH="/opt/hexstrike-venv/bin:$PATH"  
-  
-WORKDIR /app  
-  
-# Copy and install Python dependencies  
-COPY requirements.txt .  
-RUN pip3 install --no-cache-dir -r requirements.txt  
-  
-# Copy application code  
-COPY . .  
-  
-# Create chromium symlink for AI agent compatibility  
-RUN ln -s /usr/bin/chromium /usr/bin/google-chrome  
-  
-EXPOSE 8888  
-  
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \  
-  CMD curl -f http://localhost:8888/health || exit 1  
-  
+FROM kalilinux/kali-rolling
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HEXSTRIKE_PORT=8888
+ENV GOPATH=/go
+ENV PATH="$GOPATH/bin:/opt/hexstrike-venv/bin:$PATH"
+
+# Install base system & build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3 python3-pip python3-venv git curl wget sudo \
+    gnupg2 ca-certificates golang gcc libc6-dev pkg-config unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install most Kali security tools (CLI only)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Network recon & scanning
+    nmap masscan rustscan amass subfinder autorecon dnsenum theharvester \
+    arp-scan nbtscan responder enum4linux smbmap rpcclient netexec \
+    # Web security (CLI tools)
+    gobuster dirb ffuf feroxbuster dirsearch httpx wafw00f sqlmap nikto wpscan \
+    # Auth & password tools
+    hydra john hashcat medusa patator evil-winrm hash-identifier ophcrack crackmapexec \
+    # Binary & forensics
+    gdb radare2 binwalk ropgadget checksec strings objdump readelf xxd hexdump file \
+    volatility3 foremost steghide exiftool photorec testdisk scalpel bulk-extractor sleuthkit \
+    # Cloud & container
+    trivy kube-hunter kube-bench docker-bench-security prowler scout-suite checkov terrascan falco \
+    awscli azure-cli gcloud kubectl helm \
+    # OSINT / misc
+    whois dnsutils host \
+ && rm -rf /var/lib/apt/lists/*
+
+# Go installs for popular Go-based tools
+RUN go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest \
+ && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
+ && go install github.com/projectdiscovery/katana/cmd/katana@latest \
+ && go install github.com/hahwul/dalfox/v2@latest \
+ && go install github.com/jaeles-project/jaeles/v2@latest
+
+# Python environment for HexStrike
+RUN python3 -m venv /opt/hexstrike-venv
+
+# Copy and install Python dependencies
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create chromium symlink for headless browser agent usage
+RUN apt-get update && apt-get install -y --no-install-recommends chromium chromium-driver \
+ && ln -s /usr/bin/chromium /usr/bin/google-chrome \
+ && rm -rf /var/lib/apt/lists/*
+
+# Expose server port
+EXPOSE 8888
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8888/health || exit 1
+
+# Default command to start HexStrike AI
 CMD ["python3", "hexstrike_server.py", "--port", "8888"]
