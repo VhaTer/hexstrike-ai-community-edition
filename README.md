@@ -15,7 +15,7 @@
 
 **Advanced AI-powered penetration testing MCP framework with 150+ security tools and 12+ autonomous AI agents**
 
-[📋 What's New](#whats-new-in-v60) • [🏗️ Architecture](#architecture-overview) • [🚀 Installation](#installation) • [🛠️ Features](#features) • [🤖 AI Agents](#ai-agents) • [📡 API Reference](#api-reference)
+[📡 Wiki](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki)
 
 </div>
 
@@ -67,9 +67,13 @@ source hexstrike-env/bin/activate  # Linux/Mac
 # 3. Install Python dependencies
 pip3 install -r requirements.txt
 
+# 4. Start the MCP server
+python3 hexstrike_server.py
 ```
 
 ### Installation and Setting Up Guide for various AI Clients:
+
+[Install Security Tools - Wiki](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/Install-Security-Tools)
 
 #### Installation & Demo Video
 
@@ -88,44 +92,6 @@ You can install and run HexStrike AI MCPs with various AI clients, including:
 
 Refer to the video above for step-by-step instructions and integration examples for these platforms.
 
-
-
-### Install Security Tools
-
-**Core Tools (Essential):**
-```bash
-# Network & Reconnaissance
-nmap masscan rustscan amass subfinder nuclei fierce dnsenum
-autorecon theharvester responder netexec enum4linux-ng
-
-# Web Application Security
-gobuster feroxbuster dirsearch ffuf dirb httpx katana
-nikto sqlmap wpscan arjun paramspider dalfox wafw00f
-
-# Password & Authentication
-hydra john hashcat medusa patator crackmapexec
-evil-winrm hash-identifier ophcrack
-
-# Binary Analysis & Reverse Engineering
-gdb radare2 binwalk ghidra checksec strings objdump
-volatility3 foremost steghide exiftool
-```
-
-**Cloud Security Tools:**
-```bash
-prowler scout-suite trivy
-kube-hunter kube-bench docker-bench-security
-```
-
-**Browser Agent Requirements:**
-```bash
-# Chrome/Chromium for Browser Agent
-sudo apt install chromium-browser chromium-chromedriver
-# OR install Google Chrome
-wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-sudo apt update && sudo apt install google-chrome-stable
-```
 
 ### Start the Server
 
@@ -445,11 +411,6 @@ Configure VS Code settings in `.vscode/settings.json`:
 
 ---
 
-## Wiki
-[API Reference](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/API-Reference)
-
----
-
 ## Usage Examples
 When writing your prompt, you generally can't start with just a simple "i want you to penetration test site X.com" as the LLM's are generally setup with some level of ethics. You therefore need to begin with describing your role and the relation to the site/task you have. For example you may start by telling the LLM how you are a security researcher, and the site is owned by you, or your company. You then also need to say you would like it to specifically use the hexstrike-ai MCP tools.
 So a complete example might be:
@@ -480,40 +441,7 @@ AI Agent: "Thank you for clarifying ownership and intent. To proceed with a pene
 ---
 
 ## Troubleshooting
-
-### Common Issues
-
-1. **MCP Connection Failed**:
-   ```bash
-   # Check if server is running
-   netstat -tlnp | grep 8888
-   
-   # Restart server
-   python3 hexstrike_server.py
-   ```
-
-2. **Security Tools Not Found**:
-   ```bash
-   # Check tool availability
-   which nmap gobuster nuclei
-   
-   # Install missing tools from their official sources
-   ```
-
-3. **AI Agent Cannot Connect**:
-   ```bash
-   # Verify MCP configuration paths
-   # Check server logs for connection attempts
-   python3 hexstrike_mcp.py --debug
-   ```
-
-### Debug Mode
-
-Enable debug mode for detailed logging:
-```bash
-python3 hexstrike_server.py --debug
-python3 hexstrike_mcp.py --debug
-```
+[Troubleshooting - Wiki](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/Troubleshooting)
 
 ---
 
@@ -563,30 +491,6 @@ MIT License - see LICENSE file for details.
 ## Original Author
 
 **m0x4m4** - [www.0x4m4.com](https://www.0x4m4.com) | [HexStrike](https://www.hexstrike.com)
-
----
-
-## Official Sponsor
-
-<p align="center">
-  <strong>Sponsored By LeaksAPI - Live Dark Web Data leak checker</strong>
-</p>
-
-<p align="center">
-  <a href="https://leak-check.net">
-    <img src="assets/leaksapi-logo.png" alt="LeaksAPI Logo" width="150" />
-  </a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://leak-check.net">
-    <img src="assets/leaksapi-banner.png" alt="LeaksAPI Banner" width="450" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://leak-check.net">
-    <img src="https://img.shields.io/badge/Visit-leak--check.net-00D4AA?style=for-the-badge&logo=shield&logoColor=white" alt="Visit leak-check.net" />
-  </a>
-</p>
 
 ---
 
