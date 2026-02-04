@@ -539,6 +539,24 @@ python3 hexstrike_mcp.py --debug
 
 ---
 
+:warning:  Disclaimer 
+
+This project is intended solely for authorized security testing, research, and educational purposes.  
+You may only use this software on systems, networks, or applications for which you have explicit, written permission from the owner.
+
+Unauthorized use of this software is strictly prohibited and may violate local, national, or international laws.  
+The authors, contributors, and maintainers of this project:
+
+- do not endorse any malicious or illegal activity,  
+- cannot be held responsible for misuse of the software,  
+- assume no liability for damages, data loss, service disruption, or legal consequences resulting from its use.
+
+This software is provided “as is”, without warranty of any kind, express or implied.  
+By using this project, you agree that you are solely responsible for your actions and compliance with applicable laws and regulations.
+
+---
+---
+
 ## Contributing
 
 We welcome contributions from the cybersecurity and AI community!
@@ -562,30 +580,6 @@ MIT License - see LICENSE file for details.
 ## Original Author
 
 **m0x4m4** - [www.0x4m4.com](https://www.0x4m4.com) | [HexStrike](https://www.hexstrike.com)
-
----
-
-## Official Sponsor
-
-<p align="center">
-  <strong>Sponsored By LeaksAPI - Live Dark Web Data leak checker</strong>
-</p>
-
-<p align="center">
-  <a href="https://leak-check.net">
-    <img src="assets/leaksapi-logo.png" alt="LeaksAPI Logo" width="150" />
-  </a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://leak-check.net">
-    <img src="assets/leaksapi-banner.png" alt="LeaksAPI Banner" width="450" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://leak-check.net">
-    <img src="https://img.shields.io/badge/Visit-leak--check.net-00D4AA?style=for-the-badge&logo=shield&logoColor=white" alt="Visit leak-check.net" />
-  </a>
-</p>
 
 ---
 
