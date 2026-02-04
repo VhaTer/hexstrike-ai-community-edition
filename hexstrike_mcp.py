@@ -5,14 +5,6 @@ HexStrike AI MCP Client - Enhanced AI Agent Communication Interface
 Enhanced with AI-Powered Intelligence & Automation
 🚀 Bug Bounty | CTF | Red Team | Security Research
 
-RECENT ENHANCEMENTS (v6.0):
-✅ Complete color consistency with reddish hacker theme
-✅ Enhanced visual output with consistent styling
-✅ Improved error handling and recovery systems
-✅ FastMCP integration for seamless AI communication
-✅ 100+ security tools with intelligent parameter optimization
-✅ Advanced logging with colored output and emojis
-
 Architecture: MCP Client for AI agent communication with HexStrike server
 Framework: FastMCP integration for tool orchestration
 """
