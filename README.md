@@ -52,6 +52,7 @@ HexStrike AI features a multi-agent architecture with autonomous AI agents, inte
 ## Installation
 
 ### Quick Setup to Run the hexstrike MCPs Server
+Many tools, such as nmap, require elevated privileges for certain features. To avoid granting permissions to each tool individually, perform the setup steps below as the `root` user.
 
 ```bash
 # 1. Clone the repository
@@ -162,13 +163,13 @@ Edit `~/.config/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "hexstrike-ai": {
-      "command": "python3",
+      "command": "/path/to/hexstrike-ai/hexstrike-env/bin/python3",
       "args": [
         "/path/to/hexstrike-ai/hexstrike_mcp.py",
         "--server",
         "http://localhost:8888"
       ],
-      "description": "HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform",
+      "description": "HexStrike AI Community Edition",
       "timeout": 300,
       "disabled": false
     }
@@ -184,7 +185,7 @@ Configure VS Code settings in `.vscode/settings.json`:
   "servers": {
     "hexstrike": {
       "type": "stdio",
-      "command": "python3",
+      "command": "/path/to/hexstrike-ai/hexstrike-env/bin/python3",
       "args": [
         "/path/to/hexstrike-ai/hexstrike_mcp.py",
         "--server",
