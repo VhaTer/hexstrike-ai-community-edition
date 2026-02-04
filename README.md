@@ -483,7 +483,7 @@ MIT License - see LICENSE file for details.
 
 ## Original Author
 
-**m0x4m4** - [www.0x4m4.com](https://www.0x4m4.com) | [HexStrike](https://www.hexstrike.com)
+**0x4m4** - [www.0x4m4.com](https://www.0x4m4.com) | [HexStrike](https://www.hexstrike.com)
 
 <div align="center">
 
