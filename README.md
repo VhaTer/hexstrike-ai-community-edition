@@ -502,15 +502,6 @@ MIT License - see LICENSE file for details.
 
 <div align="center">
 
-### **📊 Project Statistics**
-
-- **150+ Security Tools** - Comprehensive security testing arsenal
-- **12+ AI Agents** - Autonomous decision-making and workflow management
-- **4000+ Vulnerability Templates** - Nuclei integration with extensive coverage
-- **35+ Attack Categories** - From web apps to cloud infrastructure
-- **Real-time Processing** - Sub-second response times with intelligent caching
-- **99.9% Uptime** - Fault-tolerant architecture with graceful degradation
-
 ### **🚀 Ready to Transform Your AI Agents?**
 
 ---
