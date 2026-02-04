@@ -102,10 +102,6 @@ Refer to the video above for step-by-step instructions and integration examples 
 
 </details>
 
----
-
-## AI Client Integration Setup
-
 <details>
 <summary>Claude Desktop Integration or Cursor</summary>
 
