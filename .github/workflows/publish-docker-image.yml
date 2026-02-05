@@ -2,10 +2,9 @@ name: Build & Publish Docker Image
 
 on:
   push:
-    branches: ['**']
   pull_request:
-    branches: ['**']
   workflow_dispatch:
+
 
 permissions:
   contents: read
@@ -31,7 +30,8 @@ jobs:
       # 3. Convertir le nom du repo en lowercase (obligatoire pour GHCR)
       - name: Set lowercase repo slug
         run: |
-          echo "IMAGE_NAME=$(echo '${GITHUB_REPOSITORY}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          # use bash lowercase expansion so GITHUB_REPOSITORY is expanded and lowercased
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       # 4. Build & Push Docker image
       - name: Build and push Docker image
