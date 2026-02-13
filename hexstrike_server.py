@@ -127,7 +127,7 @@ class TechnologyStack(Enum):
 @dataclass
 class TargetProfile:
     """Comprehensive target analysis profile for intelligent decision making"""
-    target: str
+    target: Any
     target_type: TargetType = TargetType.UNKNOWN
     ip_addresses: List[str] = field(default_factory=list)
     open_ports: List[int] = field(default_factory=list)
