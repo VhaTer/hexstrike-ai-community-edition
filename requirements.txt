@@ -39,6 +39,12 @@ angr>=9.2.0,<10.0.0             # Binary analysis (import angr)
 bcrypt==4.0.1                   # Pin bcrypt version for passlib compatibility (fixes pwntools dependency issue)
 
 # ============================================================================
+# DATABASE CONNECTORS (CONDITIONALLY USED)
+# ============================================================================
+PyMySQL>=1.0.0,<2.0.0
+psycopg2>=2.9.0,<3.0.0
+
+# ============================================================================
 # EXTERNAL SECURITY TOOLS (150+ Tools - Install separately)
 # ============================================================================
 #
