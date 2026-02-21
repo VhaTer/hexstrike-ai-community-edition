@@ -219,10 +219,10 @@ class HexStrikeClient:
 
 TOOL_CATEGORIES = {
     "wordlist": [
-        lambda mcp, client: register_wordlist_tools(mcp, client),
+        lambda mcp, client, logger: register_wordlist_tools(mcp, client),
     ],
     "bot": [
-        lambda mcp, client: register_bot_tools(mcp, client),
+        lambda mcp, client, logger: register_bot_tools(mcp, client),
     ],
     "database": [
         lambda mcp, client, logger: register_database_tools(mcp, client, logger),
@@ -301,7 +301,7 @@ def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False, p
     if compact:
         logger.info("Compact mode: only gateway tools registered (classify_task, run_tool)")
         return mcp
-    
+    print("profiles:", profiles)
     # Determine which profiles to load
     if profiles:
         if "default" in profiles:
