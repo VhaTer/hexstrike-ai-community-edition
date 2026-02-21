@@ -21,6 +21,29 @@ import core.config_core as config_core
 from mcp.server.fastmcp import FastMCP
 from mcp_core.hexstrikecolors import HexStrikeColors
 
+from mcp_tools.gateway import register_gateway_tools
+from mcp_tools.wordlist import register_wordlist_tools
+from mcp_tools.bot import register_bot_tools
+from mcp_tools.database import register_database_tools
+from mcp_tools.core_network_scanning import register_core_network_scanning_tools
+from mcp_tools.cloud_and_container_security import register_cloud_and_container_security_tools
+from mcp_tools.file_ops_and_payload_gen import register_file_ops_and_payload_gen_tools
+from mcp_tools.python_env import register_python_env_tools
+from mcp_tools.additional_security_tools import register_additional_security_tools
+from mcp_tools.enhanced_network_scanning import register_enhanced_network_scanning_tools
+from mcp_tools.binary_analysis_and_reverse_engineering import register_binary_analysis_and_reverse_engineering_tools
+from mcp_tools.enhanced_binary_analysis_and_exploitation import register_enhanced_binary_analysis_and_exploitation_tools
+from mcp_tools.enhanced_web_app_security import register_enhanced_web_app_security_tools
+from mcp_tools.ai_payload_generation import register_ai_payload_generation_tools
+from mcp_tools.api_testing import register_api_testing_tools
+from mcp_tools.advanced_ctf_tools import register_advanced_ctf_tools
+from mcp_tools.bug_bounty_recon import register_bug_bounty_recon_tools
+from mcp_tools.system_monitoring import register_system_monitoring_tools
+from mcp_tools.process_management import register_process_management_tools
+from mcp_tools.vulnerability_intelligence import register_vulnerability_intelligence_tools
+from mcp_tools.visual_output_tools import register_visual_output_tools
+from mcp_tools.intelligent_decision_engine import register_intelligent_decision_engine_tools
+
 # Backward compatibility alias
 Colors = HexStrikeColors
 
@@ -194,13 +217,73 @@ class HexStrikeClient:
         """
         return self.safe_get("health")
 
-def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False) -> FastMCP:
+TOOL_CATEGORIES = {
+    "wordlist": [
+        lambda mcp, client: register_wordlist_tools(mcp, client),
+    ],
+    "bot": [
+        lambda mcp, client: register_bot_tools(mcp, client),
+    ],
+    "database": [
+        lambda mcp, client, logger: register_database_tools(mcp, client, logger),
+    ],
+    "core_network": [
+        lambda mcp, client, logger: register_core_network_scanning_tools(mcp, client, logger, HexStrikeColors),
+        lambda mcp, client, logger: register_enhanced_network_scanning_tools(mcp, client, logger),
+    ],
+    "cloud_container": [
+        lambda mcp, client, logger: register_cloud_and_container_security_tools(mcp, client, logger),
+    ],
+    "file_payload": [
+        lambda mcp, client, logger: register_file_ops_and_payload_gen_tools(mcp, client, logger),
+    ],
+    "python_env": [
+        lambda mcp, client, logger: register_python_env_tools(mcp, client, logger),
+    ],
+    "additional_security": [
+        lambda mcp, client, logger: register_additional_security_tools(mcp, client, logger),
+    ],
+    "binary": [
+        lambda mcp, client, logger: register_binary_analysis_and_reverse_engineering_tools(mcp, client, logger),
+        lambda mcp, client, logger: register_enhanced_binary_analysis_and_exploitation_tools(mcp, client, logger),
+    ],
+    "web_app": [
+        lambda mcp, client, logger: register_enhanced_web_app_security_tools(mcp, client, logger, HexStrikeColors),
+        lambda mcp, client, logger: register_ai_payload_generation_tools(mcp, client, logger),
+        lambda mcp, client, logger: register_api_testing_tools(mcp, client, logger),
+        lambda mcp, client, logger: register_bug_bounty_recon_tools(mcp, client, logger),
+    ],
+    "ctf": [
+        lambda mcp, client, logger: register_advanced_ctf_tools(mcp, client, logger),
+    ],
+    "monitoring": [
+        lambda mcp, client, logger: register_system_monitoring_tools(mcp, client, logger),
+        lambda mcp, client, logger: register_process_management_tools(mcp, client, logger),
+    ],
+    "vuln_intel": [
+        lambda mcp, client, logger: register_vulnerability_intelligence_tools(mcp, client, logger),
+    ],
+    "visual": [
+        lambda mcp, client, logger: register_visual_output_tools(mcp, client, logger),
+    ],
+    "ai_decision": [
+        lambda mcp, client, logger: register_intelligent_decision_engine_tools(mcp, client, logger, HexStrikeColors),
+    ],
+}
+
+DEFAULT_PROFILE = [
+    "core_network", "web_app", "binary", "monitoring", "vuln_intel", "visual", "ai_decision"
+]
+FULL_PROFILE = list(TOOL_CATEGORIES.keys())
+
+def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False, profiles: Optional[list] = None) -> FastMCP:
     """
     Set up the MCP server with all enhanced tool functions
 
     Args:
         hexstrike_client: Initialized HexStrikeClient
         compact: If True, register only classify_task and run_tool gateway tools
+        profiles: Optional list of tool profiles to load (e.g., ["core_network", "web_app"])
 
     Returns:
         Configured FastMCP instance
@@ -219,89 +302,21 @@ def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False) -
         logger.info("Compact mode: only gateway tools registered (classify_task, run_tool)")
         return mcp
     
-     # Register wordlist tools
-    from mcp_tools.wordlist import register_wordlist_tools
-    register_wordlist_tools(mcp, hexstrike_client)
+    # Determine which profiles to load
+    if profiles:
+        if "default" in profiles:
+            selected_profiles = DEFAULT_PROFILE
+        elif "full" in profiles:
+            selected_profiles = FULL_PROFILE
+        else:
+            selected_profiles = profiles
+    else:
+        selected_profiles = DEFAULT_PROFILE
 
-    # Register bot tools
-    from mcp_tools.bot import register_bot_tools
-    register_bot_tools(mcp, hexstrike_client)
-
-    # Register database tools
-    from mcp_tools.database import register_database_tools
-    register_database_tools(mcp, hexstrike_client, logger)
-
-    # Register core network scanning tools
-    from mcp_tools.core_network_scanning import register_core_network_scanning_tools
-    register_core_network_scanning_tools(mcp, hexstrike_client, logger, HexStrikeColors)
-
-    # Register cloud and container security tools
-    from mcp_tools.cloud_and_container_security import register_cloud_and_container_security_tools
-    register_cloud_and_container_security_tools(mcp, hexstrike_client, logger)
-
-    # Register file operations and payload generation tools
-    from mcp_tools.file_ops_and_payload_gen import register_file_ops_and_payload_gen_tools
-    register_file_ops_and_payload_gen_tools(mcp, hexstrike_client, logger)
-
-    # Register Python environment management tools
-    from mcp_tools.python_env import register_python_env_tools
-    register_python_env_tools(mcp, hexstrike_client, logger)
-
-    # Register additional security tools that were in the original implementation but not yet categorized
-    from mcp_tools.additional_security_tools import register_additional_security_tools
-    register_additional_security_tools(mcp, hexstrike_client, logger)
-
-    # Register enhanced network scanning and enumeration tools
-    from mcp_tools.enhanced_network_scanning import register_enhanced_network_scanning_tools
-    register_enhanced_network_scanning_tools(mcp, hexstrike_client, logger)
-
-    # Register binary analysis and reverse engineering tools
-    from mcp_tools.binary_analysis_and_reverse_engineering import register_binary_analysis_and_reverse_engineering_tools
-    register_binary_analysis_and_reverse_engineering_tools(mcp, hexstrike_client, logger)
-
-    # Register enhanced binary analysis and exploitation tools
-    from mcp_tools.enhanced_binary_analysis_and_exploitation import register_enhanced_binary_analysis_and_exploitation_tools
-    register_enhanced_binary_analysis_and_exploitation_tools(mcp, hexstrike_client, logger) 
-   
-    # Register enhanced web application security tools
-    from mcp_tools.enhanced_web_app_security import register_enhanced_web_app_security_tools
-    register_enhanced_web_app_security_tools(mcp, hexstrike_client, logger, HexStrikeColors)
-
-    # Register AI-powered payload generation and testing tools
-    from mcp_tools.ai_payload_generation import register_ai_payload_generation_tools
-    register_ai_payload_generation_tools(mcp, hexstrike_client, logger)
-
-    # Register API testing tools for comprehensive API security assessment
-    from mcp_tools.api_testing import register_api_testing_tools
-    register_api_testing_tools(mcp, hexstrike_client, logger)
-
-    # Register advanced CTF tools for competitive security challenges
-    from mcp_tools.advanced_ctf_tools import register_advanced_ctf_tools
-    register_advanced_ctf_tools(mcp, hexstrike_client, logger)
-
-    # Regular bug bounty recon tools for web endpoint discovery and parameter enumeration
-    from mcp_tools.bug_bounty_recon import register_bug_bounty_recon_tools
-    register_bug_bounty_recon_tools(mcp, hexstrike_client, logger)
-
-    # Register system monitoring tools for server health, cache stats, and telemetry
-    from mcp_tools.system_monitoring import register_system_monitoring_tools
-    register_system_monitoring_tools(mcp, hexstrike_client, logger)
-
-    # Register process management tools for advanced task handling and monitoring
-    from mcp_tools.process_management import register_process_management_tools
-    register_process_management_tools(mcp, hexstrike_client, logger)
-
-    # Register vulnerability intelligence tools for CVE analysis, exploit availability, and risk assessment
-    from mcp_tools.vulnerability_intelligence import register_vulnerability_intelligence_tools
-    register_vulnerability_intelligence_tools(mcp, hexstrike_client, logger)
-
-    # Register enhanced visual output tools for better result presentation
-    from mcp_tools.visual_output_tools import register_visual_output_tools
-    register_visual_output_tools(mcp, hexstrike_client, logger)
-    
-    # Register intelligent decision engine tools for AI-powered analysis and recommendations
-    from mcp_tools.intelligent_decision_engine import register_intelligent_decision_engine_tools
-    register_intelligent_decision_engine_tools(mcp, hexstrike_client, logger, HexStrikeColors)
+    # Register tools for each selected profile
+    for profile in selected_profiles:
+        for reg_func in TOOL_CATEGORIES.get(profile, []):
+            reg_func(mcp, hexstrike_client, logger)    
 
     return mcp
 
@@ -314,6 +329,7 @@ def parse_args():
                       help=f"Request timeout in seconds (default: {DEFAULT_REQUEST_TIMEOUT})")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--compact", action="store_true", help="Compact mode: register only classify_task and run_tool for small LLM clients")
+    parser.add_argument("--profile", nargs="+", type=str, default=[], help="Tool profile(s) to load (e.g., ctf, binary, web, api)")
     return parser.parse_args()
 
 def main():
