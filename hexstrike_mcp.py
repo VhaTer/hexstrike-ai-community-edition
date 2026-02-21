@@ -283,16 +283,12 @@ def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False, p
     Args:
         hexstrike_client: Initialized HexStrikeClient
         compact: If True, register only classify_task and run_tool gateway tools
-        profiles: Optional list of tool profiles to load (e.g., ["core_network", "web_app"])
+        profile: Optional list of tool profiles to load (e.g., ["core_network", "web_app"])
 
     Returns:
         Configured FastMCP instance
     """
     mcp = FastMCP("hexstrike-ai-mcp")
-
-    # ============================================================================
-    # GATEWAY TOOLS (always registered)
-    # ============================================================================
 
     # Register gateway tools for task classification and tool execution
     from mcp_tools.gateway import register_gateway_tools
