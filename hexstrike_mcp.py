@@ -44,6 +44,8 @@ from mcp_tools.ops.visual_output_tools import register_visual_output_tools
 from mcp_tools.ai_agents.intelligent_decision_engine import register_intelligent_decision_engine_tools
 
 from mcp_tools.web_fuzz.dirb import register_dirb_tool
+from mcp_tools.web_fuzz.ffuf import register_ffuf_tool
+
 from mcp_tools.web_scan.nikto import register_nikto_tool
 from mcp_tools.web_scan.sqlmap import register_sqlmap_tool
 from mcp_tools.web_scan.wpscan import register_wpscan_tool
@@ -53,6 +55,7 @@ from mcp_tools.password_cracking.hydra import register_hydra_tool
 from mcp_tools.password_cracking.john import register_john_tool
 
 from mcp_tools.smb_enum.enum4linux import register_enum4linux_tool
+from mcp_tools.smb_enum.netexec import register_netexec_tool
 
 # Backward compatibility alias
 Colors = HexStrikeColors
@@ -238,6 +241,7 @@ TOOL_CATEGORIES = {
     #Tools for SMB and network share enumeration (e.g., Enum4linux, NetExec, SMBMap).
     "smb_enum": [
         lambda mcp, client, logger: register_enum4linux_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_netexec_tool(mcp, client, logger),
     ],
 
     #Tools for reconnaissance and subdomain discovery (e.g., Amass, Subfinder).
@@ -246,6 +250,7 @@ TOOL_CATEGORIES = {
     #Tools for web content discovery and fuzzing (e.g., Dirb, FFuf).
     "web_fuzz": [
         lambda mcp, client, logger: register_dirb_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_ffuf_tool(mcp, client, logger),
     ],
 
     #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap).
