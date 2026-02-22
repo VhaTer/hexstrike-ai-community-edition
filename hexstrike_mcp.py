@@ -42,7 +42,7 @@ from mcp_tools.system_monitoring import register_system_monitoring_tools
 from mcp_tools.process_management import register_process_management_tools
 from mcp_tools.vulnerability_intelligence import register_vulnerability_intelligence_tools
 from mcp_tools.visual_output_tools import register_visual_output_tools
-from mcp_tools.intelligent_decision_engine import register_intelligent_decision_engine_tools
+from mcp_tools.ai_agents.intelligent_decision_engine import register_intelligent_decision_engine_tools
 
 # Backward compatibility alias
 Colors = HexStrikeColors
@@ -266,13 +266,13 @@ TOOL_CATEGORIES = {
     "visual": [
         lambda mcp, client, logger: register_visual_output_tools(mcp, client, logger),
     ],
-    "ai_decision": [
+    "ai_agents": [
         lambda mcp, client, logger: register_intelligent_decision_engine_tools(mcp, client, logger, HexStrikeColors),
     ],
 }
 
 DEFAULT_PROFILE = [
-    "core_network", "web_app", "monitoring", "vuln_intel", "visual", "ai_decision"
+    "core_network", "web_app", "monitoring", "vuln_intel", "visual", "ai_agents"
 ]
 FULL_PROFILE = list(TOOL_CATEGORIES.keys())
 
