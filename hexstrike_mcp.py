@@ -15,33 +15,32 @@ import logging
 from typing import Dict, Any, Optional
 import requests
 import time
-from datetime import datetime
 
 import core.config_core as config_core
 from mcp.server.fastmcp import FastMCP
 from mcp_core.hexstrikecolors import HexStrikeColors
 
 from mcp_tools.gateway import register_gateway_tools
-from mcp_tools.wordlist import register_wordlist_tools
+from mcp_tools.ops.wordlist import register_wordlist_tools
 from mcp_tools.automated_recon.bot import register_bot_tools
-from mcp_tools.database import register_database_tools
-from mcp_tools.core_network_scanning import register_core_network_scanning_tools
-from mcp_tools.cloud_and_container_security import register_cloud_and_container_security_tools
-from mcp_tools.file_ops_and_payload_gen import register_file_ops_and_payload_gen_tools
-from mcp_tools.python_env import register_python_env_tools
-from mcp_tools.additional_security_tools import register_additional_security_tools
-from mcp_tools.enhanced_network_scanning import register_enhanced_network_scanning_tools
-from mcp_tools.binary_analysis_and_reverse_engineering import register_binary_analysis_and_reverse_engineering_tools
-from mcp_tools.enhanced_binary_analysis_and_exploitation import register_enhanced_binary_analysis_and_exploitation_tools
-from mcp_tools.enhanced_web_app_security import register_enhanced_web_app_security_tools
-from mcp_tools.ai_payload_generation import register_ai_payload_generation_tools
-from mcp_tools.api_testing import register_api_testing_tools
-from mcp_tools.advanced_ctf_tools import register_advanced_ctf_tools
-from mcp_tools.bug_bounty_recon import register_bug_bounty_recon_tools
-from mcp_tools.system_monitoring import register_system_monitoring_tools
-from mcp_tools.process_management import register_process_management_tools
-from mcp_tools.vulnerability_intelligence import register_vulnerability_intelligence_tools
-from mcp_tools.visual_output_tools import register_visual_output_tools
+from mcp_tools.database.database import register_database_tools
+from mcp_tools.network_recon.core_network_scanning import register_core_network_scanning_tools
+from mcp_tools.cloud_container.cloud_and_container_security import register_cloud_and_container_security_tools
+from mcp_tools.ops.file_ops_and_payload_gen import register_file_ops_and_payload_gen_tools
+from mcp_tools.ops.python_env import register_python_env_tools
+from mcp_tools.web_app_security.additional_security_tools import register_additional_security_tools
+from mcp_tools.network_recon.enhanced_network_scanning import register_enhanced_network_scanning_tools
+from mcp_tools.binary_analysis.binary_analysis_and_reverse_engineering import register_binary_analysis_and_reverse_engineering_tools
+from mcp_tools.binary_analysis.enhanced_binary_analysis_and_exploitation import register_enhanced_binary_analysis_and_exploitation_tools
+from mcp_tools.web_app_security.enhanced_web_app_security import register_enhanced_web_app_security_tools
+from mcp_tools.ai_agents.ai_payload_generation import register_ai_payload_generation_tools
+from mcp_tools.web_app_security.api_testing import register_api_testing_tools
+from mcp_tools.ctf_forensics.advanced_ctf_tools import register_advanced_ctf_tools
+from mcp_tools.bug_bounty_osint.bug_bounty_recon import register_bug_bounty_recon_tools
+from mcp_tools.ops.system_monitoring import register_system_monitoring_tools
+from mcp_tools.ops.process_management import register_process_management_tools
+from mcp_tools.ops.vulnerability_intelligence import register_vulnerability_intelligence_tools
+from mcp_tools.ops.visual_output_tools import register_visual_output_tools
 from mcp_tools.ai_agents.intelligent_decision_engine import register_intelligent_decision_engine_tools
 
 # Backward compatibility alias
@@ -291,7 +290,6 @@ def setup_mcp_server(hexstrike_client: HexStrikeClient, compact: bool = False, p
     mcp = FastMCP("hexstrike-ai-mcp")
 
     # Register gateway tools for task classification and tool execution
-    from mcp_tools.gateway import register_gateway_tools
     register_gateway_tools(mcp, hexstrike_client)
 
     if compact:
