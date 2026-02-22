@@ -51,6 +51,7 @@ from mcp_tools.web_crawl.katana import register_katana_tool
 from mcp_tools.web_scan.nikto import register_nikto_tool
 from mcp_tools.web_scan.sqlmap import register_sqlmap_tool
 from mcp_tools.web_scan.wpscan import register_wpscan_tool
+from mcp_tools.web_scan.jaeles import register_jaeles_tool
 
 from mcp_tools.exploit_framework.metasploit import register_metasploit_tool
 
@@ -70,6 +71,7 @@ from mcp_tools.url_recon.waybackurls import register_waybackurls_tool
 
 from mcp_tools.param_discovery.arjun import register_arjun_tool
 from mcp_tools.param_discovery.paramspider import register_paramspider_tool
+from mcp_tools.param_discovery.x8 import register_x8_tool
 
 # Backward compatibility alias
 Colors = HexStrikeColors
@@ -283,6 +285,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_nikto_tool(mcp, client, logger),
         lambda mcp, client, logger: register_sqlmap_tool(mcp, client, logger),
         lambda mcp, client, logger: register_wpscan_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_jaeles_tool(mcp, client, logger),
     ],
 
     #Tools for automated exploitation and attack frameworks (e.g., Metasploit).
@@ -296,10 +299,11 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_waybackurls_tool(mcp, client, logger),
     ],
 
-    # Tools for parameter discovery and fuzzing (e.g., Arjun).
+    # Tools for parameter discovery and fuzzing (e.g., Arju0n, ParamSpider, x8).
     "param_discovery": [
         lambda mcp, client, logger: register_arjun_tool(mcp, client, logger),
         lambda mcp, client, logger: register_paramspider_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_x8_tool(mcp, client, logger),
     ],
 
 
