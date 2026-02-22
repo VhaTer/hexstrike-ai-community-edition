@@ -53,6 +53,7 @@ from mcp_tools.web_scan.sqlmap import register_sqlmap_tool
 from mcp_tools.web_scan.wpscan import register_wpscan_tool
 from mcp_tools.web_scan.jaeles import register_jaeles_tool
 from mcp_tools.web_scan.dalfox import register_dalfox_tool
+from mcp_tools.web_scan.burpsuite import register_burpsuite_tool
 
 from mcp_tools.exploit_framework.metasploit import register_metasploit_tool
 
@@ -79,6 +80,8 @@ from mcp_tools.web_probe.httpx import register_httpx_tool
 from mcp_tools.data_processing.anew import register_anew_tool
 
 from mcp_tools.param_fuzz.qsreplace import register_qsreplace_tool
+
+from mcp_tools.url_filter.uro import register_uro_tool
 
 # Backward compatibility alias
 Colors = HexStrikeColors
@@ -294,6 +297,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_wpscan_tool(mcp, client, logger),
         lambda mcp, client, logger: register_jaeles_tool(mcp, client, logger),
         lambda mcp, client, logger: register_dalfox_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_burpsuite_tool(mcp, client, logger),
     ],
 
     #Tools for web probing and technology detection (e.g., httpx).
@@ -327,6 +331,11 @@ TOOL_CATEGORIES = {
     #Tools for data processing and unique line filtering (e.g., anew).
     "data_processing": [
         lambda mcp, client, logger: register_anew_tool(mcp, client, logger),
+    ],
+
+    #Tools for URL filtering and duplicate removal (e.g., uro).
+    "url_filter": [
+        lambda mcp, client, logger: register_uro_tool(mcp, client, logger),
     ],
 
 
