@@ -23,7 +23,7 @@ from mcp_core.hexstrikecolors import HexStrikeColors
 
 from mcp_tools.gateway import register_gateway_tools
 from mcp_tools.wordlist import register_wordlist_tools
-from mcp_tools.bot import register_bot_tools
+from mcp_tools.automated_recon.bot import register_bot_tools
 from mcp_tools.database import register_database_tools
 from mcp_tools.core_network_scanning import register_core_network_scanning_tools
 from mcp_tools.cloud_and_container_security import register_cloud_and_container_security_tools
