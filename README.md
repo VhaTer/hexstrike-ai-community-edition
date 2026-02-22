@@ -38,6 +38,14 @@ Activate Minimal Mode for the MCP server using the `--compact` flag:
 - 🧩 Plug-and-Play Integration: Exposes just the intelligent classifier and tool execution gateway, making it easy to embed HexStrike into other platforms or CI/CD workflows.
 - 🏃 Ideal for Local Models: Great for running with smaller, local LLMs or when you want minimal overhead.
 
+### Profile Mode (`--profile`)
+
+Specify one or more tool profiles to load only the relevant categories for your workflow:
+
+- 🚀 Select profiles for targeted workflows to speed up scans and reduce resource usage.
+- 🌐 Use --profile full to enable the complete arsenal, or --profile default for the recommended set.
+
+
 ## Architecture Overview
 
 HexStrike AI features a multi-agent architecture with autonomous AI agents, intelligent decision-making, and vulnerability intelligence.
