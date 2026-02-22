@@ -43,6 +43,11 @@ from mcp_tools.ops.vulnerability_intelligence import register_vulnerability_inte
 from mcp_tools.ops.visual_output_tools import register_visual_output_tools
 from mcp_tools.ai_agents.intelligent_decision_engine import register_intelligent_decision_engine_tools
 
+from mcp_tools.web_fuzz.dirb import register_dirb_tool
+from mcp_tools.web_scan.nikto import register_nikto_tool
+from mcp_tools.web_scan.sqlmap import register_sqlmap_tool
+from mcp_tools.exploit_framework.metasploit import register_metasploit_tool
+
 # Backward compatibility alias
 Colors = HexStrikeColors
 
@@ -217,6 +222,34 @@ class HexStrikeClient:
         return self.safe_get("health")
 
 TOOL_CATEGORIES = {
+
+    #Tools for brute-forcing and cracking password hashes (e.g., Hydra, John, Hashcat).
+    "password_cracking": [],
+
+    #Tools for SMB and network share enumeration (e.g., Enum4linux, NetExec, SMBMap).
+    "smb_enum": [],
+
+    #Tools for reconnaissance and subdomain discovery (e.g., Amass, Subfinder).
+    "recon": [],
+
+    #Tools for web content discovery and fuzzing (e.g., Dirb, FFuf).
+    "web_fuzz": [
+        lambda mcp, client, logger: register_dirb_tool(mcp, client, logger),
+    ],
+
+    #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap).
+    "web_scan": [
+        lambda mcp, client, logger: register_nikto_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_sqlmap_tool(mcp, client, logger),
+    ],
+
+    #Tools for automated exploitation and attack frameworks (e.g., Metasploit).
+    "exploit_framework": [
+        lambda mcp, client, logger: register_metasploit_tool(mcp, client, logger),
+    ],
+
+    
+
     "wordlist": [
         lambda mcp, client, logger: register_wordlist_tools(mcp, client),
     ],
