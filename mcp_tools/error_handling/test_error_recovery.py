@@ -1,41 +1,8 @@
-# mcp_tools/enhanced_web_app_security.py
+# mcp_tools/error_handling/test_error_recovery.py
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-def register_enhanced_web_app_security_tools(mcp, hexstrike_client, logger, HexStrikeColors):
-
-    # ---------------- Additional HTTP Framework Tools (sync with server) ----------------
-
-    @mcp.tool()
-    def error_handling_statistics() -> Dict[str, Any]:
-        """
-        Get intelligent error handling system statistics and recent error patterns.
-
-        Returns:
-            Error handling statistics and patterns
-        """
-        logger.info(f"{HexStrikeColors.ELECTRIC_PURPLE}📊 Retrieving error handling statistics{HexStrikeColors.RESET}")
-        result = hexstrike_client.safe_get("api/error-handling/statistics")
-
-        if result.get("success"):
-            stats = result.get("statistics", {})
-            total_errors = stats.get("total_errors", 0)
-            recent_errors = stats.get("recent_errors_count", 0)
-
-            logger.info(f"{HexStrikeColors.SUCCESS}✅ Error statistics retrieved{HexStrikeColors.RESET}")
-            logger.info(f"  📈 Total Errors: {total_errors}")
-            logger.info(f"  🕒 Recent Errors: {recent_errors}")
-
-            # Log error breakdown by type
-            error_counts = stats.get("error_counts_by_type", {})
-            if error_counts:
-                logger.info(f"{HexStrikeColors.HIGHLIGHT_BLUE} ERROR BREAKDOWN {HexStrikeColors.RESET}")
-                for error_type, count in error_counts.items():
-                                          logger.info(f"  {HexStrikeColors.FIRE_RED}{error_type}: {count}{HexStrikeColors.RESET}")
-        else:
-            logger.error(f"{HexStrikeColors.ERROR}❌ Failed to retrieve error statistics{HexStrikeColors.RESET}")
-
-        return result
+def register_test_error_recovery_tool(mcp, hexstrike_client, logger, HexStrikeColors):
 
     @mcp.tool()
     def test_error_recovery(tool_name: str, error_type: str = "timeout",

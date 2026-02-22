@@ -31,7 +31,7 @@ from mcp_tools.ops.python_env import register_python_env_tools
 from mcp_tools.network_recon.enhanced_network_scanning import register_enhanced_network_scanning_tools
 from mcp_tools.binary_analysis.binary_analysis_and_reverse_engineering import register_binary_analysis_and_reverse_engineering_tools
 from mcp_tools.binary_analysis.enhanced_binary_analysis_and_exploitation import register_enhanced_binary_analysis_and_exploitation_tools
-from mcp_tools.web_app_security.enhanced_web_app_security import register_enhanced_web_app_security_tools
+
 from mcp_tools.ai_agents.ai_payload_generation import register_ai_payload_generation_tools
 from mcp_tools.web_app_security.api_testing import register_api_testing_tools
 from mcp_tools.ctf_forensics.advanced_ctf_tools import register_advanced_ctf_tools
@@ -92,6 +92,9 @@ from mcp_tools.waf_detect.wafw00f import register_wafw00f_tool
 
 from mcp_tools.dns_enum.fierce import register_fierce_tool
 from mcp_tools.dns_enum.dnsenum import register_dnsenum_tool
+
+from mcp_tools.error_handling.error_handling_statistics import register_error_handling_statistics_tool
+from mcp_tools.error_handling.test_error_recovery import register_test_error_recovery_tool
 
 # Backward compatibility alias
 Colors = HexStrikeColors
@@ -366,7 +369,12 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_fierce_tool(mcp, client, logger),
         lambda mcp, client, logger: register_dnsenum_tool(mcp, client, logger),
     ],
-
+    
+    #Tools for error handling and statistics collection to improve reliability and debugging.
+    "error_handling": [
+        lambda mcp, client, logger: register_error_handling_statistics_tool(mcp, client, logger, HexStrikeColors),
+        lambda mcp, client, logger: register_test_error_recovery_tool(mcp, client, logger, HexStrikeColors),
+    ],
 
     "wordlist": [
         lambda mcp, client, logger: register_wordlist_tools(mcp, client),
@@ -395,7 +403,6 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_enhanced_binary_analysis_and_exploitation_tools(mcp, client, logger),
     ],
     "web_app": [
-        lambda mcp, client, logger: register_enhanced_web_app_security_tools(mcp, client, logger, HexStrikeColors),
         lambda mcp, client, logger: register_ai_payload_generation_tools(mcp, client, logger),
         lambda mcp, client, logger: register_api_testing_tools(mcp, client, logger),
         lambda mcp, client, logger: register_bug_bounty_recon_tools(mcp, client, logger),
