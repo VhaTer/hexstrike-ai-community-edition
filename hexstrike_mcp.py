@@ -76,6 +76,10 @@ from mcp_tools.param_discovery.x8 import register_x8_tool
 
 from mcp_tools.web_probe.httpx import register_httpx_tool
 
+from mcp_tools.data_processing.anew import register_anew_tool
+
+from mcp_tools.param_fuzz.qsreplace import register_qsreplace_tool
+
 # Backward compatibility alias
 Colors = HexStrikeColors
 
@@ -283,7 +287,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_katana_tool(mcp, client, logger),
     ],
 
-    #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap).
+    #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap, Jaeles, Dalfox).
     "web_scan": [
         lambda mcp, client, logger: register_nikto_tool(mcp, client, logger),
         lambda mcp, client, logger: register_sqlmap_tool(mcp, client, logger),
@@ -308,11 +312,21 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_waybackurls_tool(mcp, client, logger),
     ],
 
-    # Tools for parameter discovery and fuzzing (e.g., Arju0n, ParamSpider, x8).
+    #Tools for parameter discovery and fuzzing (e.g., Arju0n, ParamSpider, x8).
     "param_discovery": [
         lambda mcp, client, logger: register_arjun_tool(mcp, client, logger),
         lambda mcp, client, logger: register_paramspider_tool(mcp, client, logger),
         lambda mcp, client, logger: register_x8_tool(mcp, client, logger),
+    ],
+
+    #Tools for query string parameter replacement (e.g., qsreplace).
+    "param_fuzz": [
+        lambda mcp, client, logger: register_qsreplace_tool(mcp, client, logger),
+    ],
+
+    #Tools for data processing and unique line filtering (e.g., anew).
+    "data_processing": [
+        lambda mcp, client, logger: register_anew_tool(mcp, client, logger),
     ],
 
 
