@@ -45,6 +45,7 @@ Specify one or more tool profiles to load only the relevant categories for your 
 - 🚀 Select profiles for targeted workflows to speed up scans and reduce resource usage.
 - 🌐 Use --profile full to enable the complete arsenal, or --profile default for the recommended set.
 
+See Wiki for more info [Flags](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/Flags)
 
 ## Architecture Overview
 
@@ -98,12 +99,13 @@ hexstrike-env/bin/python3 hexstrike_mcp.py --server http://localhost:8888
 hexstrike-env/bin/python3 hexstrike_mcp.py --server http://localhost:8888 --compact
 ```
 
-This registers only the two core gateway tools:
+### Profile Mode (`--profile`)
 
-- classify_task: Analyzes your security task description and recommends the most relevant tools and parameters.
-- run_tool: Executes any recommended security tool by name and parameters, as suggested by the classifier.
+```bash
+hexstrike-env/bin/python3 hexstrike_mcp.py --server http://localhost:8888 --profile web_app core_network
+```
 
-Compact mode is ideal for automation pipelines or external orchestrators, exposing only the intelligent classifier and tool execution gateway for streamlined integration.
+See Wiki for more info [Flags](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/Flags)
 
 ### Server flags
 
