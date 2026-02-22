@@ -54,6 +54,7 @@ from mcp_tools.web_scan.wpscan import register_wpscan_tool
 from mcp_tools.web_scan.jaeles import register_jaeles_tool
 from mcp_tools.web_scan.dalfox import register_dalfox_tool
 from mcp_tools.web_scan.burpsuite import register_burpsuite_tool
+from mcp_tools.web_scan.zap import register_zap_tool
 
 from mcp_tools.exploit_framework.metasploit import register_metasploit_tool
 
@@ -290,7 +291,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_katana_tool(mcp, client, logger),
     ],
 
-    #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap, Jaeles, Dalfox).
+    #Tools for web vulnerability scanning and assessment (e.g., Nikto, WPScan, SQLMap, Jaeles, Dalfox, ZAP, Burp Suite).
     "web_scan": [
         lambda mcp, client, logger: register_nikto_tool(mcp, client, logger),
         lambda mcp, client, logger: register_sqlmap_tool(mcp, client, logger),
@@ -298,6 +299,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_jaeles_tool(mcp, client, logger),
         lambda mcp, client, logger: register_dalfox_tool(mcp, client, logger),
         lambda mcp, client, logger: register_burpsuite_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_zap_tool(mcp, client, logger),
     ],
 
     #Tools for web probing and technology detection (e.g., httpx).
