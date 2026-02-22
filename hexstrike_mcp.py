@@ -68,6 +68,9 @@ from mcp_tools.recon.subfinder import register_subfinder_tool
 from mcp_tools.url_recon.gau import register_gau_tool
 from mcp_tools.url_recon.waybackurls import register_waybackurls_tool
 
+from mcp_tools.param_discovery.arjun import register_arjun_tool
+from mcp_tools.param_discovery.paramspider import register_paramspider_tool
+
 # Backward compatibility alias
 Colors = HexStrikeColors
 
@@ -263,7 +266,7 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_subfinder_tool(mcp, client, logger),
     ],
 
-    #Tools for web content discovery and fuzzing (e.g., Dirb, FFuf).
+    #Tools for web content discovery and fuzzing (e.g., Dirb, FFuf, Dirsearch).
     "web_fuzz": [
         lambda mcp, client, logger: register_dirb_tool(mcp, client, logger),
         lambda mcp, client, logger: register_ffuf_tool(mcp, client, logger),
@@ -287,10 +290,16 @@ TOOL_CATEGORIES = {
         lambda mcp, client, logger: register_metasploit_tool(mcp, client, logger),
     ],
 
-    #Tools for URL discovery and reconnaissance (e.g., Gau).
+    #Tools for URL discovery and reconnaissance (e.g., Gau, Waybackurls).
     "url_recon": [
         lambda mcp, client, logger: register_gau_tool(mcp, client, logger),
         lambda mcp, client, logger: register_waybackurls_tool(mcp, client, logger),
+    ],
+
+    # Tools for parameter discovery and fuzzing (e.g., Arjun).
+    "param_discovery": [
+        lambda mcp, client, logger: register_arjun_tool(mcp, client, logger),
+        lambda mcp, client, logger: register_paramspider_tool(mcp, client, logger),
     ],
 
 
