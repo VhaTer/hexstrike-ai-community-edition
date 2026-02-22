@@ -7,6 +7,8 @@ API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 class ModernVisualEngine:
     """Beautiful, modern output formatting with animations and colors"""
 
+    #HexStrike Green -  #2d6718
+
     # Enhanced color palette with reddish tones and better highlighting
     COLORS = {
         'MATRIX_GREEN': '\033[38;5;46m',
@@ -17,7 +19,7 @@ class ModernVisualEngine:
         'TERMINAL_GRAY': '\033[38;5;240m',
         'BRIGHT_WHITE': '\033[97m',
         'RESET': '\033[0m',
-        'BOLD': '\033[1m',
+        'BOLD': '\033[1m',       
         'DIM': '\033[2m',
         # New reddish tones and highlighting colors
         'BLOOD_RED': '\033[38;5;124m',
@@ -80,8 +82,8 @@ class ModernVisualEngine:
         accent = ModernVisualEngine.COLORS['ACCENT_LINE']
         gradient = ModernVisualEngine.COLORS['ACCENT_GRADIENT']
         RESET = ModernVisualEngine.COLORS['RESET']
-        BOLD = ModernVisualEngine.COLORS['BOLD']
-        title_block = f"{accent}{BOLD}"
+        MATRIX_GREEN = ModernVisualEngine.COLORS['MATRIX_GREEN']
+        title_block = f"{accent}{MATRIX_GREEN}"
         banner = f"""
 {title_block}
 ██╗  ██╗███████╗██╗  ██╗███████╗████████╗██████╗ ██╗██╗  ██╗███████╗
