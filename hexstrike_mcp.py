@@ -86,6 +86,8 @@ from mcp_tools.url_filter.uro import register_uro_tool
 
 from mcp_tools.web_framework.http_framework import register_http_framework_tool
 
+from mcp_tools.waf_detect.wafw00f import register_wafw00f_tool
+
 # Backward compatibility alias
 Colors = HexStrikeColors
 
@@ -345,6 +347,11 @@ TOOL_CATEGORIES = {
     #Tools for web framework interactions and HTTP request manipulation (e.g., custom HTTP framework with match/replace rules, repeater, intruder).
     "web_framework": [
         lambda mcp, client, logger: register_http_framework_tool(mcp, client, logger, HexStrikeColors),    
+    ],
+
+    #Tools for WAF detection and fingerprinting (e.g., wafw00f).
+    "waf_detect": [
+        lambda mcp, client, logger: register_wafw00f_tool(mcp, client, logger),    
     ],
 
 
