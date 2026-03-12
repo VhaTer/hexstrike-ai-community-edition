@@ -18,7 +18,6 @@
 python3 -m venv hexstrike-env
 source hexstrike-env/bin/activate
 python3 -m pip install -r requirements.txt
-python3 -m pip install -r requirements-tools.txt
 ```
 
 ### Run the server
