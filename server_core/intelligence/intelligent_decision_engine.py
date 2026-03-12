@@ -3,7 +3,6 @@ import re
 import socket
 import urllib.parse
 from typing import Dict, List, Any, Optional
-
 from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain, AttackStep

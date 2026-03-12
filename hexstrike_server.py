@@ -92,7 +92,6 @@ wordlist_store = WordlistStore()
 # INTELLIGENT DECISION ENGINE (v6.0 ENHANCEMENT)
 # ============================================================================
 from shared.target_types import TechnologyStack
-from intelligence.intelligent_decision_engine import IntelligentDecisionEngine
 
 # Global decision engine instance
 decision_engine = IntelligentDecisionEngine()
@@ -165,9 +164,6 @@ from server_core.python_env_manager import env_manager
 # ============================================================================
 # ADVANCED VULNERABILITY INTELLIGENCE SYSTEM (v6.0 ENHANCEMENT)
 # ============================================================================
-
-from intelligence.cve_intelligence_manager import CVEIntelligenceManager
-
 from server_core.setup_logging import setup_logging
 
 # Configuration (using existing API_PORT from top of file)
