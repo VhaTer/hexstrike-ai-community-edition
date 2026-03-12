@@ -9,6 +9,7 @@ Framework: FastMCP integration for AI agent communication
 """
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -629,7 +630,7 @@ def health_check():
     ]
 
     forensics_tools = [
-        "volatility3", "vol", "steghide", "hashpump", "foremost", "exiftool",
+        "vol", "steghide", "hashpump", "foremost", "exiftool",
         "strings", "xxd", "file", "photorec", "testdisk", "scalpel", "bulk-extractor",
         "stegsolve", "zsteg", "outguess"
     ]
@@ -4809,8 +4810,8 @@ class HTTPTestingFramework:
             'https': f'http://127.0.0.1:{proxy_port}'
         }
 
-    def intercept_request(self, url: str, method: str = 'GET', data: dict = None,
-                         headers: dict = None, cookies: dict = None) -> dict:
+    def intercept_request(self, url: str, method: str = 'GET', data: Any = None,
+                         headers: Optional[Dict[str, Any]] = None, cookies: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Intercept and analyze HTTP requests"""
         try:
             if headers:
@@ -4946,7 +4947,7 @@ class HTTPTestingFramework:
 
     # ----------------- Intruder (Sniper mode) -----------------
     def intruder_sniper(self, url: str, method: str = 'GET', location: str = 'query',
-                        params: list = None, payloads: list = None, base_data: dict = None,
+                        params: Optional[list] = None, payloads: Optional[list] = None, base_data: Optional[dict] = None,
                         max_requests: int = 100) -> dict:
         """Simple fuzzing: iterate payloads over each parameter individually (Sniper)."""
         from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
@@ -5089,7 +5090,15 @@ class HTTPTestingFramework:
 
                         # Find all links
                         for link in soup.find_all('a', href=True):
-                            href = link['href']
+                            href_attr = link.get('href')
+                            if isinstance(href_attr, list):
+                                href = href_attr[0] if href_attr else ""
+                            elif isinstance(href_attr, str):
+                                href = href_attr
+                            else:
+                                href = ""
+                            if not href:
+                                continue
                             full_url = urljoin(current_url, href)
 
                             if urlparse(full_url).netloc == urlparse(base_url).netloc:
@@ -5098,10 +5107,18 @@ class HTTPTestingFramework:
 
                         # Find all forms
                         for form in soup.find_all('form'):
+                            action_attr = form.get('action')
+                            if isinstance(action_attr, list):
+                                action_value = action_attr[0] if action_attr else ''
+                            elif isinstance(action_attr, str):
+                                action_value = action_attr
+                            else:
+                                action_value = ''
+
                             form_data = {
                                 'url': current_url,
-                                'action': urljoin(current_url, form.get('action', '')),
-                                'method': form.get('method', 'GET').upper(),
+                                'action': urljoin(current_url, action_value),
+                                'method': str(form.get('method') or 'GET').upper(),
                                 'inputs': []
                             }
 
@@ -5139,7 +5156,7 @@ class BrowserAgent:
         self.page_sources = []
         self.network_logs = []
 
-    def setup_browser(self, headless: bool = True, proxy_port: int = None):
+    def setup_browser(self, headless: bool = True, proxy_port: Optional[int] = None):
         """Setup Chrome browser with security testing options"""
         try:
             chrome_options = Options()
@@ -5182,24 +5199,28 @@ class BrowserAgent:
     def navigate_and_inspect(self, url: str, wait_time: int = 5) -> dict:
         """Navigate to URL and perform comprehensive inspection"""
         try:
-            if not self.driver:
+            if self.driver is None:
                 if not self.setup_browser():
                     return {'success': False, 'error': 'Failed to setup browser'}
+
+            driver = self.driver
+            if driver is None:
+                return {'success': False, 'error': 'Browser driver is not initialized'}
 
             nav_command = f'Navigate to {url}'
             logger.info(f"{ModernVisualEngine.format_command_execution(nav_command, 'STARTING')}")
 
             # Navigate to URL
-            self.driver.get(url)
+            driver.get(url)
             time.sleep(wait_time)
 
             # Take screenshot
             screenshot_path = f"/tmp/hexstrike_screenshot_{int(time.time())}.png"
-            self.driver.save_screenshot(screenshot_path)
+            driver.save_screenshot(screenshot_path)
             self.screenshots.append(screenshot_path)
 
             # Get page source
-            page_source = self.driver.page_source
+            page_source = driver.page_source
             self.page_sources.append({
                 'url': url,
                 'source': page_source[:50000],  # Limit size
@@ -5208,10 +5229,10 @@ class BrowserAgent:
 
             # Extract page information
             page_info = {
-                'title': self.driver.title,
-                'url': self.driver.current_url,
+                'title': driver.title,
+                'url': driver.current_url,
                 'cookies': [{'name': c['name'], 'value': c['value'], 'domain': c['domain']}
-                           for c in self.driver.get_cookies()],
+                           for c in driver.get_cookies()],
                 'local_storage': self._get_local_storage(),
                 'session_storage': self._get_session_storage(),
                 'forms': self._extract_forms(),
@@ -5249,7 +5270,11 @@ class BrowserAgent:
     def _get_console_errors(self) -> list:
         """Collect console errors & warnings (if supported)"""
         try:
-            logs = self.driver.get_log('browser')
+            driver = self.driver
+            if driver is None:
+                return []
+
+            logs = driver.get_log('browser')
             out = []
             for entry in logs[-100:]:
                 lvl = entry.get('level', '')
@@ -5364,7 +5389,11 @@ class BrowserAgent:
     def _get_local_storage(self) -> dict:
         """Extract local storage data"""
         try:
-            return self.driver.execute_script("""
+            driver = self.driver
+            if driver is None:
+                return {}
+
+            return driver.execute_script("""
                 var storage = {};
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
@@ -5378,7 +5407,11 @@ class BrowserAgent:
     def _get_session_storage(self) -> dict:
         """Extract session storage data"""
         try:
-            return self.driver.execute_script("""
+            driver = self.driver
+            if driver is None:
+                return {}
+
+            return driver.execute_script("""
                 var storage = {};
                 for (var i = 0; i < sessionStorage.length; i++) {
                     var key = sessionStorage.key(i);
@@ -5393,7 +5426,11 @@ class BrowserAgent:
         """Extract all forms from the page"""
         forms = []
         try:
-            form_elements = self.driver.find_elements(By.TAG_NAME, 'form')
+            driver = self.driver
+            if driver is None:
+                return forms
+
+            form_elements = driver.find_elements(By.TAG_NAME, 'form')
             for form in form_elements:
                 form_data = {
                     'action': form.get_attribute('action') or '',
@@ -5419,7 +5456,11 @@ class BrowserAgent:
         """Extract all links from the page"""
         links = []
         try:
-            link_elements = self.driver.find_elements(By.TAG_NAME, 'a')
+            driver = self.driver
+            if driver is None:
+                return links
+
+            link_elements = driver.find_elements(By.TAG_NAME, 'a')
             for link in link_elements[:50]:  # Limit to 50 links
                 href = link.get_attribute('href')
                 if href:
@@ -5436,7 +5477,11 @@ class BrowserAgent:
         """Extract all input elements"""
         inputs = []
         try:
-            input_elements = self.driver.find_elements(By.TAG_NAME, 'input')
+            driver = self.driver
+            if driver is None:
+                return inputs
+
+            input_elements = driver.find_elements(By.TAG_NAME, 'input')
             for input_elem in input_elements:
                 inputs.append({
                     'name': input_elem.get_attribute('name') or '',
@@ -5453,7 +5498,11 @@ class BrowserAgent:
         """Extract script sources and inline scripts"""
         scripts = []
         try:
-            script_elements = self.driver.find_elements(By.TAG_NAME, 'script')
+            driver = self.driver
+            if driver is None:
+                return scripts
+
+            script_elements = driver.find_elements(By.TAG_NAME, 'script')
             for script in script_elements[:20]:  # Limit to 20 scripts
                 src = script.get_attribute('src')
                 if src:
@@ -5473,7 +5522,11 @@ class BrowserAgent:
     def _get_network_logs(self) -> list:
         """Get network request logs"""
         try:
-            logs = self.driver.get_log('performance')
+            driver = self.driver
+            if driver is None:
+                return []
+
+            logs = driver.get_log('performance')
             network_requests = []
 
             for log in logs[-50:]:  # Last 50 logs
@@ -6538,8 +6591,6 @@ def jwt_analyzer():
             parts = jwt_token.split('.')
             if len(parts) >= 2:
                 # Decode header
-                import base64
-                import json
 
                 # Add padding if needed
                 header_b64 = parts[0] + '=' * (4 - len(parts[0]) % 4)
@@ -6665,9 +6716,7 @@ def api_schema_analyzer():
 
         # Parse schema based on type
         try:
-            import json
             schema_data = json.loads(schema_content)
-
             if schema_type.lower() in ["openapi", "swagger"]:
                 # OpenAPI/Swagger analysis
                 paths = schema_data.get("paths", {})
@@ -6762,7 +6811,7 @@ def volatility3():
                 "error": "Plugin parameter is required"
             }), 400
 
-        command = f"vol.py -f {memory_file} {plugin}"
+        command = f"vol -f {memory_file} {plugin}"
 
         if output_file:
             command += f" -o {output_file}"
@@ -7832,13 +7881,13 @@ def ctf_cryptography_solver():
 
         # Frequency analysis for substitution ciphers
         if cipher_type in ["substitution", "caesar", "vigenere"] or "substitution" in results["analysis_results"]:
-            char_freq = {}
+            char_freq: Dict[str, int] = {}
             for char in cipher_text.upper():
                 if char.isalpha():
                     char_freq[char] = char_freq.get(char, 0) + 1
 
             if char_freq:
-                most_common = max(char_freq, key=char_freq.get)
+                most_common = max(char_freq.keys(), key=lambda key: char_freq[key])
                 results["analysis_results"].append(f"Most frequent character: {most_common} ({char_freq[most_common]} occurrences)")
                 results["next_steps"].append("Try substituting most frequent character with 'E'")
 

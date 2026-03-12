@@ -12,7 +12,6 @@
 [![Tools](https://img.shields.io/badge/Security%20Tools-170%2B-brightgreen.svg)](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition)
 [![Agents](https://img.shields.io/badge/AI%20Agents-12%2B-purple.svg)](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition)
 
-
 **Advanced AI-powered penetration testing MCP framework, on-demand TTP knowledge, and adaptive scanning intelligence**
 
 [📡 Wiki](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki)
@@ -82,15 +81,12 @@ source hexstrike-env/bin/activate        # Linux/Mac
 # 3. Install Python dependencies
 pip3 install -r requirements.txt
 
-# 4. Install Extra Python dependencies
-pip3 install -r requirements-tools.txt
-
-# 5. Start the API server
+# 4. Start the API server
 python3 hexstrike_server.py
 
-# 6. In a separate terminal, start the MCP client
+# 5. In a separate terminal, start the MCP client
 # (use the venv python to ensure dependencies are available)
-hexstrike-env/bin/python3 hexstrike_mcp.py --server http://localhost:8888
+hexstrike-env/bin/python3 hexstrike_mcp.py --server http://localhost:8888 --profile full
 ```
 
 > See [Flags](https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition/wiki/Flags) on how to customize the experience.
@@ -543,12 +539,6 @@ We welcome contributions from the cybersecurity and AI community!
 - **⚡ Performance Optimizations** - Caching improvements and scalability enhancements
 - **📖 Documentation** - AI usage examples and integration guides
 - **🧪 Testing Frameworks** - Automated testing for AI agent interactions
-
----
-
-## License
-
-see LICENSE file for details.
 
 ---
 
