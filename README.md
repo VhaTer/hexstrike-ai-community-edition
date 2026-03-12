@@ -31,8 +31,8 @@
 - **Compact Mode**: Great for running with smaller, local LLMs.
 - **Profile Mode**: Specify one or more profiles to load only the relevant ones for your workflow.
 - Refactored Codebase: Improved clarity, maintainability, and performance.
-- Updated Dependencies: All packages upgraded for security and compatibility.
-- Enhanced Tool Usage: Smarter parameter handling, improved documentation, and endpoint references.
+- Updated Dependencies: All packages upgraded for security and compatibility
+- Enhanced Tool Usage: Smarter parameter handling, improved documentation, and endpoint references
 - AI Integration: Upgraded MCP compatibility and agent orchestration (FastMCP v3).
 
 ### Details
