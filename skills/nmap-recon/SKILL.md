@@ -1,4 +1,5 @@
 ---
+name: nmap-recon
 description: Network reconnaissance workflow using nmap, masscan, and rustscan via HexStrike tools
 ---
 

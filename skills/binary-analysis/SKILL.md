@@ -1,4 +1,5 @@
 ---
+name: binary-analysis
 description: Binary analysis and reverse engineering workflow using checksec, strings, binwalk, radare2, ropgadget, and gdb for CTF and vulnerability research
 ---
 

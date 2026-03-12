@@ -1,4 +1,5 @@
 ---
+name: smb-enum
 description: SMB and Windows network enumeration workflow using nmap, smbmap, enum4linux, netexec, and nbtscan for share discovery, user enumeration, and lateral movement
 ---
 

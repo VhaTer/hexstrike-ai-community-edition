@@ -1,4 +1,5 @@
 ---
+name: web-vuln
 description: Web vulnerability scanning workflow covering SQLi, XSS, template injection, and generic CVE detection using nuclei, sqlmap, dalfox, nikto, and jaeles
 ---
 

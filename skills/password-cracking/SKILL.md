@@ -1,4 +1,5 @@
 ---
+name: password-cracking
 description: Password hash identification, cracking, and credential brute-forcing using hashid, john, hashcat, hydra, medusa, and ophcrack
 ---
 

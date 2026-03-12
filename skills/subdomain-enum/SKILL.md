@@ -1,4 +1,5 @@
 ---
+name: subdomain-enum
 description: Subdomain and DNS enumeration workflow using subfinder, amass, dnsenum, fierce, theharvester, gau, and waybackurls
 ---
 

@@ -1,4 +1,5 @@
 ---
+name: cloud-audit
 description: Cloud and container security auditing workflow using prowler, trivy, kube-hunter, and docker-bench for AWS, GCP, Azure, Kubernetes, and container images
 ---
 

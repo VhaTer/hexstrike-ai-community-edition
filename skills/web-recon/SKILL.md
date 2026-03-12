@@ -1,4 +1,5 @@
 ---
+name: web-recon
 description: Web content discovery and technology fingerprinting using gobuster, ffuf, feroxbuster, katana, httpx, and wafw00f
 ---
 
