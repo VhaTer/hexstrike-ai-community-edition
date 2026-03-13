@@ -44,15 +44,9 @@ def run_mcp(args, logger):
         logger.info("🚀 Starting HexStrike AI MCP server")
         logger.info("🤖 Ready to serve AI agents with enhanced cybersecurity capabilities")
 
-        # stdio fallback for MCP clients that don't support the run() method
-        try:
-            mcp.run(show_banner=False)
-        except AttributeError:
-            import asyncio
-            if hasattr(mcp, "run_stdio"):
-                asyncio.run(mcp.run_stdio_async())
-            else:
-                raise
+       
+        # FastMCP 3.1+ — mcp.run() is stable, stdio fallback removed
+        mcp.run(show_banner=False)
 
     except Exception as e:
         logger.error(f"💥 Error starting MCP server: {str(e)}")
