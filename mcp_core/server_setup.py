@@ -14,6 +14,11 @@ try:
 except ImportError:
     SkillsDirectoryProvider = None
 
+try:
+    from fastmcp.server.transforms.search import BM25SearchTransform
+except ImportError:
+    BM25SearchTransform = None
+
 def _register_skills(mcp: FastMCP, logger) -> None:
     """Mount the local skills/ directory as MCP resources if it exists."""
     if SkillsDirectoryProvider is None:
@@ -39,7 +44,8 @@ def setup_mcp_server(hexstrike_client, logger, compact: bool = False, profiles: 
     Returns:
         Configured FastMCP instance
     """
-    mcp = FastMCP("hexstrike-ai-mcp")
+    transforms = [BM25SearchTransform()] if BM25SearchTransform else []
+    mcp = FastMCP("hexstrike-ai-mcp", transforms=transforms)
 
     _register_skills(mcp, logger)
 
