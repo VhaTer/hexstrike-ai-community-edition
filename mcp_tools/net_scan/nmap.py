@@ -1,81 +1,114 @@
 # mcp_tools/net_scan/nmap.py
 
-import asyncio
 from typing import Dict, Any
+from fastmcp import Context
 
-def register_nmap(mcp, hexstrike_client, logger, HexStrikeColors):
+def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
     @mcp.tool()
-    async def nmap_scan(target: str, scan_type: str = "-sV", ports: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def nmap_scan(
+        ctx: Context,
+        target: str,
+        scan_type: str = "-sV",
+        ports: str = "",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute an enhanced Nmap scan against a target with real-time logging.
+        Execute an Nmap scan against a target for service and version detection.
 
-        Args:
-            target: The IP address or hostname to scan
-            scan_type: Scan type (e.g., -sV for version detection, -sC for scripts)
-            ports: Comma-separated list of ports or port ranges
-            additional_args: Additional Nmap arguments
+        Workflow position: use after rustscan/masscan identifies open ports,
+        or standalone for a complete scan on a single target.
 
-        Returns:
-            Scan results with enhanced telemetry
+        Parameters:
+        - target: IP address, hostname, or CIDR range (e.g. 192.168.1.1, 10.0.0.0/24)
+        - scan_type: Nmap scan flags (default: -sV for version detection)
+            common values:
+            '-sV'        — service/version detection
+            '-sC'        — default NSE scripts
+            '-sV -sC'    — version + scripts (recommended)
+            '-sS'        — SYN stealth scan (requires root)
+            '-sU'        — UDP scan
+            '-A'         — aggressive (OS + version + scripts + traceroute)
+        - ports: comma-separated ports or ranges (e.g. '22,80,443' or '1-1000')
+                 omit to scan top 1000 ports
+        - additional_args: extra nmap flags (e.g. '-T4 -O --open')
+
+        Prerequisites: none — can be run standalone.
+        For efficiency: run rustscan_fast_scan first to discover open ports,
+        then pass those ports here for deep service enumeration.
+
+        Output: service names, versions, states, and script output per port.
+
+        Recommended sequence:
+            1. rustscan_fast_scan(target='192.168.1.1', ports='1-65535')
+            2. nmap_scan(target='192.168.1.1', scan_type='-sV -sC',
+                         ports='<open ports from rustscan>')
         """
         data: Dict[str, Any] = {
             "target": target,
             "scan_type": scan_type,
             "ports": ports,
-            "additional_args": additional_args
+            "additional_args": additional_args,
+            "use_recovery": True
         }
-        logger.info(f"{HexStrikeColors.FIRE_RED}🔍 Initiating Nmap scan: {target}{HexStrikeColors.RESET}")
-
-        # Use enhanced error handling by default
-        data["use_recovery"] = True
-
-        # Offload the blocking HTTP+subprocess call to a thread pool so the
-        # asyncio event loop remains responsive
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/nmap", data)
-        )
-
+        await ctx.info(f"🔍 Starting nmap scan: {target}")
+        result = hexstrike_client.safe_post("api/tools/nmap", data)
         if result.get("success"):
-            logger.info(f"{HexStrikeColors.SUCCESS}✅ Nmap scan completed successfully for {target}{HexStrikeColors.RESET}")
-
-            # Check for recovery information
+            await ctx.info(f"✅ nmap scan completed for {target}")
             if result.get("recovery_info", {}).get("recovery_applied"):
-                recovery_info = result["recovery_info"]
-                attempts = recovery_info.get("attempts_made", 1)
-                logger.info(f"{HexStrikeColors.HIGHLIGHT_YELLOW} Recovery applied: {attempts} attempts made {HexStrikeColors.RESET}")
+                attempts = result["recovery_info"].get("attempts_made", 1)
+                await ctx.info(f"⚠️ Recovery applied: {attempts} attempt(s)")
         else:
-            logger.error(f"{HexStrikeColors.ERROR}❌ Nmap scan failed for {target}{HexStrikeColors.RESET}")
-
-            # Check for human escalation
+            await ctx.error(f"❌ nmap scan failed for {target}")
             if result.get("human_escalation"):
-                logger.error(f"{HexStrikeColors.CRITICAL} HUMAN ESCALATION REQUIRED {HexStrikeColors.RESET}")
-
+                await ctx.error("🚨 HUMAN ESCALATION REQUIRED")
         return result
 
     @mcp.tool()
-    async def nmap_advanced_scan(target: str, scan_type: str = "-sS", ports: str = "",
-                                 timing: str = "T4", nse_scripts: str = "", os_detection: bool = False,
-                                 version_detection: bool = False, aggressive: bool = False,
-                                 stealth: bool = False, additional_args: str = "") -> Dict[str, Any]:
+    async def nmap_advanced_scan(
+        ctx: Context,
+        target: str,
+        scan_type: str = "-sS",
+        ports: str = "",
+        timing: str = "T4",
+        nse_scripts: str = "",
+        os_detection: bool = False,
+        version_detection: bool = False,
+        aggressive: bool = False,
+        stealth: bool = False,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
         Execute advanced Nmap scans with custom NSE scripts and optimized timing.
 
-        Args:
-            target: The target IP address or hostname
-            scan_type: Nmap scan type (e.g., -sS, -sT, -sU)
-            ports: Specific ports to scan
-            timing: Timing template (T0-T5)
-            nse_scripts: Custom NSE scripts to run
-            os_detection: Enable OS detection
-            version_detection: Enable version detection
-            aggressive: Enable aggressive scanning
-            stealth: Enable stealth mode
-            additional_args: Additional Nmap arguments
+        Workflow position: use after nmap_scan identifies services,
+        for targeted deep enumeration of specific ports/services.
 
-        Returns:
-            Advanced Nmap scanning results with custom NSE scripts
+        Parameters:
+        - target: IP address or hostname
+        - scan_type: base scan type ('-sS' SYN stealth, '-sT' TCP connect, '-sU' UDP)
+        - ports: specific ports to target (e.g. '445' for SMB, '80,443' for web)
+        - timing: T0 (paranoid) to T5 (insane) — default T4 (aggressive)
+        - nse_scripts: NSE script names or categories
+            examples:
+            'smb-vuln-*,smb-enum-shares'     — SMB vulnerabilities
+            'http-title,http-headers'         — HTTP enumeration
+            'ftp-anon,ftp-bounce'             — FTP checks
+            'ssh-hostkey,ssh-auth-methods'    — SSH enumeration
+            'vuln'                            — all vuln scripts
+        - os_detection: enable OS fingerprinting (requires root)
+        - version_detection: enable service version detection
+        - aggressive: enable -A (OS + version + scripts + traceroute)
+        - stealth: reduce scan noise (slower timing, fragmented packets)
+        - additional_args: extra nmap flags
+
+        Prerequisites: best used with known open ports from nmap_scan or rustscan.
+
+        Common targeted sequences:
+            SMB: nmap_advanced_scan(target='x.x.x.x', ports='445',
+                     nse_scripts='smb-vuln-*,smb-enum-shares')
+            Web: nmap_advanced_scan(target='x.x.x.x', ports='80,443',
+                     nse_scripts='http-title,http-methods,http-headers')
         """
         data = {
             "target": target,
@@ -89,17 +122,10 @@ def register_nmap(mcp, hexstrike_client, logger, HexStrikeColors):
             "stealth": stealth,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Advanced Nmap: {target}")
-
-        # Offload the blocking HTTP+subprocess call to a thread pool so the
-        # asyncio event loop remains responsive
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/nmap-advanced", data)
-        )
-
+        await ctx.info(f"🔍 Starting advanced nmap: {target}")
+        result = hexstrike_client.safe_post("api/tools/nmap-advanced", data)
         if result.get("success"):
-            logger.info(f"✅ Advanced Nmap completed for {target}")
+            await ctx.info(f"✅ Advanced nmap completed for {target}")
         else:
-            logger.error(f"❌ Advanced Nmap failed for {target}")
+            await ctx.error(f"❌ Advanced nmap failed for {target}")
         return result
