@@ -1,32 +1,57 @@
 # mcp_tools/recon/theharvester.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_theharvester_tool(mcp, hexstrike_client, logger):
+def register_theharvester_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def theharvester_scan(domain: str, additional_args: str = "") -> Dict[str, Any]:
+    async def theharvester_scan(
+        ctx: Context,
+        domain: str,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute TheHarvester for passive information gathering with enhanced logging.
+        OSINT gathering using theHarvester — emails, hosts, IPs from public sources.
 
-        Args:
-            domain <string, required> : The target domain
-            additional_args <string, optional> : Additional TheHarvester arguments
+        Workflow position: passive OSINT alongside subfinder/amass.
+        Uniquely valuable for email harvesting and LinkedIn/social media intel
+        that subdomain tools don't cover.
 
-        Returns:
-            Passive information gathering results
+        Parameters:
+        - domain: target domain (e.g. 'example.com')
+        - additional_args: extra theHarvester flags
+            '-b google,bing,linkedin'  — specific sources (default: all)
+            '-l 500'                   — limit results per source (default 100)
+            '-f <file>'                — save results to HTML/XML file
+            '-s'                       — use Shodan (requires API key)
+            '-v'                       — verify host names via DNS resolution
+
+        Prerequisites: none — passive queries to public OSINT sources.
+        Some sources require API keys (Shodan, Hunter.io, etc.) configured
+        in ~/.theHarvester/api-keys.yaml.
+
+        Output:
+        - Email addresses (valuable for phishing/password spray)
+        - Hostnames and subdomains
+        - IP addresses and ASN info
+        - LinkedIn profiles (if -b linkedin used)
+        - Virtual hosts
+
+        Typical recon sequence:
+            1. subfinder_scan(domain='example.com')
+            2. theharvester_scan(domain='example.com')    — emails + OSINT
+            3. amass_scan(domain='example.com')
+            4. httpx probe on all discovered hosts
         """
         data = {
             "domain": domain,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting TheHarvester: {domain}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/recon/theharvester", data)
-        )
+        await ctx.info(f"🔍 Starting theHarvester: {domain}")
+        result = hexstrike_client.safe_post("api/tools/recon/theharvester", data)
         if result.get("success"):
-            logger.info(f"✅ TheHarvester completed for {domain}")
+            await ctx.info(f"✅ theHarvester completed for {domain}")
         else:
-            logger.error(f"❌ TheHarvester failed for {domain}")
+            await ctx.error(f"❌ theHarvester failed for {domain}")
         return result
