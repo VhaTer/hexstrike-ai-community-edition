@@ -1,29 +1,49 @@
 # mcp_tools/net_scan/masscan.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_masscan_tool(mcp, hexstrike_client, logger):
-    
+def register_masscan_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def masscan_high_speed(target: str, ports: str = "1-65535", rate: int = 1000,
-                          interface: str = "", router_mac: str = "", source_ip: str = "",
-                          banners: bool = False, additional_args: str = "") -> Dict[str, Any]:
+    async def masscan_high_speed(
+        ctx: Context,
+        target: str,
+        ports: str = "1-65535",
+        rate: int = 1000,
+        interface: str = "",
+        router_mac: str = "",
+        source_ip: str = "",
+        banners: bool = False,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Masscan for high-speed Internet-scale port scanning with intelligent rate limiting.
+        High-speed Internet-scale port scanning using masscan.
 
-        Args:
-            target: The target IP address or CIDR range
-            ports: Port range to scan
-            rate: Packets per second rate
-            interface: Network interface to use
-            router_mac: Router MAC address
-            source_ip: Source IP address
-            banners: Enable banner grabbing
-            additional_args: Additional Masscan arguments
+        Workflow position: FIRST step for large CIDR ranges or full port sweeps.
+        Use instead of nmap for initial discovery when scanning many hosts
+        or all 65535 ports — then hand off results to nmap for service detection.
 
-        Returns:
-            High-speed port scanning results with intelligent rate limiting
+        Parameters:
+        - target: IP address, hostname, or CIDR range (e.g. '10.0.0.0/8')
+        - ports: port range to scan (default: 1-65535 full sweep)
+                 examples: '80,443', '1-1024', '22,80,443,8080,8443'
+        - rate: packets per second (default 1000 — increase carefully)
+                warning: high rates (>10000) may trigger IDS/IPS or drop packets
+        - interface: network interface to use
+        - router_mac: router MAC address (required for some network setups)
+        - source_ip: custom source IP address
+        - banners: enable basic banner grabbing (slower)
+        - additional_args: extra masscan flags
+
+        Prerequisites: requires root/sudo for raw packet sending.
+
+        Output: list of open ports per host — no service info (use nmap after).
+
+        Recommended sequence for large ranges:
+            1. masscan_high_speed(target='10.0.0.0/24', ports='1-65535', rate=1000)
+            2. nmap_scan(target='<live hosts>', ports='<open ports>',
+                         scan_type='-sV -sC')
         """
         data = {
             "target": target,
@@ -35,15 +55,10 @@ def register_masscan_tool(mcp, hexstrike_client, logger):
             "banners": banners,
             "additional_args": additional_args
         }
-        logger.info(f"🚀 Starting Masscan: {target} at rate {rate}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/masscan", data)
-        )
+        await ctx.info(f"🚀 Starting masscan: {target} at {rate} pps")
+        result = hexstrike_client.safe_post("api/tools/masscan", data)
         if result.get("success"):
-            logger.info(f"✅ Masscan completed for {target}")
+            await ctx.info(f"✅ masscan completed for {target}")
         else:
-            logger.error(f"❌ Masscan failed for {target}")
+            await ctx.error(f"❌ masscan failed for {target}")
         return result
-
-
