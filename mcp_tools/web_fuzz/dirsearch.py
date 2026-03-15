@@ -1,26 +1,56 @@
 # mcp_tools/web_fuzz/dirsearch.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_dirsearch_tools(mcp, hexstrike_client, logger):
+def register_dirsearch_tools(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def dirsearch_scan(url: str, extensions: str = "php,html,js,txt,xml,json",
-                      wordlist: str = "/usr/share/wordlists/dirsearch/common.txt",
-                      threads: int = 30, recursive: bool = False, additional_args: str = "") -> Dict[str, Any]:
+    async def dirsearch_scan(
+        ctx: Context,
+        url: str,
+        extensions: str = "php,html,js,txt,xml,json",
+        wordlist: str = "/usr/share/wordlists/dirsearch/common.txt",
+        threads: int = 30,
+        recursive: bool = False,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Dirsearch for advanced directory and file discovery with enhanced logging.
+        Advanced directory and file discovery using dirsearch.
 
-        Args:
-            url: The target URL
-            extensions: File extensions to search for
-            wordlist: Wordlist file to use
-            threads: Number of threads to use
-            recursive: Enable recursive scanning
-            additional_args: Additional Dirsearch arguments
+        Workflow position: content discovery — particularly good at
+        finding files by extension rather than just directories.
+        Use when you know the target stack (PHP, Python, Java) and
+        want extension-aware discovery.
 
-        Returns:
-            Advanced directory discovery results
+        Parameters:
+        - url: target URL (e.g. 'https://example.com')
+        - extensions: comma-separated file extensions to append to each word
+            PHP stack:   'php,php3,php5,bak,txt,xml'
+            Python stack: 'py,pyc,txt,cfg,env'
+            Java stack:  'jsp,jspx,do,action,xml'
+            Generic:     'php,html,js,txt,xml,json,bak,zip'
+        - wordlist: path to wordlist file
+        - threads: concurrent threads (default 30)
+        - recursive: scan discovered directories recursively (slower but thorough)
+        - additional_args: extra dirsearch flags
+            '-i 200,301,302' — include only these status codes
+            '-x 404,403'     — exclude these status codes
+            '--timeout <n>'  — request timeout in seconds
+            '-H "header"'    — custom headers
+            '--follow-redirects' — follow HTTP redirects
+
+        Prerequisites: target accessible.
+
+        dirsearch vs gobuster vs ffuf:
+        - dirsearch   — best for extension-aware file discovery, recursive support
+        - gobuster    — faster for pure directory discovery
+        - ffuf        — most flexible (FUZZ anywhere)
+
+        Typical sequence:
+            1. gobuster_scan — fast directory sweep
+            2. dirsearch_scan(extensions='php,bak,txt,zip') — file discovery
+            3. Manual review of interesting findings
         """
         data = {
             "url": url,
@@ -30,13 +60,10 @@ def register_dirsearch_tools(mcp, hexstrike_client, logger):
             "recursive": recursive,
             "additional_args": additional_args
         }
-        logger.info(f"📁 Starting Dirsearch scan: {url}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/dirsearch", data)
-        )
+        await ctx.info(f"📁 Starting dirsearch: {url}")
+        result = hexstrike_client.safe_post("api/tools/dirsearch", data)
         if result.get("success"):
-            logger.info(f"✅ Dirsearch scan completed for {url}")
+            await ctx.info(f"✅ dirsearch completed for {url}")
         else:
-            logger.error(f"❌ Dirsearch scan failed for {url}")
+            await ctx.error(f"❌ dirsearch failed for {url}")
         return result
