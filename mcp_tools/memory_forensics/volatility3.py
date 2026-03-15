@@ -1,23 +1,38 @@
 # mcp_tools/memory_forensics/volatility3.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_volatility3(mcp, hexstrike_client, logger):
-    
+def register_volatility3(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def volatility3_analyze(memory_file: str, plugin: str, output_file: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def volatility3_analyze(
+        ctx: Context,
+        memory_file: str,
+        plugin: str,
+        output_file: str = "",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Volatility3 for advanced memory forensics with enhanced logging.
+        Advanced memory forensics using Volatility3 — auto-detects OS profile.
 
-        Args:
-            memory_file: Path to memory dump file
-            plugin: Volatility3 plugin to execute
-            output_file: Output file path
-            additional_args: Additional Volatility3 arguments
+        Parameters:
+        - memory_file: path to memory dump (.raw, .vmem, .mem, .dmp)
+        - plugin: volatility3 plugin (namespace.PluginName format)
+            Windows: windows.pslist, windows.pstree, windows.psscan,
+                     windows.cmdline, windows.netscan, windows.malfind,
+                     windows.dlllist, windows.hashdump, windows.dumpfiles
+            Linux:   linux.pslist, linux.bash, linux.check_syscall
+        - output_file: save output to file (optional)
+        - additional_args: extra flags (-p <pid>, --output-dir <dir>)
 
-        Returns:
-            Advanced memory forensics results
+        Preferred over volatility — no manual profile selection needed.
+
+        Typical sequence:
+            1. volatility3_analyze(memory_file='dump.raw', plugin='windows.pslist')
+            2. volatility3_analyze(plugin='windows.netscan')
+            3. volatility3_analyze(plugin='windows.malfind')
+            4. volatility3_analyze(plugin='windows.hashdump') → hashcat mode 1000
         """
         data = {
             "memory_file": memory_file,
@@ -25,13 +40,10 @@ def register_volatility3(mcp, hexstrike_client, logger):
             "output_file": output_file,
             "additional_args": additional_args
         }
-        logger.info(f"🧠 Starting Volatility3 analysis: {plugin}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/volatility3", data)
-        )
+        await ctx.info(f"🧠 Starting volatility3 [{plugin}]: {memory_file}")
+        result = hexstrike_client.safe_post("api/tools/volatility3", data)
         if result.get("success"):
-            logger.info(f"✅ Volatility3 analysis completed")
+            await ctx.info(f"✅ volatility3 [{plugin}] completed")
         else:
-            logger.error(f"❌ Volatility3 analysis failed")
+            await ctx.error(f"❌ volatility3 [{plugin}] failed")
         return result
