@@ -1,28 +1,58 @@
 # mcp_tools/web_scan/dalfox.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_dalfox_tool(mcp, hexstrike_client, logger):
-    
+def register_dalfox_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def dalfox_xss_scan(url: str, pipe_mode: bool = False, blind: bool = False,
-                       mining_dom: bool = True, mining_dict: bool = True,
-                       custom_payload: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def dalfox_xss_scan(
+        ctx: Context,
+        url: str,
+        pipe_mode: bool = False,
+        blind: bool = False,
+        mining_dom: bool = True,
+        mining_dict: bool = True,
+        custom_payload: str = "",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Dalfox for advanced XSS vulnerability scanning with enhanced logging.
+        Advanced XSS vulnerability scanning using Dalfox.
 
-        Args:
-            url: The target URL
-            pipe_mode: Use pipe mode for input
-            blind: Enable blind XSS testing
-            mining_dom: Enable DOM mining
-            mining_dict: Enable dictionary mining
-            custom_payload: Custom XSS payload
-            additional_args: Additional Dalfox arguments
+        Workflow position: XSS testing after parameter discovery.
+        Dalfox is the most capable XSS scanner — DOM analysis, blind XSS,
+        and dictionary-based mining make it comprehensive.
 
-        Returns:
-            Advanced XSS vulnerability scanning results
+        Parameters:
+        - url: target URL with parameter(s) to test
+               (e.g. 'https://example.com/search?q=test')
+        - pipe_mode: accept URLs from stdin pipe (for bulk scanning)
+        - blind: enable blind XSS testing — injects payloads that call
+                 back to a listener when executed (requires dalfox listener)
+        - mining_dom: analyze DOM for XSS sinks (default True)
+        - mining_dict: use dictionary-based payload mining (default True)
+        - custom_payload: inject a specific custom XSS payload
+        - additional_args: extra dalfox flags
+            '--cookie <c>'     — set cookies for authenticated testing
+            '--header <h>'     — custom headers
+            '--proxy <url>'    — route through proxy
+            '--timeout <sec>'  — request timeout
+            '--delay <ms>'     — delay between requests (ms)
+            '-w <threads>'     — concurrent workers
+            '--output <file>'  — save results to file
+            '--format <fmt>'   — output format (plain, json, markdown)
+
+        Prerequisites: target must reflect input somewhere in the response.
+        Use arjun first to discover which parameters reflect input.
+
+        dalfox vs xsser:
+        - dalfox — more comprehensive, DOM mining, blind XSS, actively maintained
+        - xsser  — alternative, good for edge cases dalfox misses
+
+        Typical XSS testing sequence:
+            1. arjun_parameter_discovery — find reflected parameters
+            2. dalfox_xss_scan(url='endpoint?param=test') — test each param
+            3. Manual verification of confirmed findings
         """
         data = {
             "url": url,
@@ -33,13 +63,10 @@ def register_dalfox_tool(mcp, hexstrike_client, logger):
             "custom_payload": custom_payload,
             "additional_args": additional_args
         }
-        logger.info(f"🎯 Starting Dalfox XSS scan: {url if url else 'pipe mode'}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/dalfox", data)
-        )
+        await ctx.info(f"🎯 Starting dalfox XSS scan: {url if url else 'pipe mode'}")
+        result = hexstrike_client.safe_post("api/tools/dalfox", data)
         if result.get("success"):
-            logger.info(f"✅ Dalfox XSS scan completed")
+            await ctx.info("✅ dalfox XSS scan completed")
         else:
-            logger.error(f"❌ Dalfox XSS scan failed")
+            await ctx.error("❌ dalfox XSS scan failed")
         return result
