@@ -1,33 +1,58 @@
 # mcp_tools/web_crawl/hakrawler.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_hakrawler_tools(mcp, hexstrike_client, logger):
+def register_hakrawler_tools(mcp, hexstrike_client, logger=None):
 
     @mcp.tool()
-    async def hakrawler_crawl(url: str, depth: int = 2, forms: bool = True, robots: bool = True, sitemap: bool = True, wayback: bool = False, additional_args: str = "") -> Dict[str, Any]:
+    async def hakrawler_crawl(
+        ctx: Context,
+        url: str,
+        depth: int = 2,
+        forms: bool = True,
+        robots: bool = True,
+        sitemap: bool = True,
+        wayback: bool = False,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Hakrawler for web endpoint discovery with enhanced logging.
+        Fast web endpoint discovery using hakrawler.
 
-        Note: Uses standard Kali Linux hakrawler (hakluke/hakrawler) with parameter mapping:
-        - url: Piped via echo to stdin (not -url flag)
-        - depth: Mapped to -d flag (not -depth)
-        - forms: Mapped to -s flag for showing sources
-        - robots/sitemap/wayback: Mapped to -subs for subdomain inclusion
-        - Always includes -u for unique URLs
+        Workflow position: quick crawl alongside or before katana.
+        Hakrawler is faster and lighter than katana — good first pass
+        to rapidly discover linked pages, forms, and standard paths.
 
-        Args:
-            url: Target URL to crawl
-            depth: Crawling depth (mapped to -d)
-            forms: Include forms in crawling (mapped to -s)
-            robots: Check robots.txt (mapped to -subs)
-            sitemap: Check sitemap.xml (mapped to -subs)
-            wayback: Use Wayback Machine (mapped to -subs)
-            additional_args: Additional Hakrawler arguments
+        Note on parameter mapping (Kali hakrawler implementation):
+        - url: piped via stdin (not -url flag)
+        - depth: mapped to -d flag
+        - forms: mapped to -s flag (show sources)
+        - robots/sitemap/wayback: mapped to -subs for inclusion
+        - always includes -u for unique URLs
 
-        Returns:
-            Web endpoint discovery results
+        Parameters:
+        - url: target URL (e.g. 'https://example.com')
+        - depth: crawl depth — links to follow from root (default 2)
+        - forms: include form action URLs in discovery (default True)
+        - robots: parse and include robots.txt paths (default True)
+        - sitemap: parse and include sitemap.xml URLs (default True)
+        - wayback: include URLs from Wayback Machine (default False — use gau instead)
+        - additional_args: extra hakrawler flags
+
+        Prerequisites: target must be accessible.
+        No JS rendering — static HTML crawling only.
+
+        Output: list of discovered URLs including forms, robots, sitemap entries.
+
+        hakrawler vs katana:
+        - hakrawler — fast, lightweight, no JS rendering, good for traditional sites
+        - katana    — slower, JS rendering, form extraction, better for modern SPAs
+
+        Typical sequence:
+            1. hakrawler_crawl(url='https://example.com')    — fast static crawl
+            2. katana_crawl(url='https://example.com')       — deep JS crawl
+            3. Deduplicate with anew
+            4. Feed to gobuster/ffuf or injection tools
         """
         data = {
             "url": url,
@@ -38,13 +63,10 @@ def register_hakrawler_tools(mcp, hexstrike_client, logger):
             "wayback": wayback,
             "additional_args": additional_args
         }
-        logger.info(f"🕷️ Starting Hakrawler crawling: {url}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/hakrawler", data)
-        )
+        await ctx.info(f"🕷️ Starting hakrawler: {url}")
+        result = hexstrike_client.safe_post("api/tools/hakrawler", data)
         if result.get("success"):
-            logger.info(f"✅ Hakrawler crawling completed")
+            await ctx.info(f"✅ hakrawler completed for {url}")
         else:
-            logger.error(f"❌ Hakrawler crawling failed")
+            await ctx.error(f"❌ hakrawler failed for {url}")
         return result
