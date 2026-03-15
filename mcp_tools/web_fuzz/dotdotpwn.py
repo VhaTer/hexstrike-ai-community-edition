@@ -1,35 +1,61 @@
 # mcp_tools/web_fuzz/dotdotpwn.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_dotdotpwn_tool(mcp, hexstrike_client, logger):
-    
+def register_dotdotpwn_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def dotdotpwn_scan(target: str, module: str = "http", additional_args: str = "") -> Dict[str, Any]:
+    async def dotdotpwn_scan(
+        ctx: Context,
+        target: str,
+        module: str = "http",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute DotDotPwn for directory traversal testing with enhanced logging.
+        Directory traversal vulnerability testing using DotDotPwn.
 
-        Args:
-            target: The target hostname or IP
-            module: Module to use (http, ftp, tftp, etc.)
-            additional_args: Additional DotDotPwn arguments
+        Workflow position: targeted vulnerability test — use after content
+        discovery reveals file inclusion or path parameters. Specifically
+        tests for path traversal (../../etc/passwd) vulnerabilities.
 
-        Returns:
-            Directory traversal test results
+        Parameters:
+        - target: target hostname or IP (e.g. 'example.com' or '192.168.1.1')
+                  do NOT include http:// — dotdotpwn handles the protocol
+        - module: protocol module to test:
+            'http'      — HTTP path traversal (most common)
+            'http-url'  — HTTP URL-based traversal
+            'ftp'       — FTP traversal
+            'tftp'      — TFTP traversal
+            'payload'   — generate payloads only (no active testing)
+        - additional_args: extra dotdotpwn flags
+            '-d <n>'     — traversal depth (default 6)
+            '-f <file>'  — target file to read (default /etc/passwd)
+            '-b'         — break after first match found
+            '-q'         — quiet mode
+            '-k <str>'   — string to search in response (confirms traversal)
+            '-s'         — enable URL encoding of payloads
+            '-o'         — use only ../ without encoding variations
+
+        Prerequisites: target must have a path/file parameter that could be
+        vulnerable to directory traversal. Identify candidates with katana
+        or dirb first (look for ?file=, ?path=, ?page= parameters).
+
+        Output: list of successful traversal payloads and their responses.
+
+        Typical sequence:
+            1. katana_crawl — find ?file= or ?page= parameters
+            2. dotdotpwn_scan(target='example.com', module='http') — test traversal
         """
         data = {
             "target": target,
             "module": module,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting DotDotPwn scan: {target}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/dotdotpwn", data)
-        )
+        await ctx.info(f"🔍 Starting dotdotpwn: {target} [{module}]")
+        result = hexstrike_client.safe_post("api/tools/dotdotpwn", data)
         if result.get("success"):
-            logger.info(f"✅ DotDotPwn scan completed for {target}")
+            await ctx.info(f"✅ dotdotpwn completed for {target}")
         else:
-            logger.error(f"❌ DotDotPwn scan failed for {target}")
+            await ctx.error(f"❌ dotdotpwn failed for {target}")
         return result
