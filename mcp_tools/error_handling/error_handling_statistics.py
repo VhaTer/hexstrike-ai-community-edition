@@ -1,39 +1,31 @@
 # mcp_tools/error_handling/error_handling_statistics.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_error_handling_statistics_tool(mcp, hexstrike_client, logger, HexStrikeColors):
+def register_error_handling_statistics_tool(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
+
     @mcp.tool()
-    async def error_handling_statistics() -> Dict[str, Any]:
+    async def error_handling_statistics(ctx: Context) -> Dict[str, Any]:
         """
-        Get intelligent error handling system statistics and recent error patterns.
+        Get error handling statistics and recent error patterns from the HexStrike server.
 
-        Returns:
-            Error handling statistics and patterns
+        Useful for debugging recurring tool failures or understanding
+        which tools are failing most frequently.
+
+        Output: total errors, error counts by type, recent error patterns,
+        and recovery strategy success rates.
         """
-        logger.info(f"{HexStrikeColors.ELECTRIC_PURPLE}📊 Retrieving error handling statistics{HexStrikeColors.RESET}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_get("api/error-handling/statistics")
-        )
-
+        await ctx.info("📊 Retrieving error handling statistics")
+        result = hexstrike_client.safe_get("api/error-handling/statistics")
         if result.get("success"):
             stats = result.get("statistics", {})
-            total_errors = stats.get("total_errors", 0)
-            recent_errors = stats.get("recent_errors_count", 0)
-
-            logger.info(f"{HexStrikeColors.SUCCESS}✅ Error statistics retrieved{HexStrikeColors.RESET}")
-            logger.info(f"  📈 Total Errors: {total_errors}")
-            logger.info(f"  🕒 Recent Errors: {recent_errors}")
-
-            # Log error breakdown by type
+            total = stats.get("total_errors", 0)
+            recent = stats.get("recent_errors_count", 0)
+            await ctx.info(f"✅ Stats retrieved — total: {total}, recent: {recent}")
             error_counts = stats.get("error_counts_by_type", {})
-            if error_counts:
-                logger.info(f"{HexStrikeColors.HIGHLIGHT_BLUE} ERROR BREAKDOWN {HexStrikeColors.RESET}")
-                for error_type, count in error_counts.items():
-                                          logger.info(f"  {HexStrikeColors.FIRE_RED}{error_type}: {count}{HexStrikeColors.RESET}")
+            for error_type, count in error_counts.items():
+                await ctx.info(f"  {error_type}: {count}")
         else:
-            logger.error(f"{HexStrikeColors.ERROR}❌ Failed to retrieve error statistics{HexStrikeColors.RESET}")
-
+            await ctx.error("❌ Failed to retrieve error statistics")
         return result
