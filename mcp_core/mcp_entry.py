@@ -44,9 +44,8 @@ def run_mcp(args, logger):
         logger.info("🚀 Starting HexStrike AI MCP server")
         logger.info("🤖 Ready to serve AI agents with enhanced cybersecurity capabilities")
 
-       
-        # FastMCP 3.1+ — mcp.run() is stable, stdio fallback removed
-        mcp.run(show_banner=False)
+        # FastMCP 3.x: log_level passed to run() — suppresses stdout for Claude Desktop
+        mcp.run(show_banner=False, log_level="WARNING")
 
     except Exception as e:
         logger.error(f"💥 Error starting MCP server: {str(e)}")

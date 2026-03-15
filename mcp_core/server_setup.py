@@ -45,7 +45,7 @@ def setup_mcp_server(hexstrike_client, logger, compact: bool = False, profiles: 
         Configured FastMCP instance
     """
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai-mcp", transforms=transforms, log_level="WARNING")
+    mcp = FastMCP("hexstrike-ai-mcp", transforms=transforms)
 
     _register_skills(mcp, logger)
 
