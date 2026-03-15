@@ -1,39 +1,48 @@
 # mcp_tools/password_cracking/ophcrack.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_ophcrack_tool(mcp, hexstrike_client, logger):
+def register_ophcrack_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
     async def ophcrack_crack(
+        ctx: Context,
         hash_file: str,
         tables_dir: str = "",
         tables: str = "",
         additional_args: str = ""
     ) -> Dict[str, Any]:
         """
-        Execute Ophcrack for Windows hash cracking.
+        Windows NTLM hash cracking using Ophcrack rainbow tables.
 
-        Description:
-            This tool runs the Ophcrack utility to crack Windows password hashes. It accepts a hash file (in pwdump/session format),
-            optional rainbow tables directory and table set, and any additional command-line arguments for Ophcrack.
+        Workflow position: NTLM hash cracking when wordlist/mask attacks fail.
+        Rainbow tables trade disk space for instant cracking — no GPU needed.
+        Best for simple/common Windows passwords when hashcat wordlist fails.
 
         Parameters:
-            hash_file (str): Path to the hash file (pwdump/session). Required.
-            tables_dir (str, optional): Path to rainbow tables directory.
-            tables (str, optional): Table set string for -t option.
-            additional_args (str, optional): Extra ophcrack CLI arguments.
+        - hash_file: path to hash file in pwdump or session format
+                     (format: username:uid:LM_hash:NTLM_hash:::)
+        - tables_dir: path to directory containing rainbow tables
+                      (download from https://ophcrack.sourceforge.io/tables.php)
+        - tables: table set name to use:
+            'VistaFree'   — free Vista/7 tables (368MB, ~50% success)
+            'WinXP Free'  — free XP tables (388MB, most XP passwords)
+            'Vista proba' — extended Vista tables (8GB, ~90% success)
+        - additional_args: extra ophcrack flags
+            '-v'          — verbose
+            '-n <n>'      — number of threads
 
-        Returns:
-            Dict[str, Any]: Result from Ophcrack execution, including success/error and output.
+        Prerequisites: rainbow tables must be downloaded and available locally.
+        Tables are large (hundreds of MB to GB) — download once, reuse.
 
-        Example usage:
-            ophcrack_crack(
-                hash_file="/path/to/hashes.txt",
-                tables_dir="/path/to/tables",
-                tables="VistaFree",
-                additional_args="-v"
-            )
+        ophcrack vs hashcat:
+        - ophcrack  — no GPU needed, instant if hash is in tables, but limited coverage
+        - hashcat   — much better coverage with good wordlist + rules, GPU accelerated
+
+        Typical sequence:
+            1. hashcat_crack with rockyou.txt + best64 rules — try wordlist first
+            2. ophcrack_crack if wordlist fails — rainbow table fallback
         """
         data = {
             "hash_file": hash_file,
@@ -41,13 +50,10 @@ def register_ophcrack_tool(mcp, hexstrike_client, logger):
             "tables": tables,
             "additional_args": additional_args
         }
-        logger.info(f"🔑 Starting Ophcrack crack with hash file: {hash_file}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/password-cracking/ophcrack", data)
-        )
+        await ctx.info(f"🔑 Starting ophcrack: {hash_file}")
+        result = hexstrike_client.safe_post("api/tools/password-cracking/ophcrack", data)
         if result.get("success"):
-            logger.info("✅ Ophcrack crack completed successfully")
+            await ctx.info("✅ ophcrack completed")
         else:
-            logger.error("❌ Ophcrack crack failed")
+            await ctx.error("❌ ophcrack failed")
         return result

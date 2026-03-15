@@ -1,12 +1,13 @@
 # mcp_tools/password_cracking/patator.py
 
-
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_patator_tool(mcp, hexstrike_client, logger):
+def register_patator_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
     async def patator_attack(
+        ctx: Context,
         module: str,
         target: str,
         username: str = "",
@@ -16,23 +17,36 @@ def register_patator_tool(mcp, hexstrike_client, logger):
         additional_args: str = ""
     ) -> Dict[str, Any]:
         """
-        API endpoint to execute Patator for password brute forcing.
+        Multi-purpose brute-forcer using Patator — flexible module system.
 
-        This tool allows clients to initiate a password brute force attack using the Patator tool.
-        It supports multiple modules (e.g., ssh, ftp, http) and flexible input for usernames and passwords,
-        including single values or files containing lists. Enhanced logging is provided for audit and debugging.
+        Workflow position: credential testing, alternative to hydra/medusa.
+        Patator's module system handles edge cases that hydra/medusa struggle with.
 
         Parameters:
-          - module (str): Patator module to use (e.g., 'ssh_login', 'ftp_login'). Required.
-          - target (str): Target host or address for the attack. Required.
-          - username (str): Single username to test (optional).
-          - username_file (str): Path to file containing usernames (optional, mutually exclusive with 'username').
-          - password (str): Single password to test (optional).
-          - password_file (str): Path to file containing passwords (optional, mutually exclusive with 'password').
-          - additional_args (str): Extra Patator command-line arguments (optional).
+        - module: Patator module to use (note: patator uses underscore format):
+            'ssh_login'    — SSH
+            'ftp_login'    — FTP
+            'http_fuzz'    — HTTP fuzzing
+            'smtp_login'   — SMTP
+            'mysql_login'  — MySQL
+            'mssql_login'  — MSSQL
+            'snmp_login'   — SNMP
+            'dns_forward'  — DNS forward lookup
+        - target: target host or address
+        - username: single username
+        - username_file: file with usernames
+        - password: single password
+        - password_file: file with passwords
+        - additional_args: extra patator arguments
+            '-x ignore:code=530'  — ignore specific responses
+            '-t <n>'              — threads
 
-        Returns:
-          - Dict[str, Any]: Result from Patator execution, including success/error and output.
+        Prerequisites: username AND password (or files) required.
+
+        patator vs hydra vs medusa:
+        - patator  — most flexible module system, good for custom protocols
+        - hydra    — most protocol support, most commonly used
+        - medusa   — fastest for SSH/FTP parallel attacks
         """
         data = {
             "module": module,
@@ -43,13 +57,10 @@ def register_patator_tool(mcp, hexstrike_client, logger):
             "password_file": password_file,
             "additional_args": additional_args
         }
-        logger.info(f"🔑 Starting Patator attack: {target}:{module}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/patator", data)
-        )
+        await ctx.info(f"🔑 Starting patator: {target}:{module}")
+        result = hexstrike_client.safe_post("api/tools/patator", data)
         if result.get("success"):
-            logger.info(f"✅ Patator attack completed for {target}")
+            await ctx.info(f"✅ patator completed for {target}")
         else:
-            logger.error(f"❌ Patator attack failed for {target}")
+            await ctx.error(f"❌ patator failed for {target}")
         return result
