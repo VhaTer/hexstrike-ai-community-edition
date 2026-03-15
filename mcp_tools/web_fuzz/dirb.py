@@ -1,34 +1,61 @@
 # mcp_tools/web_fuzz/dirb.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_dirb_tool(mcp, hexstrike_client, logger):
+def register_dirb_tool(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def dirb_scan(url: str, wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "") -> Dict[str, Any]:
+    async def dirb_scan(
+        ctx: Context,
+        url: str,
+        wordlist: str = "/usr/share/wordlists/dirb/common.txt",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
         """
-        Execute Dirb for directory brute forcing with enhanced logging.
+        Directory brute-force using dirb — classic, reliable, simple.
 
-        Args:
-            url: The target URL
-            wordlist: Path to wordlist file
-            additional_args: Additional Dirb arguments
+        Workflow position: content discovery after httpx confirms target is live.
+        Dirb is the simplest dir fuzzer — good for quick checks or
+        when other tools are unavailable.
 
-        Returns:
-            Scan results with enhanced telemetry
+        Parameters:
+        - url: target URL (e.g. 'https://example.com')
+        - wordlist: path to wordlist (default: dirb common.txt ~4600 entries)
+            common alternatives:
+            '/usr/share/wordlists/dirb/big.txt'           — ~20k entries
+            '/usr/share/wordlists/dirbuster/medium.txt'   — ~220k entries
+            '/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt'
+        - additional_args: extra dirb flags
+            '-r'          — don't search recursively
+            '-z'          — add millisecond delay between requests
+            '-a <agent>'  — custom user-agent
+            '-c <cookie>' — set cookie
+            '-H <header>' — add custom header
+            '-o <file>'   — save output to file
+
+        Prerequisites: target accessible on HTTP/HTTPS.
+
+        dirb vs gobuster vs ffuf vs feroxbuster:
+        - dirb        — simple, no threads config, reliable fallback
+        - gobuster    — faster, multi-threaded, DNS/vhost modes
+        - ffuf        — most flexible, FUZZ placeholder, vhost/param fuzzing
+        - feroxbuster — recursive by default, Rust-based, very fast
+
+        Typical sequence:
+            1. dirb_scan or gobuster_scan — quick common paths
+            2. ffuf_scan with larger wordlist — thorough sweep
+            3. Follow up on interesting findings
         """
         data = {
             "url": url,
             "wordlist": wordlist,
             "additional_args": additional_args
         }
-        logger.info(f"📁 Starting Dirb scan: {url}")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/dirb", data)
-        )
+        await ctx.info(f"📁 Starting dirb scan: {url}")
+        result = hexstrike_client.safe_post("api/tools/dirb", data)
         if result.get("success"):
-            logger.info(f"✅ Dirb scan completed for {url}")
+            await ctx.info(f"✅ dirb completed for {url}")
         else:
-            logger.error(f"❌ Dirb scan failed for {url}")
+            await ctx.error(f"❌ dirb failed for {url}")
         return result
