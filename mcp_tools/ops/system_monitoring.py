@@ -1,74 +1,46 @@
-# mcp_tools/system_monitoring.py
+# mcp_tools/ops/system_monitoring.py
 
 from typing import Dict, Any
-import asyncio
+from fastmcp import Context
 
-def register_system_monitoring_tools(mcp, hexstrike_client, logger):
+def register_system_monitoring_tools(mcp, hexstrike_client, logger=None):
+
     @mcp.tool()
-    async def server_health() -> Dict[str, Any]:
-        """
-        Check the health status of the HexStrike AI server.
-
-        Returns:
-            Server health information with tool availability and telemetry
-        """
-        logger.info(f"🏥 Checking HexStrike AI server health")
+    async def server_health(ctx: Context) -> Dict[str, Any]:
+        """Check HexStrike server health, tool availability, and telemetry."""
+        await ctx.info("🏥 Checking HexStrike server health")
         result = hexstrike_client.check_health()
         if result.get("status") == "healthy":
-            logger.info(f"✅ Server is healthy - {result.get('total_tools_available', 0)} tools available")
+            await ctx.info(f"✅ Server healthy — {result.get('total_tools_available', 0)} tools available")
         else:
-            logger.warning(f"⚠️  Server health check returned: {result.get('status', 'unknown')}")
+            await ctx.warning(f"⚠️ Server status: {result.get('status', 'unknown')}")
         return result
 
     @mcp.tool()
-    async def get_cache_stats() -> Dict[str, Any]:
-        """
-        Get cache statistics from the HexStrike AI server.
-
-        Returns:
-            Cache performance statistics
-        """
-        logger.info(f"💾 Getting cache statistics")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_get("api/cache/stats")
-        )
+    async def get_cache_stats(ctx: Context) -> Dict[str, Any]:
+        """Get cache performance statistics from the HexStrike server."""
+        await ctx.info("💾 Getting cache statistics")
+        result = hexstrike_client.safe_get("api/cache/stats")
         if "hit_rate" in result:
-            logger.info(f"📊 Cache hit rate: {result.get('hit_rate', 'unknown')}")
+            await ctx.info(f"📊 Cache hit rate: {result.get('hit_rate')}")
         return result
 
     @mcp.tool()
-    async def clear_cache() -> Dict[str, Any]:
-        """
-        Clear the cache on the HexStrike AI server.
-
-        Returns:
-            Cache clear operation results
-        """
-        logger.info(f"🧹 Clearing server cache")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/cache/clear", {})
-        )
+    async def clear_cache(ctx: Context) -> Dict[str, Any]:
+        """Clear the result cache on the HexStrike server."""
+        await ctx.info("🧹 Clearing server cache")
+        result = hexstrike_client.safe_post("api/cache/clear", {})
         if result.get("success"):
-            logger.info(f"✅ Cache cleared successfully")
+            await ctx.info("✅ Cache cleared")
         else:
-            logger.error(f"❌ Failed to clear cache")
+            await ctx.error("❌ Failed to clear cache")
         return result
 
     @mcp.tool()
-    async def get_telemetry() -> Dict[str, Any]:
-        """
-        Get system telemetry from the HexStrike AI server.
-
-        Returns:
-            System performance and usage telemetry
-        """
-        logger.info(f"📈 Getting system telemetry")
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_get("api/telemetry")
-        )
+    async def get_telemetry(ctx: Context) -> Dict[str, Any]:
+        """Get system performance and usage telemetry."""
+        await ctx.info("📈 Getting system telemetry")
+        result = hexstrike_client.safe_get("api/telemetry")
         if "commands_executed" in result:
-            logger.info(f"📊 Commands executed: {result.get('commands_executed', 0)}")
+            await ctx.info(f"📊 Commands executed: {result.get('commands_executed', 0)}")
         return result
