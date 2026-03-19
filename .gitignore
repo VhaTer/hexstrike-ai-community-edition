@@ -6,3 +6,5 @@ node_modules/
 
 # Web UI build output
 ui/node_modules/
+session.md
+hexstrike_mcp.log

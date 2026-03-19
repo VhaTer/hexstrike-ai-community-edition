@@ -3,6 +3,7 @@
 <img src="assets/hexstrike-logo.png" alt="HexStrike AI Logo" width="220" style="margin-bottom: 20px;"/>
 
 # HexStrike AI - Community Edition
+
 ### AI-Powered MCP Cybersecurity Automation Platform
 
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
@@ -252,6 +253,7 @@ Edit `~/.config/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
 </details>
 
 <details>
@@ -277,6 +279,7 @@ Configure VS Code settings in `.vscode/settings.json`:
   "inputs": []
 }
 ```
+
 </details>
 
 <details>
@@ -303,6 +306,7 @@ Configure OpenCode settings in `~/.config/opencode/opencode.json`:
   }
 }
 ```
+
 </details>
 
 ---
@@ -579,6 +583,28 @@ python3 hexstrike_server.py
 
 </details>
 
+<details>
+<summary><b>📡 WiFi Penetration Testing</b></summary>
+
+- Aircrack-ng Suite:
+- Aircrack-ng - WPA/WPA2 PSK cracking from captured handshakes using dictionary attacks
+- Airmon-ng - Enable/disable monitor mode and kill interfering processes
+- Airodump-ng - Passive 802.11 packet capture for AP discovery and WPA handshake collection
+- Aireplay-ng - Packet injection for deauthentication, fake authentication, and ARP replay attacks
+- Airbase-ng - Rogue/soft access point creation for Evil Twin and client capture attacks
+- Airdecap-ng - Decrypt WEP/WPA/WPA2 encrypted pcap capture files
+
+*Modern WiFi Tools:*
+
+- hcxdumptool - Clientless PMKID capture and WPA/WPA2 handshake collection (v7.0.0+)
+- hcxpcapngtool - Convert hcxdumptool pcapng output to hashcat -m 22000 format
+- EAPHammer - WPA-Enterprise Evil Twin for harvesting 802.1X EAP credentials
+- Wifite2 - Automated WiFi auditing with PMKID, handshake, and WPS attack support
+- Bettercap - WiFi recon, deauthentication, and Evil Twin via Bettercap wifi module
+- mdk4 - 802.11 protocol stress testing and WIDS/WIPS evasion validation
+
+</details>
+
 ---
 
 ### AI Agents
@@ -632,6 +658,7 @@ AI Agent: "Thank you for clarifying ownership and intent. To proceed with a pene
 - **Consistent Methodology** — AI agents apply the same systematic approach to every scan instead of manual variance
 - **Learning Over Time** — First WordPress scan uses defaults, 5th WordPress scan knows which tools are most effective
 - **Attack Chain Discovery** — Knowledge graph surfaces multi-step attack paths that isolated findings would miss
+
 </details>
 
 ---
@@ -639,6 +666,7 @@ AI Agent: "Thank you for clarifying ownership and intent. To proceed with a pene
 ## Security Considerations
 
 ⚠️ **Important Security Notes**:
+
 - This tool provides AI agents with powerful system access
 - Run in isolated environments or dedicated security testing VMs
 - AI agents can execute arbitrary security tools - ensure proper oversight
