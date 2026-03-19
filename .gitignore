@@ -2,6 +2,9 @@ __pycache__
 *.pyc
 hexstrike.log
 .hexstrike_data/
-
+session.md
+hexstrike_mcp.log
 # Web UI build output
 ui/node_modules/
+# Migration/utility scripts
+*Script.py
