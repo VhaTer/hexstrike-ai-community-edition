@@ -48,8 +48,6 @@ def register_gobuster(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
         Prerequisites: target accessible.
 
-        Output includes recovery info if server-side error recovery was applied.
-
         gobuster vs ffuf vs feroxbuster:
         - gobuster    — fast, multi-mode (dir/dns/vhost), simple syntax
         - ffuf        — FUZZ anywhere, most flexible for custom fuzzing
@@ -62,8 +60,32 @@ def register_gobuster(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
             "additional_args": additional_args,
             "use_recovery": True
         }
+
         await ctx.info(f"📁 Starting gobuster {mode}: {url}")
-        result = hexstrike_client.safe_post("api/tools/gobuster", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/gobuster", data)
+        )
+
+        phases = [
+            (20, "🔍 Initializing wordlist..."),
+            (45, "💥 Fuzzing directories and files..."),
+            (70, "💥 Still fuzzing..."),
+            (88, "📋 Processing results..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=12)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
             await ctx.info(f"✅ gobuster completed for {url}")
             if result.get("recovery_info", {}).get("recovery_applied"):

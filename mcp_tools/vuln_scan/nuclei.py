@@ -75,21 +75,44 @@ def register_nuclei(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
             "additional_args": additional_args,
             "use_recovery": True
         }
+
         await ctx.info(f"🔬 Starting nuclei scan: {target}")
         if severity:
-            await ctx.info(f"Severity filter: {severity}")
+            await ctx.info(f"🎯 Severity filter: {severity}")
         if tags:
-            await ctx.info(f"Tags filter: {tags}")
+            await ctx.info(f"🏷️ Tags filter: {tags}")
+        await ctx.report_progress(0, 100)
 
-        result = hexstrike_client.safe_post("api/tools/nuclei", data)
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/nuclei", data)
+        )
+
+        phases = [
+            (15, "📋 Loading templates..."),
+            (35, "⚡ Running nuclei templates..."),
+            (60, "⚡ Scanning with all templates..."),
+            (85, "📋 Processing findings..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             await ctx.info(f"✅ nuclei completed for {target}")
             output = result.get("stdout", "")
             if "CRITICAL" in output:
-                await ctx.warning("🚨 CRITICAL vulnerabilities detected!")
+                await ctx.error("🚨 CRITICAL vulnerabilities detected!")
             elif "HIGH" in output:
-                await ctx.warning("⚠️ HIGH severity vulnerabilities found!")
+                await ctx.info("⚠️ HIGH severity vulnerabilities found!")
+            await ctx.info("💡 Check severity: CRITICAL > HIGH > MEDIUM > LOW")
             if result.get("recovery_info", {}).get("recovery_applied"):
                 attempts = result["recovery_info"].get("attempts_made", 1)
                 await ctx.info(f"⚠️ Recovery applied: {attempts} attempt(s)")
