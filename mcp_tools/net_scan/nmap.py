@@ -1,6 +1,7 @@
 # mcp_tools/net_scan/nmap.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
@@ -51,15 +52,40 @@ def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
             "additional_args": additional_args,
             "use_recovery": True
         }
-        await ctx.info(f"🔍 Starting nmap scan: {target}")
-        result = hexstrike_client.safe_post("api/tools/nmap", data)
+
+        port_info = f" ports {ports}" if ports else " top 1000 ports"
+        await ctx.info(f"🔍 Starting nmap {scan_type} on {target}{port_info}")
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/nmap", data)
+        )
+
+        phases = [
+            (20, "📡 Host discovery..."),
+            (40, "🔌 Port scanning..."),
+            (65, "🔎 Service/version detection..."),
+            (85, "📋 Running NSE scripts..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ nmap scan completed for {target}")
+            await ctx.info(f"✅ nmap completed for {target}")
             if result.get("recovery_info", {}).get("recovery_applied"):
                 attempts = result["recovery_info"].get("attempts_made", 1)
                 await ctx.info(f"⚠️ Recovery applied: {attempts} attempt(s)")
         else:
-            await ctx.error(f"❌ nmap scan failed for {target}")
+            await ctx.error(f"❌ nmap failed for {target}")
             if result.get("human_escalation"):
                 await ctx.error("🚨 HUMAN ESCALATION REQUIRED")
         return result
@@ -122,8 +148,39 @@ def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
             "stealth": stealth,
             "additional_args": additional_args
         }
-        await ctx.info(f"🔍 Starting advanced nmap: {target}")
-        result = hexstrike_client.safe_post("api/tools/nmap-advanced", data)
+
+        options = []
+        if nse_scripts: options.append(f"scripts: {nse_scripts}")
+        if os_detection: options.append("OS detection")
+        if aggressive:   options.append("aggressive mode")
+        if stealth:      options.append("stealth mode")
+        option_str = " | ".join(options) if options else "default"
+
+        await ctx.info(f"🔍 Advanced nmap on {target} — {option_str}")
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/nmap-advanced", data)
+        )
+
+        phases = [
+            (20, "📡 Host discovery..."),
+            (40, "🔌 Port scanning..."),
+            (60, "🔎 Running NSE scripts..."),
+            (80, "🧠 OS fingerprinting & analysis..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
             await ctx.info(f"✅ Advanced nmap completed for {target}")
         else:
