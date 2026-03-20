@@ -1,6 +1,7 @@
 # mcp_tools/web_crawl/katana.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_katana_tool(mcp, hexstrike_client, logger=None):
@@ -63,9 +64,31 @@ def register_katana_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"⚔️ Starting katana crawl: {url}")
-        result = hexstrike_client.safe_post("api/tools/katana", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/katana", data)
+        )
+
+        phases = [
+            (20, "🌐 Fetching initial page..."),
+            (40, "🔍 Crawling discovered links..."),
+            (65, "⚙️ Rendering JavaScript endpoints..."),
+            (85, "📋 Extracting forms and parameters..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ katana crawl completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ katana crawl failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
