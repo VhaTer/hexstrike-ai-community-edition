@@ -15,10 +15,10 @@ calls them via `hexstrike_client.safe_post()`.
 
 FastMCP 3.x changed the game. It is no longer just an MCP wrapper — it is a full
 async server framework with native HTTP transport, a Client system, Resources,
-Prompts, and real-time Context streaming. The Flask layer is now redundant and
-actively limits what the LLM can see and do.
+Prompts, real-time Context streaming, and interactive Apps. The Flask layer is now
+redundant and actively limits what the LLM can see and do.
 
-This roadmap proposes a clean, non-breaking 3-phase migration.
+This roadmap proposes a clean, non-breaking 4-phase migration.
 
 ---
 
@@ -78,7 +78,7 @@ mcp.run(transport="http", host="127.0.0.1", port=8888)
 FastMCP 3.1+ natively exposes an HTTP/SSE endpoint. `hexstrike_server.py`
 (currently ~8000 lines) becomes unnecessary.
 
-### 5. `Resources` and `Prompts` — workflow intelligence (future)
+### 5. `Resources` and `Prompts` — workflow intelligence (Phase 3+)
 
 ```python
 @mcp.resource("scan://{target}")
@@ -95,8 +95,20 @@ async def pentest_workflow(target: str, scope: str) -> list:
     ]
 ```
 
-This enables guided bug bounty and CTF workflows directly in the LLM — 
-complementing the existing `.opencode/agents/` system.
+### 6. FastMCP Apps — interactive UI in the conversation (Phase 4)
+
+```python
+from fastmcp import FastMCP
+from prefab_ui.components import Column, Heading, BarChart, Table
+
+@mcp.tool(app=True)
+def hexstrike_dashboard() -> PrefabApp:
+    """Live HexStrike dashboard — server health, tools, running scans."""
+    ...
+```
+
+MCP Apps render interactive UIs directly inside the MCP client conversation
+(Claude Desktop, VS Code Copilot, etc.) — no browser, no separate frontend.
 
 ---
 
@@ -110,24 +122,7 @@ complementing the existing `.opencode/agents/` system.
 | `mcp.run(show_banner=False, log_level="WARNING")` | `mcp_core/mcp_entry.py` | ✅ |
 | `BM25SearchTransform` for tool discovery | `mcp_core/server_setup.py` | ✅ |
 | `SkillsDirectoryProvider` for skills/ | `mcp_core/server_setup.py` | ✅ |
-| `ctx: Context` migration — net_scan | `nmap, masscan, rustscan, arp_scan` | ✅ |
-| `ctx: Context` migration — recon | `amass, subfinder, autorecon, theharvester` | ✅ |
-| `ctx: Context` migration — web_fuzz | `gobuster, ffuf, feroxbuster, dirb, dirsearch, wfuzz, dotdotpwn` | ✅ |
-| `ctx: Context` migration — web_scan | `nikto, sqlmap, dalfox, jaeles, wpscan, burpsuite, xsser, zap` | ✅ |
-| `ctx: Context` migration — web_crawl | `katana, hakrawler` | ✅ |
-| `ctx: Context` migration — web_probe | `httpx` | ✅ |
-| `ctx: Context` migration — url_recon | `gau, waybackurls` | ✅ |
-| `ctx: Context` migration — param_discovery | `arjun, paramspider, x8` | ✅ |
-| `ctx: Context` migration — smb_enum | `enum4linux, nbtscan, netexec, rpcclient, smbmap` | ✅ |
-| `ctx: Context` migration — password_cracking | `hydra, hashcat, john, medusa, patator, ophcrack, hashid` | ✅ |
-| `ctx: Context` migration — vuln_scan | `nuclei` | ✅ |
-| `ctx: Context` migration — credential_harvest | `responder` | ✅ |
-| `ctx: Context` migration — memory_forensics | `volatility, volatility3` | ✅ |
-| `ctx: Context` migration — exploit_framework | `metasploit, msfvenom, pwninit, pwntools, exploit_db` | ✅ |
-| `ctx: Context` migration — error_handling | `statistics, test_recovery` | ✅ |
-| `ctx: Context` migration — ops | `auto_install, process_management, system_monitoring, visual_output` | ✅ |
-| `ctx: Context` migration — dns_enum | `dnsenum, fierce` | ✅ |
-| `ctx: Context` migration — net_lookup | `whois` | ✅ |
+| `ctx: Context` migration — 62 tools across all non-wifi modules | `mcp_tools/` | ✅ |
 | WiFi pentest docstrings — workflow context | all 12 wifi tools | ✅ |
 | Stub `FileUploadTestingFramework` | `server_core/workflows/bugbounty/testing.py` | ✅ |
 
@@ -135,14 +130,14 @@ complementing the existing `.opencode/agents/` system.
 
 | What | Status |
 |------|--------|
-| `ctx: Context` migration — wifi_pentest | ⚠️ lost during rebase, needs redo |
+| `ctx: Context` + `run_in_executor` — wifi_pentest (12 tools) | 🔄 needs redo after rebase |
 | Unit tests — wifi_pentest mcp_tools | 🔄 in progress |
 
 ### Known divergence from upstream
 
 Upstream `beta/1.0.13` added `run_in_executor` to all tools (correct async pattern).
-Our branch has `ctx: Context` but some tools lost `run_in_executor` during rebase
-conflicts. Both are needed — the correct pattern is:
+Our branch has `ctx: Context` but wifi tools lost it during rebase conflict resolution.
+Both are needed — the correct pattern is:
 
 ```python
 @mcp.tool()
@@ -175,37 +170,16 @@ Both are required. Neither replaces the other.
 Before:
   mcp_tools/wifi_pentest/airmon_ng.py
     → hexstrike_client.safe_post("api/tools/wifi_pentest/airmon_ng", data)
-    → HTTP → Flask → server_api/wifi_pentest/airmon_ng.py
-    → subprocess
+    → HTTP → Flask → server_api/wifi_pentest/airmon_ng.py → subprocess
 
 After (Phase 1):
   mcp_tools/wifi_pentest/airmon_ng.py
-    → FastMCP Client → server_api/wifi_pentest/airmon_ng.py
-    → subprocess (direct, no HTTP)
-```
-
-**Implementation sketch:**
-
-```python
-# mcp_core/direct_client.py — new file
-from fastmcp import Client
-from mcp_core.server_setup import setup_mcp_server
-
-_direct_mcp = None
-
-async def get_direct_client():
-    global _direct_mcp
-    if _direct_mcp is None:
-        # Mount server_api tools directly, no Flask
-        from server_api.wifi_pentest import register_wifi_blueprint_as_mcp
-        _direct_mcp = FastMCP("hexstrike-direct")
-        register_wifi_blueprint_as_mcp(_direct_mcp)
-    return Client(_direct_mcp)
+    → FastMCP Client → server_api/wifi_pentest/airmon_ng.py → subprocess (direct)
 ```
 
 **Why wifi_pentest first:**
 - Cleanest module — added in beta/1.0.12, no V6 legacy
-- All tools follow same pattern
+- All tools follow the same pattern
 - No shared state with Flask blueprints
 - Already has `run_in_executor` from upstream
 
@@ -241,11 +215,136 @@ mcp.run(transport="http", host="127.0.0.1", port=8888)
 All `server_api/` blueprints become FastMCP tools registered directly.
 Flask, `requests`, `hexstrike_client.py` are removed from dependencies.
 
+Resources and Prompts are introduced here to enable guided workflows:
+
+```python
+@mcp.prompt()
+async def bug_bounty_workflow(target: str, scope: str) -> list:
+    """Full bug bounty recon → vuln hunt → report workflow."""
+    ...
+
+@mcp.prompt()
+async def ctf_workflow(challenge_type: str) -> list:
+    """CTF challenge solving workflow — binary/web/crypto/forensics."""
+    ...
+```
+
+---
+
+## Phase 4 — FastMCP Apps: interactive dashboard in the conversation
+
+**Goal:** Replace the `ui/` React/Vite/Flask dashboard with a FastMCP App
+that renders directly inside the MCP client conversation — no browser, no
+separate frontend, no `npm build`.
+
+### Why this is better than the current `ui/` approach
+
+| Current `ui/` (React + Flask) | FastMCP App (Phase 4) |
+|-------------------------------|----------------------|
+| Separate React SPA — `npm build` + static server | `pip install "fastmcp[apps]"` |
+| Calls Flask via HTTP | Tool returns UI directly |
+| User opens a browser tab | UI appears in the conversation |
+| LLM cannot see or interact with the UI | LLM sees data AND renders UI |
+| Two separate apps to maintain | One unified MCP server |
+
+### What the HexStrike dashboard App will do
+
+```python
+from fastmcp import FastMCP
+from prefab_ui.components import (
+    Column, Row, Heading, Badge, BarChart, Table,
+    Button, ProgressBar, ChartSeries
+)
+from prefab_ui.app import PrefabApp
+
+@mcp.tool(app=True)
+async def hexstrike_dashboard(ctx: Context) -> PrefabApp:
+    """
+    Live HexStrike operations dashboard.
+
+    Shows server health, tool availability, running scans,
+    and provides controls to launch/kill operations.
+    """
+    health = await get_health_async()
+    running = await get_running_scans_async()
+    resources = await get_resource_usage_async()
+
+    with Column(gap=4) as view:
+
+        # ── Header ──────────────────────────────────────────────────────
+        Row(
+            Heading("🔥 HexStrike Dashboard"),
+            Badge(health["status"], color="green" if health["status"] == "healthy" else "red"),
+        )
+
+        # ── System resources ────────────────────────────────────────────
+        Heading("System", level=2)
+        Row(
+            ProgressBar(label="CPU",    value=resources["cpu_percent"],    max=100),
+            ProgressBar(label="Memory", value=resources["memory_percent"], max=100),
+            ProgressBar(label="Disk",   value=resources["disk_percent"],   max=100),
+        )
+
+        # ── Tool availability by category ───────────────────────────────
+        Heading("Tools", level=2)
+        BarChart(
+            data=[
+                {"category": k, "available": v["available"], "total": v["total"]}
+                for k, v in health["category_stats"].items()
+            ],
+            series=[
+                ChartSeries(data_key="available", label="Available"),
+                ChartSeries(data_key="total",     label="Total"),
+            ],
+            x_axis="category",
+        )
+
+        # ── Running scans ───────────────────────────────────────────────
+        if running:
+            Heading("Running Scans", level=2)
+            Table(
+                columns=["tool", "target", "pid", "started"],
+                rows=running,
+                actions=[
+                    {"label": "Kill", "tool": "kill_scan", "param": "pid"},
+                ]
+            )
+
+        # ── Quick launch ────────────────────────────────────────────────
+        Heading("Quick Launch", level=2)
+        Row(
+            Button(label="Health Check",  tool="check_health"),
+            Button(label="Refresh Tools", tool="refresh_tool_availability"),
+            Button(label="Clear Cache",   tool="clear_cache"),
+        )
+
+    return PrefabApp(view=view)
+```
+
+### What the LLM gains
+
+Because the dashboard is a tool result, the LLM can:
+- Read the health data and proactively suggest fixes
+- Notice a missing tool and offer to install it
+- See a running scan and ask if you want to kill it
+- Correlate resource usage with scan load
+
+This is not possible with the current React/Flask approach where the UI
+and the LLM are completely separate.
+
+### Dependencies for Phase 4
+
+```
+pip install "fastmcp[apps]" prefab-ui
+```
+
+Note: `prefab-ui` is in early development — pin to a specific version.
+
 ---
 
 ## PR checklist (before opening)
 
-- [ ] `ctx: Context` + `run_in_executor` on all migrated tools
+- [ ] `ctx: Context` + `run_in_executor` on all migrated tools (including wifi)
 - [ ] Unit tests passing — `hexstrike-env/bin/pytest tests/`
 - [ ] `hexstrike_server.py` starts clean
 - [ ] `hexstrike_mcp.py --profile wifi_pentest` connects and streams ctx logs
@@ -261,3 +360,5 @@ Flask, `requests`, `hexstrike_client.py` are removed from dependencies.
 - FastMCP HTTP transport: https://gofastmcp.com/deployment/running-server
 - FastMCP Resources: https://gofastmcp.com/servers/resources
 - FastMCP Prompts: https://gofastmcp.com/servers/prompts
+- FastMCP Apps: https://gofastmcp.com/apps/overview
+- Prefab UI: https://prefab.prefect.io
