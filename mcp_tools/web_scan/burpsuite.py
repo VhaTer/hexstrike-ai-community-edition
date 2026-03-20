@@ -1,6 +1,7 @@
 # mcp_tools/web_scan/burpsuite.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_burpsuite_tool(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
@@ -55,11 +56,32 @@ def register_burpsuite_tool(mcp, hexstrike_client, logger=None, HexStrikeColors=
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting Burp Suite scan: {target or 'configured target'}")
-        result = hexstrike_client.safe_post("api/tools/burpsuite", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/burpsuite", data)
+        )
+
+        phases = [
+            (20, "🔌 Connecting to Burp Suite..."),
+            (50, "🔍 Running active scan..."),
+            (82, "📋 Processing findings..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info("✅ Burp Suite scan completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error("❌ Burp Suite scan failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
 
     @mcp.tool()
@@ -94,9 +116,30 @@ def register_burpsuite_tool(mcp, hexstrike_client, logger=None, HexStrikeColors=
             "max_pages": max_pages
         }
         await ctx.info(f"🔍 Starting burpsuite alternative scan: {target}")
-        result = hexstrike_client.safe_post("api/tools/burpsuite-alt", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/burpsuite-alt", data)
+        )
+
+        phases = [
+            (20, "🔌 Connecting to Burp Suite..."),
+            (50, "🔍 Running active scan..."),
+            (82, "📋 Processing findings..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ Alternative scan completed for {target}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ Alternative scan failed for {target}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
