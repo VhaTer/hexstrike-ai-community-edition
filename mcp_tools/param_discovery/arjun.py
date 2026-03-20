@@ -1,6 +1,7 @@
 # mcp_tools/param_discovery/arjun.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_arjun_tool(mcp, hexstrike_client, logger=None):
@@ -57,11 +58,32 @@ def register_arjun_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🎯 Starting arjun parameter discovery: {url}")
-        result = hexstrike_client.safe_post("api/tools/arjun", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/arjun", data)
+        )
+
+        phases = [
+            (20, "🔍 Loading parameter wordlist..."),
+            (50, "💥 Testing parameters..."),
+            (80, "📋 Processing discovered parameters..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ arjun completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ arjun failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
 
     @mcp.tool()

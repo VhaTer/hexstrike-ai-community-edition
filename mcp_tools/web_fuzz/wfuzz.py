@@ -1,6 +1,7 @@
 # mcp_tools/web_fuzz/wfuzz.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_wfuzz_tool(mcp, hexstrike_client, logger=None):
@@ -60,9 +61,31 @@ def register_wfuzz_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting wfuzz: {url}")
-        result = hexstrike_client.safe_post("api/tools/wfuzz", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/wfuzz", data)
+        )
+
+        phases = [
+            (20, "🔍 Preparing payload..."),
+            (45, "💥 Fuzzing in progress..."),
+            (70, "💥 Still fuzzing..."),
+            (88, "📋 Filtering responses..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ wfuzz completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ wfuzz failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

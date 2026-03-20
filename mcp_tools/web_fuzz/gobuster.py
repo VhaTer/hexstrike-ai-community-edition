@@ -1,6 +1,7 @@
 # mcp_tools/web_fuzz/gobuster.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_gobuster(mcp, hexstrike_client, logger=None, HexStrikeColors=None):

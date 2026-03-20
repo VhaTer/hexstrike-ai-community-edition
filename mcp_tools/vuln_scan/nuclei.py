@@ -1,6 +1,7 @@
 # mcp_tools/vuln_scan/nuclei.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_nuclei(mcp, hexstrike_client, logger=None, HexStrikeColors=None):

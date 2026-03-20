@@ -1,6 +1,7 @@
 # mcp_tools/web_fuzz/dirsearch.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_dirsearch_tools(mcp, hexstrike_client, logger=None):
@@ -61,9 +62,31 @@ def register_dirsearch_tools(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"📁 Starting dirsearch: {url}")
-        result = hexstrike_client.safe_post("api/tools/dirsearch", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/dirsearch", data)
+        )
+
+        phases = [
+            (20, "🔍 Loading wordlist..."),
+            (45, "💥 Scanning directories..."),
+            (70, "💥 Still scanning..."),
+            (88, "📋 Processing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ dirsearch completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ dirsearch failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

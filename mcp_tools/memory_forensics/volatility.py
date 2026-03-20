@@ -1,6 +1,7 @@
 # mcp_tools/memory_forensics/volatility.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_volatility_tool(mcp, hexstrike_client, logger=None):
@@ -36,9 +37,31 @@ def register_volatility_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🧠 Starting volatility [{plugin}]: {memory_file}")
-        result = hexstrike_client.safe_post("api/tools/volatility", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/volatility", data)
+        )
+
+        phases = [
+            (15, "📂 Loading memory image..."),
+            (40, "🔍 Identifying profile..."),
+            (65, "🧠 Running analysis plugins..."),
+            (88, "📋 Processing artifacts..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ volatility [{plugin}] completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ volatility [{plugin}] failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
