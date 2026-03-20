@@ -51,10 +51,35 @@ def register_sqlmap_tool(mcp, hexstrike_client, logger=None):
             3. sqlmap_scan(additional_args='--batch --dump -D <db> -T <table>') — extract
         """
         data_payload = {"url": url, "data": data, "additional_args": additional_args}
+
         await ctx.info(f"💉 Starting sqlmap: {url}")
-        result = hexstrike_client.safe_post("api/tools/sqlmap", data_payload)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/sqlmap", data_payload)
+        )
+
+        phases = [
+            (15, "🔌 Testing connection..."),
+            (35, "💉 Testing SQL injection vectors..."),
+            (60, "💉 Exploiting injection point..."),
+            (85, "📋 Extracting data..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
             await ctx.info(f"✅ sqlmap completed for {url}")
+            await ctx.info("💡 Check sqlmap output for extracted data")
         else:
             await ctx.error(f"❌ sqlmap failed for {url}")
         return result
