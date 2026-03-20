@@ -1,6 +1,7 @@
 # mcp_tools/recon/autorecon.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_autorecon_tool(mcp, hexstrike_client, logger=None):
@@ -104,11 +105,35 @@ def register_autorecon_tool(mcp, hexstrike_client, logger=None):
             "global_domain": global_domain, "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting autorecon: {target or target_file}")
-        result = hexstrike_client.safe_post("api/tools/autorecon", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/autorecon", data)
+        )
+
+        phases = [
+            (10, "🔌 Starting AutoRecon..."),
+            (25, "🔍 Running initial scans..."),
+            (45, "📡 Port scanning all ports..."),
+            (65, "🔎 Running service enumeration..."),
+            (85, "📋 Generating report structure..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=30)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ autorecon completed for {target or target_file}")
+            await ctx.info("✅ Completed successfully")
+            await ctx.info("💡 Check results/ directory for detailed output")
         else:
-            await ctx.error(f"❌ autorecon failed for {target or target_file}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
 
     @mcp.tool()
@@ -161,9 +186,33 @@ def register_autorecon_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔄 Starting autorecon comprehensive: {target}")
-        result = hexstrike_client.safe_post("api/tools/autorecon", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/autorecon", data)
+        )
+
+        phases = [
+            (10, "🔌 Starting AutoRecon..."),
+            (25, "🔍 Running initial scans..."),
+            (45, "📡 Port scanning all ports..."),
+            (65, "🔎 Running service enumeration..."),
+            (85, "📋 Generating report structure..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=30)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ autorecon completed for {target}")
+            await ctx.info("✅ Completed successfully")
+            await ctx.info("💡 Check results/ directory for detailed output")
         else:
-            await ctx.error(f"❌ autorecon failed for {target}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

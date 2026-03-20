@@ -1,6 +1,7 @@
 # mcp_tools/recon/amass.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_amass_tool(mcp, hexstrike_client, logger=None):
@@ -53,9 +54,31 @@ def register_amass_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting amass {mode}: {domain}")
-        result = hexstrike_client.safe_post("api/tools/amass", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/amass", data)
+        )
+
+        phases = [
+            (15, "🌐 Querying passive sources..."),
+            (35, "🔍 DNS brute-force enumeration..."),
+            (60, "🌐 Scraping additional sources..."),
+            (85, "📋 Building subdomain graph..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ amass completed for {domain}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ amass failed for {domain}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

@@ -1,6 +1,7 @@
 # mcp_tools/web_fuzz/dirb.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_dirb_tool(mcp, hexstrike_client, logger=None):
@@ -53,9 +54,31 @@ def register_dirb_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"📁 Starting dirb scan: {url}")
-        result = hexstrike_client.safe_post("api/tools/dirb", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/dirb", data)
+        )
+
+        phases = [
+            (20, "🔍 Loading wordlist..."),
+            (45, "💥 Directory brute-forcing..."),
+            (70, "💥 Still scanning..."),
+            (88, "📋 Processing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ dirb completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ dirb failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

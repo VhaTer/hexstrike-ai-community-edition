@@ -1,6 +1,7 @@
 # mcp_tools/web_scan/dalfox.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_dalfox_tool(mcp, hexstrike_client, logger=None):
@@ -64,9 +65,31 @@ def register_dalfox_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🎯 Starting dalfox XSS scan: {url if url else 'pipe mode'}")
-        result = hexstrike_client.safe_post("api/tools/dalfox", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/dalfox", data)
+        )
+
+        phases = [
+            (20, "🔍 Analyzing parameters..."),
+            (45, "💥 Testing XSS payloads..."),
+            (70, "💥 Running DOM analysis..."),
+            (88, "📋 Processing findings..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info("✅ dalfox XSS scan completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error("❌ dalfox XSS scan failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

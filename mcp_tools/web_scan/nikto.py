@@ -1,6 +1,7 @@
 # mcp_tools/web_scan/nikto.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_nikto_tool(mcp, hexstrike_client, logger=None):
@@ -46,9 +47,31 @@ def register_nikto_tool(mcp, hexstrike_client, logger=None):
         """
         data = {"target": target, "additional_args": additional_args}
         await ctx.info(f"🔬 Starting nikto scan: {target}")
-        result = hexstrike_client.safe_post("api/tools/nikto", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/nikto", data)
+        )
+
+        phases = [
+            (15, "🔌 Connecting to web server..."),
+            (35, "🔍 Scanning for vulnerabilities..."),
+            (60, "🔍 Running vulnerability checks..."),
+            (85, "📋 Compiling findings..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ nikto completed for {target}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ nikto failed for {target}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

@@ -1,6 +1,7 @@
 # mcp_tools/net_scan/rustscan.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_rustscan_tool(mcp, hexstrike_client, logger=None):
@@ -55,9 +56,30 @@ def register_rustscan_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"⚡ Starting rustscan: {target}")
-        result = hexstrike_client.safe_post("api/tools/rustscan", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/rustscan", data)
+        )
+
+        phases = [
+            (25, "⚡ Fast port discovery..."),
+            (60, "🔍 Identifying open ports..."),
+            (88, "📋 Passing to nmap for service detection..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=8)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ rustscan completed for {target}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ rustscan failed for {target}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

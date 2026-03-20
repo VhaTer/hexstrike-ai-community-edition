@@ -1,6 +1,7 @@
 # mcp_tools/web_scan/sqlmap.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_sqlmap_tool(mcp, hexstrike_client, logger=None):
