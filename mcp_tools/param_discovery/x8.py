@@ -1,6 +1,7 @@
 # mcp_tools/param_discovery/x8.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_x8_tool(mcp, hexstrike_client, logger=None):
@@ -58,9 +59,30 @@ def register_x8_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting x8 parameter discovery: {url}")
-        result = hexstrike_client.safe_post("api/tools/x8", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/x8", data)
+        )
+
+        phases = [
+            (20, "🔍 Initializing parameter discovery..."),
+            (50, "💥 Testing hidden parameters..."),
+            (82, "📋 Processing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ x8 completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ x8 failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

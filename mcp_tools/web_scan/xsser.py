@@ -1,6 +1,7 @@
 # mcp_tools/web_scan/xsser.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_xsser_tool(mcp, hexstrike_client, logger=None):
@@ -46,9 +47,30 @@ def register_xsser_tool(mcp, hexstrike_client, logger=None):
         """
         data = {"url": url, "params": params, "additional_args": additional_args}
         await ctx.info(f"🔍 Starting xsser: {url}")
-        result = hexstrike_client.safe_post("api/tools/xsser", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/xsser", data)
+        )
+
+        phases = [
+            (20, "🔍 Analyzing parameters..."),
+            (50, "💥 Testing XSS payloads..."),
+            (82, "📋 Processing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ xsser completed for {url}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ xsser failed for {url}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

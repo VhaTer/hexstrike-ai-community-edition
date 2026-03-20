@@ -1,6 +1,7 @@
 # mcp_tools/password_cracking/ophcrack.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_ophcrack_tool(mcp, hexstrike_client, logger=None):
@@ -51,9 +52,30 @@ def register_ophcrack_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔑 Starting ophcrack: {hash_file}")
-        result = hexstrike_client.safe_post("api/tools/password-cracking/ophcrack", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/password-cracking/ophcrack", data)
+        )
+
+        phases = [
+            (20, "📂 Loading rainbow tables..."),
+            (50, "💥 Cracking NTLM hashes..."),
+            (80, "📋 Finalizing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info("✅ ophcrack completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error("❌ ophcrack failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

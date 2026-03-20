@@ -1,6 +1,7 @@
 # mcp_tools/dns_enum/dnsenum.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 
 def register_dnsenum_tool(mcp, hexstrike_client, logger=None):
@@ -52,9 +53,30 @@ def register_dnsenum_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting dnsenum: {domain}")
-        result = hexstrike_client.safe_post("api/tools/dnsenum", data)
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_post("api/tools/dnsenum", data)
+        )
+
+        phases = [
+            (25, "🌐 Querying DNS records..."),
+            (55, "🔍 Brute-forcing subdomains..."),
+            (85, "📋 Processing results..."),
+        ]
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=10)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            await ctx.info(f"✅ dnsenum completed for {domain}")
+            await ctx.info("✅ Completed successfully")
         else:
-            await ctx.error(f"❌ dnsenum failed for {domain}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
