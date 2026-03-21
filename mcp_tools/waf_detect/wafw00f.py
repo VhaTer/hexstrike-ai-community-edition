@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.web_recon_direct as _web_recon_direct
 
 def register_wafw00f_tool(mcp, hexstrike_client, logger):
 
