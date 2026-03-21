@@ -10,25 +10,19 @@ def register_wafw00f_tool(mcp, hexstrike_client, logger):
     @mcp.tool()
     async def wafw00f_scan(ctx: Context, target: str, additional_args: str = "") -> Dict[str, Any]:
         """
-        Execute wafw00f to identify and fingerprint WAF products with enhanced logging.
+        Identify and fingerprint WAF products using wafw00f.
 
-        Args:
-            target: Target URL or IP
-            additional_args: Additional wafw00f arguments
-
-        Returns:
-            WAF detection results
+        Parameters:
+        - target: Target URL or IP
+        - additional_args: Additional wafw00f arguments
         """
-        data = {
-            "target": target,
-            "additional_args": additional_args
-        }
+        data = {"target": target, "additional_args": additional_args}
         await ctx.info(f"🛡️ Starting Wafw00f WAF detection: {target}")
         await ctx.report_progress(0, 100)
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/wafw00f", data)
+            None, lambda: _web_recon_direct.web_recon_exec("wafw00f", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
