@@ -1,5 +1,7 @@
 # mcp_tools/crypto_attack/hashpump.py
 
+from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 from typing import Dict, Any
 import asyncio
 
@@ -27,13 +29,13 @@ def register_hashpump_tool(mcp, hexstrike_client, logger):
             "append_data": append_data,
             "additional_args": additional_args
         }
-        logger.info(f"🔐 Starting HashPump attack")
+        await ctx.info(f"🔐 Starting HashPump attack")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/hashpump", payload)
+            None, lambda: _misc_direct.misc_exec("hashpump", data)
         )
         if result.get("success"):
-            logger.info(f"✅ HashPump attack completed")
+            await ctx.info(f"✅ HashPump attack completed")
         else:
-            logger.error(f"❌ HashPump attack failed")
+            await ctx.error(f"❌ HashPump attack failed")
         return result

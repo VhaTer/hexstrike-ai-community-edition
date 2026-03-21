@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 
 def register_anew_tool(mcp, hexstrike_client, logger=None):
 
@@ -48,7 +49,7 @@ def register_anew_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info("📝 Starting anew deduplication")
-        result = hexstrike_client.safe_post("api/tools/anew", data)
+        result = _misc_direct.misc_exec("anew", data)
         if result.get("success"):
             await ctx.info("✅ anew completed")
         else:
