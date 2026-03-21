@@ -33,7 +33,7 @@ def register_sqlite_tools(mcp, hexstrike_client, logger):
         try:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
-                None, lambda: hexstrike_client.safe_post("api/tools/sqlite", data)
+                None, lambda: _misc_direct.misc_exec("sqlite", data)
             )
             return result
         except Exception as e:
