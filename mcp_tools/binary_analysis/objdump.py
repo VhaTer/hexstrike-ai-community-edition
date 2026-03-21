@@ -26,7 +26,7 @@ def register_objdump_tool(mcp, hexstrike_client, logger):
         logger.info(f"🔧 Starting Objdump analysis: {binary}")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/objdump", data)
+            None, lambda: _misc_direct.misc_exec("objdump", data)
         )
         if result.get("success"):
             logger.info(f"✅ Objdump analysis completed for {binary}")

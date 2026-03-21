@@ -26,7 +26,7 @@ def register_strings_tool(mcp, hexstrike_client, logger):
         logger.info(f"🔧 Starting Strings extraction: {file_path}")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/strings", data)
+            None, lambda: _misc_direct.misc_exec("strings", data)
         )
         if result.get("success"):
             logger.info(f"✅ Strings extraction completed for {file_path}")
