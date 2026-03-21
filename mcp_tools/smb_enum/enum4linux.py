@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.smb_enum_direct as _smb_direct
 
 def register_enum4linux_tool(mcp, hexstrike_client, logger=None):
 
@@ -59,7 +60,7 @@ def register_enum4linux_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/enum4linux", data)
+            None, lambda: _smb_direct.smb_enum_exec("enum4linux", data)
         )
 
         phases = [
@@ -137,7 +138,7 @@ def register_enum4linux_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/enum4linux-ng", data)
+            None, lambda: _smb_direct.smb_enum_exec("enum4linux", data)
         )
 
         phases = [

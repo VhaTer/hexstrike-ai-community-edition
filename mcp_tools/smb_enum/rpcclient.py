@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from fastmcp import Context
+import mcp_core.smb_enum_direct as _smb_direct
 
 def register_rpcclient_tool(mcp, hexstrike_client, logger=None):
 
