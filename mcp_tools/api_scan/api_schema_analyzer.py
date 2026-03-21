@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 
 def register_api_schema_analyzer(mcp, hexstrike_client, logger):
 
@@ -28,7 +29,7 @@ def register_api_schema_analyzer(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/api_schema_analyzer", data)
+            None, lambda: _misc_direct.misc_exec("api_schema_analyzer", data)
         )
         done, _ = await asyncio.wait([future], timeout=30)
         if not done:

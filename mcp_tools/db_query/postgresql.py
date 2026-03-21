@@ -43,7 +43,7 @@ def register_postgresql_tools(mcp, hexstrike_client, logger):
         try:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
-                None, lambda: hexstrike_client.safe_post("api/tools/postgresql", data)    
+                None, lambda: _misc_direct.misc_exec("postgresql", data)    
             )
             return result
         except Exception as e:

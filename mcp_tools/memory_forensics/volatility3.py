@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 
 def register_volatility3(mcp, hexstrike_client, logger=None):
 
@@ -46,7 +47,7 @@ def register_volatility3(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/volatility3", data)
+            None, lambda: _misc_direct.misc_exec("volatility3", data)
         )
 
         phases = [
