@@ -47,7 +47,7 @@ def register_bbot_tools(mcp, hexstrike_client):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/bot/bbot", {
+            None, lambda: _misc_direct.misc_exec("bbot", {
                 "target": target,
                 "parameters": parameters
             })

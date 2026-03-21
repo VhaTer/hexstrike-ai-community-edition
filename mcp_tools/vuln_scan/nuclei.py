@@ -85,7 +85,7 @@ def register_nuclei(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/nuclei", data)
+            None, lambda: _misc_direct.misc_exec("nuclei", data)
         )
 
         phases = [

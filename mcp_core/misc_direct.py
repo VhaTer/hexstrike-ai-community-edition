@@ -581,6 +581,32 @@ def _api_fuzzer(data: dict) -> dict:
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
+
+def _bbot(data: dict) -> dict:
+    target      = data.get("target", "").strip()
+    parameters  = data.get("parameters", {})
+    if not target: return {"success": False, "error": "target is required"}
+    flags = ""
+    for k, v in parameters.items():
+        flags += f" -{k} {v}"
+    command = f"bbot -t {target}{flags}"
+    return execute_command(command)
+
+
+def _nuclei(data: dict) -> dict:
+    target          = data.get("target", "").strip()
+    if not target: return {"success": False, "error": "target is required"}
+    severity        = data.get("severity", "")
+    tags            = data.get("tags", "")
+    template        = data.get("template", "")
+    additional_args = data.get("additional_args", "")
+    command = f"nuclei -u {target}"
+    if severity:        command += f" -severity {severity}"
+    if tags:            command += f" -tags {tags}"
+    if template:        command += f" -t {template}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -625,6 +651,8 @@ _HANDLERS = {
     "uro":                 _uro,
     "responder":           _responder,
     "api_fuzzer":          _api_fuzzer,
+    "bbot":                _bbot,
+    "nuclei":              _nuclei,
 }
 
 
