@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.recon_direct as _recon_direct
 
 def register_autorecon_tool(mcp, hexstrike_client, logger=None):
 
@@ -109,7 +110,7 @@ def register_autorecon_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/autorecon", data)
+            None, lambda: _recon_direct.recon_exec("autorecon", data)
         )
 
         phases = [
@@ -190,7 +191,7 @@ def register_autorecon_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/autorecon", data)
+            None, lambda: _recon_direct.recon_exec("autorecon", data)
         )
 
         phases = [

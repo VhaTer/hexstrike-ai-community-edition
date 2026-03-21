@@ -1,7 +1,9 @@
 # mcp_tools/net_lookup/whois.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
+import mcp_core.recon_direct as _recon_direct
 
 def register_whois(mcp, hexstrike_client, logger=None):
 
@@ -37,8 +39,11 @@ def register_whois(mcp, hexstrike_client, logger=None):
             3. dnsenum_scan(target='example.com')        — zone transfer attempt
         """
         await ctx.info(f"🔎 WHOIS lookup: {target}")
+        loop = asyncio.get_running_loop()
         try:
-            result = hexstrike_client.safe_post("api/tools/whois", {"target": target})
+            result = await loop.run_in_executor(
+                None, lambda: _recon_direct.recon_exec("whois", {"target": target})
+            )
             if result.get("success"):
                 await ctx.info(f"✅ WHOIS completed for {target}")
             else:
