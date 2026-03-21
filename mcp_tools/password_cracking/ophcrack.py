@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.password_cracking_direct as _pwdcrack_direct
 
 def register_ophcrack_tool(mcp, hexstrike_client, logger=None):
 
@@ -56,7 +57,7 @@ def register_ophcrack_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/password-cracking/ophcrack", data)
+            None, lambda: _pwdcrack_direct.pwdcrack_exec("ophcrack", data)
         )
 
         phases = [
