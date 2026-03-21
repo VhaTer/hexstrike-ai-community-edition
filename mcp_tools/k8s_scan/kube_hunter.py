@@ -40,7 +40,7 @@ def register_kube_hunter_tool(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/kube-hunter", data)
+            None, lambda: hexstrike_client.safe_post("api/tools/kube-hunter", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
