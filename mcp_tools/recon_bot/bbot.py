@@ -1,8 +1,9 @@
 import asyncio
 from fastmcp import Context
-# mcp_tools/recon_bot/bot.py
+# mcp_tools/recon_bot/bbot.py
 
 def register_bbot_tools(mcp, hexstrike_client):
+
     @mcp.tool()
     async def bbot_scan(ctx: Context, target: str, parameters: dict) -> dict:
         """
@@ -41,11 +42,36 @@ def register_bbot_tools(mcp, hexstrike_client):
             - Combine flags for advanced control.
             - Returns JSON with BBot response or error details.
         """
+        await ctx.info(f"🤖 Starting BBOT scan: {target}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bot/bbot", {
-            "target": target,
-            "parameters": parameters
-        })
+                "target": target,
+                "parameters": parameters
+            })
         )
+
+        phases = [
+            (15, "🤖 Initializing BBOT scan..."),
+            (35, "🌐 Running recon modules..."),
+            (60, "🔍 Aggregating intelligence..."),
+            (85, "📋 Building target graph..."),
+        ]
+
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=20)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
+        if result.get("success"):
+            await ctx.info("✅ BBOT scan completed")
+        else:
+            await ctx.error(f"❌ BBOT scan failed: {result.get('error', 'unknown')}")
         return result
