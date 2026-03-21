@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 
 def register_gdb_tools(mcp, hexstrike_client, logger):
     
@@ -31,7 +32,7 @@ def register_gdb_tools(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/gdb", data)
+            None, lambda: _misc_direct.misc_exec("gdb", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
@@ -76,7 +77,7 @@ def register_gdb_tools(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/gdb-peda", data)
+            None, lambda: _misc_direct.misc_exec("gdb", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
