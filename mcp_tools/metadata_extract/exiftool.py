@@ -1,5 +1,7 @@
 # mcp_tools/metadata_extract/exiftool.py
 
+from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 from typing import Dict, Any
 import asyncio
 
@@ -25,13 +27,13 @@ def register_exiftool_tool(mcp, hexstrike_client, logger):
             "tags": tags,
             "additional_args": additional_args
         }
-        logger.info(f"📷 Starting ExifTool analysis: {file_path}")
+        await ctx.info(f"📷 Starting ExifTool analysis: {file_path}")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/exiftool", data)
+            None, lambda: _misc_direct.misc_exec("exiftool", data)
         )
         if result.get("success"):
-            logger.info(f"✅ ExifTool analysis completed")
+            await ctx.info(f"✅ ExifTool analysis completed")
         else:
-            logger.error(f"❌ ExifTool analysis failed")
+            await ctx.error(f"❌ ExifTool analysis failed")
         return result

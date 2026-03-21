@@ -424,6 +424,163 @@ def _jwt_analyzer(data: dict) -> dict:
     return {"success": True, "jwt_analysis_results": results}
 
 
+
+# ---------------------------------------------------------------------------
+# file_carving, runtime_monitor, stego_analysis, data_processing
+# metadata_extract, crypto_attack, param_fuzz, url_filter
+# credential_harvest, api_fuzz
+# ---------------------------------------------------------------------------
+
+def _foremost(data: dict) -> dict:
+    err = _require(data, "input_file")
+    if err: return err
+    from pathlib import Path
+    input_file      = data["input_file"].strip()
+    output_dir      = data.get("output_dir", "/tmp/foremost_output")
+    file_types      = data.get("file_types", "")
+    additional_args = data.get("additional_args", "")
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    command = f"foremost -o {output_dir}"
+    if file_types:      command += f" -t {file_types}"
+    if additional_args: command += f" {additional_args}"
+    command += f" -i {input_file}"
+    return execute_command(command)
+
+
+def _falco(data: dict) -> dict:
+    config_file     = data.get("config_file", "/etc/falco/falco.yaml")
+    rules_file      = data.get("rules_file", "")
+    output_format   = data.get("output_format", "json")
+    duration        = data.get("duration", 60)
+    additional_args = data.get("additional_args", "")
+    command = f"timeout {duration} falco"
+    if config_file:     command += f" --config {config_file}"
+    if rules_file:      command += f" --rules {rules_file}"
+    if output_format == "json": command += " --json"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _steghide(data: dict) -> dict:
+    err = _require(data, "cover_file")
+    if err: return err
+    action          = data.get("action", "extract")
+    cover_file      = data["cover_file"].strip()
+    embed_file      = data.get("embed_file", "")
+    passphrase      = data.get("passphrase", "")
+    output_file     = data.get("output_file", "")
+    additional_args = data.get("additional_args", "")
+    if action == "extract":
+        command = f"steghide extract -sf {cover_file}"
+        if output_file: command += f" -xf {output_file}"
+    elif action == "embed":
+        if not embed_file: return {"success": False, "error": "embed_file required"}
+        command = f"steghide embed -cf {cover_file} -ef {embed_file}"
+    elif action == "info":
+        command = f"steghide info {cover_file}"
+    else:
+        return {"success": False, "error": f"Invalid action: {action}"}
+    if passphrase:      command += f" -p '{passphrase}'"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _anew(data: dict) -> dict:
+    err = _require(data, "input_data")
+    if err: return err
+    input_data      = data["input_data"]
+    output_file     = data.get("output_file", "")
+    additional_args = data.get("additional_args", "")
+    if output_file: command = f"echo '{input_data}' | anew {output_file}"
+    else:           command = f"echo '{input_data}' | anew"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _exiftool(data: dict) -> dict:
+    err = _require(data, "file_path")
+    if err: return err
+    file_path       = data["file_path"].strip()
+    output_format   = data.get("output_format", "")
+    tags            = data.get("tags", "")
+    additional_args = data.get("additional_args", "")
+    command = "exiftool"
+    if output_format:   command += f" -{output_format}"
+    if tags:            command += f" -{tags}"
+    if additional_args: command += f" {additional_args}"
+    command += f" {file_path}"
+    return execute_command(command)
+
+
+def _hashpump(data: dict) -> dict:
+    signature   = data.get("signature", "")
+    orig_data   = data.get("data", "")
+    key_length  = data.get("key_length", "")
+    append_data = data.get("append_data", "")
+    additional_args = data.get("additional_args", "")
+    if not all([signature, orig_data, key_length, append_data]):
+        return {"success": False, "error": "signature, data, key_length, append_data required"}
+    command = f"hashpump -s {signature} -d '{orig_data}' -k {key_length} -a '{append_data}'"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _qsreplace(data: dict) -> dict:
+    urls            = data.get("urls", "")
+    replacement     = data.get("replacement", "FUZZ")
+    additional_args = data.get("additional_args", "")
+    if not urls: return {"success": False, "error": "urls is required"}
+    command = f"echo '{urls}' | qsreplace {replacement}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _uro(data: dict) -> dict:
+    urls            = data.get("urls", "")
+    whitelist       = data.get("whitelist", "")
+    blacklist       = data.get("blacklist", "")
+    additional_args = data.get("additional_args", "")
+    if not urls: return {"success": False, "error": "urls is required"}
+    command = f"echo '{urls}' | uro"
+    if whitelist:       command += f" -w {whitelist}"
+    if blacklist:       command += f" -b {blacklist}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _responder(data: dict) -> dict:
+    interface       = data.get("interface", "eth0")
+    analyze         = data.get("analyze", False)
+    wpad            = data.get("wpad", True)
+    force_wpad      = data.get("force_wpad_auth", False)
+    fingerprint     = data.get("fingerprint", False)
+    duration        = data.get("duration", 300)
+    additional_args = data.get("additional_args", "")
+    command = f"timeout {duration} responder -I {interface}"
+    if analyze:         command += " -A"
+    if wpad:            command += " -w"
+    if force_wpad:      command += " -F"
+    if fingerprint:     command += " -f"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _api_fuzzer(data: dict) -> dict:
+    err = _require(data, "base_url")
+    if err: return err
+    base_url        = data["base_url"].strip()
+    endpoints       = data.get("endpoints", [])
+    methods         = data.get("methods", ["GET", "POST"])
+    wordlist        = data.get("wordlist", "/usr/share/wordlists/api/api-endpoints.txt")
+    additional_args = data.get("additional_args", "")
+    # Use ffuf for API fuzzing
+    command = f"ffuf -u {base_url}/FUZZ -w {wordlist}"
+    if isinstance(methods, list): methods_str = ",".join(methods)
+    else: methods_str = str(methods)
+    command += f" -X {methods_str.split(',')[0]}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -457,6 +614,17 @@ _HANDLERS = {
     "api_schema_analyzer": _api_schema_analyzer,
     "graphql_scanner":     _graphql_scanner,
     "jwt_analyzer":        _jwt_analyzer,
+    # file_carving / runtime / stego / data / metadata / crypto / param / url
+    "foremost":            _foremost,
+    "falco":               _falco,
+    "steghide":            _steghide,
+    "anew":                _anew,
+    "exiftool":            _exiftool,
+    "hashpump":            _hashpump,
+    "qsreplace":           _qsreplace,
+    "uro":                 _uro,
+    "responder":           _responder,
+    "api_fuzzer":          _api_fuzzer,
 }
 
 

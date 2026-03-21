@@ -1,5 +1,7 @@
 # mcp_tools/url_filter/uro.py
 
+from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 from typing import Dict, Any
 import asyncio
 
@@ -25,13 +27,13 @@ def register_uro_tool(mcp, hexstrike_client, logger):
             "blacklist": blacklist,
             "additional_args": additional_args
         }
-        logger.info("🔍 Starting uro URL filtering")
+        await ctx.info("🔍 Starting uro URL filtering")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/uro", data)
+            None, lambda: _misc_direct.misc_exec("uro", data)
         )
         if result.get("success"):
-            logger.info("✅ uro URL filtering completed")
+            await ctx.info("✅ uro URL filtering completed")
         else:
-            logger.error("❌ uro URL filtering failed")
+            await ctx.error("❌ uro URL filtering failed")
         return result

@@ -1,5 +1,7 @@
 # mcp_tools/param_fuzz/qsreplace.py
 
+from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 from typing import Dict, Any
 import asyncio
 
@@ -23,13 +25,13 @@ def register_qsreplace_tool(mcp, hexstrike_client, logger):
             "replacement": replacement,
             "additional_args": additional_args
         }
-        logger.info("🔄 Starting qsreplace parameter replacement")
+        await ctx.info("🔄 Starting qsreplace parameter replacement")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/qsreplace", data)
+            None, lambda: _misc_direct.misc_exec("qsreplace", data)
         )
         if result.get("success"):
-            logger.info("✅ qsreplace parameter replacement completed")
+            await ctx.info("✅ qsreplace parameter replacement completed")
         else:
-            logger.error("❌ qsreplace parameter replacement failed")
+            await ctx.error("❌ qsreplace parameter replacement failed")
         return result
