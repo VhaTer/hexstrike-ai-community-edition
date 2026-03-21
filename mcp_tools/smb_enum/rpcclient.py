@@ -1,6 +1,7 @@
 # mcp_tools/smb_enum/rpcclient.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 import mcp_core.smb_enum_direct as _smb_direct
 
@@ -29,28 +30,19 @@ def register_rpcclient_tool(mcp, hexstrike_client, logger=None):
         - password: password for authentication
         - domain: Windows domain name (optional)
         - commands: semicolon-separated RPC commands to execute
-            Default runs: enumdomusers + enumdomgroups + querydominfo
+            Default: enumdomusers + enumdomgroups + querydominfo
             Common commands:
-            'enumdomusers'          — list all domain users
-            'enumdomgroups'         — list all domain groups
-            'querydominfo'          — domain info (lockout policy, etc.)
-            'queryuser <RID>'       — details for specific user RID
-            'enumprinters'          — list printers (often misconfigured)
-            'srvinfo'               — server OS info
-            'lsaquery'              — LSA policy info
-            'lookupnames <name>'    — resolve name to SID
+            'enumdomusers'       — list all domain users
+            'enumdomgroups'      — list all domain groups
+            'querydominfo'       — domain info (lockout policy, etc.)
+            'queryuser <RID>'    — details for specific user RID
+            'enumprinters'       — list printers
+            'srvinfo'            — server OS info
+            'lsaquery'           — LSA policy info
+            'lookupnames <n>'    — resolve name to SID
         - additional_args: extra rpcclient flags
 
-        Prerequisites: port 445 open. Null session may work on old systems.
-
-        Output: raw RPC responses for the specified commands.
-        Particularly useful for resolving specific RIDs to usernames
-        after enum4linux gives you RID ranges.
-
-        Typical use cases:
-        - Null session user enumeration on older Windows targets
-        - Resolving SIDs to usernames for targeted attacks
-        - Querying specific AD attributes not shown by enum4linux
+        Prerequisites: port 445 open. Null session may work on older systems.
         """
         data = {
             "target": target,
@@ -61,7 +53,10 @@ def register_rpcclient_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting rpcclient: {target}")
-        result = hexstrike_client.safe_post("api/tools/rpcclient", data)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, lambda: _smb_direct.smb_enum_exec("rpcclient", data)
+        )
         if result.get("success"):
             await ctx.info(f"✅ rpcclient completed for {target}")
         else:

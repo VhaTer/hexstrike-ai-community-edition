@@ -1,6 +1,7 @@
 # mcp_tools/smb_enum/nbtscan.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 import mcp_core.smb_enum_direct as _smb_direct
 
@@ -28,25 +29,15 @@ def register_nbtscan_tool(mcp, hexstrike_client, logger=None):
         - additional_args: extra nbtscan flags
 
         Prerequisites: UDP port 137 accessible (NetBIOS Name Service).
-        Works on same subnet without routing, or cross-subnet if firewall allows.
 
         Output per host:
-        - IP address
-        - NetBIOS name (often the hostname)
-        - Workgroup or domain name
-        - MAC address
-        - Host type flags (server, DC, file server, etc.)
-
-        Domain controller identification: look for hosts with
-        '<1C>' group name = domain controller candidates.
+        - IP address, NetBIOS name, workgroup/domain, MAC address, host type flags
 
         Typical SMB enum sequence:
             1. nbtscan_netbios(target='192.168.1.0/24')      — discover Windows hosts
-            2. enum4linux_scan(target='<DC IP>',
-                               additional_args='-P')          — get password policy
-            3. enum4linux_scan(target='<DC IP>')              — full enum
-            4. smbmap_scan(target='<DC IP>')                  — share permissions
-            5. netexec_scan(target='<DC IP>')                 — credential testing
+            2. enum4linux_scan(target='<DC IP>')              — full enum
+            3. smbmap_scan(target='<DC IP>')                  — share permissions
+            4. netexec_scan(target='<DC IP>')                 — credential testing
         """
         data = {
             "target": target,
@@ -55,7 +46,10 @@ def register_nbtscan_tool(mcp, hexstrike_client, logger=None):
             "additional_args": additional_args
         }
         await ctx.info(f"🔍 Starting nbtscan: {target}")
-        result = hexstrike_client.safe_post("api/tools/nbtscan", data)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, lambda: _smb_direct.smb_enum_exec("nbtscan", data)
+        )
         if result.get("success"):
             await ctx.info(f"✅ nbtscan completed for {target}")
         else:
