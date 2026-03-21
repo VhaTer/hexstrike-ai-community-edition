@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.net_scan_direct as _net_scan_direct
 
 def register_masscan_tool(mcp, hexstrike_client, logger=None):
 
@@ -61,7 +62,7 @@ def register_masscan_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/masscan", data)
+            None, lambda: _net_scan_direct.net_scan_exec("masscan", data)
         )
 
         phases = [

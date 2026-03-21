@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.net_scan_direct as _net_scan_direct
 
 def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
@@ -59,7 +60,7 @@ def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/nmap", data)
+            None, lambda: _net_scan_direct.net_scan_exec("nmap-advanced", data)
         )
 
         phases = [
@@ -161,7 +162,7 @@ def register_nmap(mcp, hexstrike_client, logger=None, HexStrikeColors=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/nmap-advanced", data)
+            None, lambda: _net_scan_direct.net_scan_exec("nmap", data)
         )
 
         phases = [
