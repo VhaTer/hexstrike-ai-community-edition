@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from fastmcp import Context
+import mcp_core.web_recon_direct as _web_recon_direct
 
 def register_httpx_tool(mcp, hexstrike_client, logger=None):
 

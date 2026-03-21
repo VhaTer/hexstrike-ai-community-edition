@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.web_recon_direct as _web_recon_direct
 
 def register_katana_tool(mcp, hexstrike_client, logger=None):
 
@@ -68,7 +69,7 @@ def register_katana_tool(mcp, hexstrike_client, logger=None):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/katana", data)
+            None, lambda: _web_recon_direct.web_recon_exec("katana", data)
         )
 
         phases = [
