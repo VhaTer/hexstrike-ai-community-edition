@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.security_direct as _security_direct
 
 def register_kube_hunter_tool(mcp, hexstrike_client, logger):
     
