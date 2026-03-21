@@ -1,6 +1,7 @@
 # mcp_tools/password_cracking/hashid.py
 
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
 import mcp_core.password_cracking_direct as _pwdcrack_direct
 
@@ -47,7 +48,10 @@ def register_hashid_tool(mcp, hexstrike_client, logger=None):
         """
         data = {"hash_value": hash_value, "additional_args": additional_args}
         await ctx.info(f"🔍 Identifying hash: {hash_value[:20]}...")
-        result = hexstrike_client.safe_post("api/tools/password_cracking/hashid", data)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, lambda: _pwdcrack_direct.pwdcrack_exec("hashid", data)
+        )
         if result.get("success"):
             await ctx.info("✅ Hash identification completed")
         else:
