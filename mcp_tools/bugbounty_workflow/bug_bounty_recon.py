@@ -3,11 +3,12 @@
 from typing import Dict, Any
 from datetime import datetime
 import asyncio
+from fastmcp import Context
 
 def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
 
     @mcp.tool()
-    async def bugbounty_reconnaissance_workflow(domain: str, scope: str = "", out_of_scope: str = "",
+    async def bugbounty_reconnaissance_workflow(ctx: Context, domain: str, scope: str = "", out_of_scope: str = "",
                                         program_type: str = "web") -> Dict[str, Any]:
         """
         Create comprehensive reconnaissance workflow for bug bounty hunting.
@@ -28,22 +29,30 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
             "program_type": program_type
         }
 
-        logger.info(f"🎯 Creating reconnaissance workflow for {domain}")
+        await ctx.info(f"🎯 Creating reconnaissance workflow for {domain}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/reconnaissance-workflow", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             workflow = result.get("workflow", {})
-            logger.info(f"✅ Reconnaissance workflow created - {workflow.get('tools_count', 0)} tools, ~{workflow.get('estimated_time', 0)}s")
+            await ctx.info(f"✅ Reconnaissance workflow created - {workflow.get('tools_count', 0)} tools, ~{workflow.get('estimated_time', 0)}s")
         else:
-            logger.error(f"❌ Failed to create reconnaissance workflow for {domain}")
+            await ctx.error(f"❌ Failed to create reconnaissance workflow for {domain}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_vulnerability_hunting(domain: str, priority_vulns: str = "rce,sqli,xss,idor,ssrf",
+    async def bugbounty_vulnerability_hunting(ctx: Context, domain: str, priority_vulns: str = "rce,sqli,xss,idor,ssrf",
                                        bounty_range: str = "unknown") -> Dict[str, Any]:
         """
         Create vulnerability hunting workflow prioritized by impact and bounty potential.
@@ -62,22 +71,30 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
             "bounty_range": bounty_range
         }
 
-        logger.info(f"🎯 Creating vulnerability hunting workflow for {domain}")
+        await ctx.info(f"🎯 Creating vulnerability hunting workflow for {domain}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/vulnerability-hunting-workflow", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             workflow = result.get("workflow", {})
-            logger.info(f"✅ Vulnerability hunting workflow created - Priority score: {workflow.get('priority_score', 0)}")
+            await ctx.info(f"✅ Vulnerability hunting workflow created - Priority score: {workflow.get('priority_score', 0)}")
         else:
-            logger.error(f"❌ Failed to create vulnerability hunting workflow for {domain}")
+            await ctx.error(f"❌ Failed to create vulnerability hunting workflow for {domain}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_business_logic_testing(domain: str, program_type: str = "web") -> Dict[str, Any]:
+    async def bugbounty_business_logic_testing(ctx: Context, domain: str, program_type: str = "web") -> Dict[str, Any]:
         """
         Create business logic testing workflow for advanced bug bounty hunting.
 
@@ -93,23 +110,31 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
             "program_type": program_type
         }
 
-        logger.info(f"🎯 Creating business logic testing workflow for {domain}")
+        await ctx.info(f"🎯 Creating business logic testing workflow for {domain}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/business-logic-workflow", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             workflow = result.get("workflow", {})
             test_count = sum(len(category["tests"]) for category in workflow.get("business_logic_tests", []))
-            logger.info(f"✅ Business logic testing workflow created - {test_count} tests")
+            await ctx.info(f"✅ Business logic testing workflow created - {test_count} tests")
         else:
-            logger.error(f"❌ Failed to create business logic testing workflow for {domain}")
+            await ctx.error(f"❌ Failed to create business logic testing workflow for {domain}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_osint_gathering(domain: str) -> Dict[str, Any]:
+    async def bugbounty_osint_gathering(ctx: Context, domain: str) -> Dict[str, Any]:
         """
         Create OSINT (Open Source Intelligence) gathering workflow for bug bounty reconnaissance.
 
@@ -121,23 +146,31 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
         """
         data = {"domain": domain}
 
-        logger.info(f"🎯 Creating OSINT gathering workflow for {domain}")
+        await ctx.info(f"🎯 Creating OSINT gathering workflow for {domain}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/osint-workflow", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             workflow = result.get("workflow", {})
             phases = len(workflow.get("osint_phases", []))
-            logger.info(f"✅ OSINT workflow created - {phases} intelligence phases")
+            await ctx.info(f"✅ OSINT workflow created - {phases} intelligence phases")
         else:
-            logger.error(f"❌ Failed to create OSINT workflow for {domain}")
+            await ctx.error(f"❌ Failed to create OSINT workflow for {domain}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_file_upload_testing(target_url: str) -> Dict[str, Any]:
+    async def bugbounty_file_upload_testing(ctx: Context, target_url: str) -> Dict[str, Any]:
         """
         Create file upload vulnerability testing workflow with bypass techniques.
 
@@ -149,23 +182,31 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
         """
         data = {"target_url": target_url}
 
-        logger.info(f"🎯 Creating file upload testing workflow for {target_url}")
+        await ctx.info(f"🎯 Creating file upload testing workflow for {target_url}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/file-upload-testing", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             workflow = result.get("workflow", {})
             phases = len(workflow.get("test_phases", []))
-            logger.info(f"✅ File upload testing workflow created - {phases} test phases")
+            await ctx.info(f"✅ File upload testing workflow created - {phases} test phases")
         else:
-            logger.error(f"❌ Failed to create file upload testing workflow for {target_url}")
+            await ctx.error(f"❌ Failed to create file upload testing workflow for {target_url}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_comprehensive_assessment(domain: str, scope: str = "",
+    async def bugbounty_comprehensive_assessment(ctx: Context, domain: str, scope: str = "",
                                          priority_vulns: str = "rce,sqli,xss,idor,ssrf",
                                          include_osint: bool = True,
                                          include_business_logic: bool = True) -> Dict[str, Any]:
@@ -190,23 +231,31 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
             "include_business_logic": include_business_logic
         }
 
-        logger.info(f"🎯 Creating comprehensive bug bounty assessment for {domain}")
+        await ctx.info(f"🎯 Creating comprehensive bug bounty assessment for {domain}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/bugbounty/comprehensive-assessment", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             assessment = result.get("assessment", {})
             summary = assessment.get("summary", {})
-            logger.info(f"✅ Comprehensive assessment created - {summary.get('workflow_count', 0)} workflows, ~{summary.get('total_estimated_time', 0)}s")
+            await ctx.info(f"✅ Comprehensive assessment created - {summary.get('workflow_count', 0)} workflows, ~{summary.get('total_estimated_time', 0)}s")
         else:
-            logger.error(f"❌ Failed to create comprehensive assessment for {domain}")
+            await ctx.error(f"❌ Failed to create comprehensive assessment for {domain}")
 
         return result
 
     @mcp.tool()
-    async def bugbounty_authentication_bypass_testing(target_url: str, auth_type: str = "form") -> Dict[str, Any]:
+    async def bugbounty_authentication_bypass_testing(ctx: Context, target_url: str, auth_type: str = "form") -> Dict[str, Any]:
         """
         Create authentication bypass testing workflow for bug bounty hunting.
 
@@ -258,7 +307,7 @@ def register_bug_bounty_recon_tools(mcp, hexstrike_client, logger):
             "manual_testing_required": True
         }
 
-        logger.info(f"🎯 Created authentication bypass testing workflow for {target_url}")
+        await ctx.info(f"🎯 Created authentication bypass testing workflow for {target_url}")
 
         return {
             "success": True,

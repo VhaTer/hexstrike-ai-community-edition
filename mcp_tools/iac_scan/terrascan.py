@@ -2,10 +2,11 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_terrascan_tool(mcp, hexstrike_client, logger):
     @mcp.tool()
-    async def terrascan_iac_scan(scan_type: str = "all", iac_dir: str = ".",
+    async def terrascan_iac_scan(ctx: Context, scan_type: str = "all", iac_dir: str = ".",
                           policy_type: str = "", output_format: str = "json",
                           severity: str = "", additional_args: str = "") -> Dict[str, Any]:
         """
@@ -30,13 +31,24 @@ def register_terrascan_tool(mcp, hexstrike_client, logger):
             "severity": severity,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Terrascan IaC scan: {iac_dir}")
+        await ctx.info(f"🔍 Starting Terrascan IaC scan: {iac_dir}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/terrascan", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/terrascan", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Terrascan scan completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Terrascan scan failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

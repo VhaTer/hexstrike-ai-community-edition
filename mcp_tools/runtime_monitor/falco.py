@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_falco_runtime_monitoring_tool(mcp, hexstrike_client, logger):
 
     @mcp.tool()
-    async def falco_runtime_monitoring(config_file: str = "/etc/falco/falco.yaml",
+    async def falco_runtime_monitoring(ctx: Context, config_file: str = "/etc/falco/falco.yaml",
                                 rules_file: str = "", output_format: str = "json",
                                 duration: int = 60, additional_args: str = "") -> Dict[str, Any]:
         """
@@ -29,13 +30,24 @@ def register_falco_runtime_monitoring_tool(mcp, hexstrike_client, logger):
             "duration": duration,
             "additional_args": additional_args
         }
-        logger.info(f"🛡️  Starting Falco runtime monitoring for {duration}s")
+        await ctx.info(f"🛡️  Starting Falco runtime monitoring for {duration}s")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/falco", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/falco", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Falco monitoring completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Falco monitoring failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

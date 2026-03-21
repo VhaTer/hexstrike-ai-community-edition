@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_steghide_tool(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def steghide_analysis(action: str, cover_file: str, embed_file: str = "", passphrase: str = "", output_file: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def steghide_analysis(ctx: Context, action: str, cover_file: str, embed_file: str = "", passphrase: str = "", output_file: str = "", additional_args: str = "") -> Dict[str, Any]:
         """
         Execute Steghide for steganography analysis with enhanced logging.
 
@@ -29,13 +30,24 @@ def register_steghide_tool(mcp, hexstrike_client, logger):
             "output_file": output_file,
             "additional_args": additional_args
         }
-        logger.info(f"🖼️ Starting Steghide {action}: {cover_file}")
+        await ctx.info(f"🖼️ Starting Steghide {action}: {cover_file}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/steghide", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/steghide", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Steghide {action} completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Steghide {action} failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

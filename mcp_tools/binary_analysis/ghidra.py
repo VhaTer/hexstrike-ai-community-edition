@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_ghidra_tools(mcp, hexstrike_client, logger):
 
     @mcp.tool()
-    async def ghidra_analysis(binary: str, project_name: str = "hexstrike_analysis",
+    async def ghidra_analysis(ctx: Context, binary: str, project_name: str = "hexstrike_analysis",
                        script_file: str = "", analysis_timeout: int = 300,
                        output_format: str = "xml", additional_args: str = "") -> Dict[str, Any]:
         """
@@ -31,13 +32,24 @@ def register_ghidra_tools(mcp, hexstrike_client, logger):
             "output_format": output_format,
             "additional_args": additional_args
         }
-        logger.info(f"🔧 Starting Ghidra analysis: {binary}")
+        await ctx.info(f"🔧 Starting Ghidra analysis: {binary}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/ghidra", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/ghidra", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Ghidra analysis completed for {binary}")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Ghidra analysis failed for {binary}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

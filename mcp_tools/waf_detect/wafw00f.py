@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_wafw00f_tool(mcp, hexstrike_client, logger):
 
     @mcp.tool()
-    async def wafw00f_scan(target: str, additional_args: str = "") -> Dict[str, Any]:
+    async def wafw00f_scan(ctx: Context, target: str, additional_args: str = "") -> Dict[str, Any]:
         """
         Execute wafw00f to identify and fingerprint WAF products with enhanced logging.
 
@@ -21,13 +22,24 @@ def register_wafw00f_tool(mcp, hexstrike_client, logger):
             "target": target,
             "additional_args": additional_args
         }
-        logger.info(f"🛡️ Starting Wafw00f WAF detection: {target}")
+        await ctx.info(f"🛡️ Starting Wafw00f WAF detection: {target}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/wafw00f", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/wafw00f", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Wafw00f completed for {target}")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Wafw00f failed for {target}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_binwalk_tool(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def binwalk_analyze(file_path: str, extract: bool = False, additional_args: str = "") -> Dict[str, Any]:
+    async def binwalk_analyze(ctx: Context, file_path: str, extract: bool = False, additional_args: str = "") -> Dict[str, Any]:
         """
         Execute Binwalk for firmware and file analysis with enhanced logging.
 
@@ -23,13 +24,24 @@ def register_binwalk_tool(mcp, hexstrike_client, logger):
             "extract": extract,
             "additional_args": additional_args
         }
-        logger.info(f"🔧 Starting Binwalk analysis: {file_path}")
+        await ctx.info(f"🔧 Starting Binwalk analysis: {file_path}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/binwalk", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/binwalk", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Binwalk analysis completed for {file_path}")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Binwalk analysis failed for {file_path}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

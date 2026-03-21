@@ -1,9 +1,10 @@
 import asyncio
+from fastmcp import Context
 # mcp_tools/recon_bot/bot.py
 
 def register_bbot_tools(mcp, hexstrike_client):
     @mcp.tool()
-    async def bbot_scan(target: str, parameters: dict) -> dict:
+    async def bbot_scan(ctx: Context, target: str, parameters: dict) -> dict:
         """
         Run BBot scan via HexStrike server.
 

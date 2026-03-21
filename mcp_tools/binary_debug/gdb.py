@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_gdb_tools(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def gdb_analyze(binary: str, commands: str = "", script_file: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def gdb_analyze(ctx: Context, binary: str, commands: str = "", script_file: str = "", additional_args: str = "") -> Dict[str, Any]:
         """
         Execute GDB for binary analysis and debugging with enhanced logging.
 
@@ -25,19 +26,30 @@ def register_gdb_tools(mcp, hexstrike_client, logger):
             "script_file": script_file,
             "additional_args": additional_args
         }
-        logger.info(f"🔧 Starting GDB analysis: {binary}")
+        await ctx.info(f"🔧 Starting GDB analysis: {binary}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/gdb", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/gdb", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ GDB analysis completed for {binary}")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ GDB analysis failed for {binary}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
 
     @mcp.tool()
-    async def gdb_peda_debug(binary: str = "", commands: str = "", attach_pid: int = 0,
+    async def gdb_peda_debug(ctx: Context, binary: str = "", commands: str = "", attach_pid: int = 0,
                       core_file: str = "", additional_args: str = "") -> Dict[str, Any]:
         """
         Execute GDB with PEDA for enhanced debugging and exploitation.
@@ -59,13 +71,24 @@ def register_gdb_tools(mcp, hexstrike_client, logger):
             "core_file": core_file,
             "additional_args": additional_args
         }
-        logger.info(f"🔧 Starting GDB-PEDA analysis: {binary or f'PID {attach_pid}' or core_file}")
+        await ctx.info(f"🔧 Starting GDB-PEDA analysis: {binary or f'PID {attach_pid}' or core_file}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/gdb-peda", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/gdb-peda", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ GDB-PEDA analysis completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ GDB-PEDA analysis failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

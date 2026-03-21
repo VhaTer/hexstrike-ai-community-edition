@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_api_fuzzer_tool(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def api_fuzzer(base_url: str, endpoints: str = "", methods: str = "GET,POST,PUT,DELETE", wordlist: str = "/usr/share/wordlists/api/api-endpoints.txt") -> Dict[str, Any]:
+    async def api_fuzzer(ctx: Context, base_url: str, endpoints: str = "", methods: str = "GET,POST,PUT,DELETE", wordlist: str = "/usr/share/wordlists/api/api-endpoints.txt") -> Dict[str, Any]:
         """
         Advanced API endpoint fuzzing with intelligent parameter discovery.
 
@@ -26,20 +27,28 @@ def register_api_fuzzer_tool(mcp, hexstrike_client, logger):
             "wordlist": wordlist
         }
 
-        logger.info(f"🔍 Starting API fuzzing: {base_url}")
+        await ctx.info(f"🔍 Starting API fuzzing: {base_url}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None, lambda: hexstrike_client.safe_post("api/tools/api_fuzzer", data)
         )
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             fuzzing_type = result.get("fuzzing_type", "unknown")
             if fuzzing_type == "endpoint_testing":
                 endpoint_count = len(result.get("results", []))
-                logger.info(f"✅ API endpoint testing completed: {endpoint_count} endpoints tested")
+                await ctx.info(f"✅ API endpoint testing completed: {endpoint_count} endpoints tested")
             else:
-                logger.info(f"✅ API endpoint discovery completed")
+                await ctx.info(f"✅ API endpoint discovery completed")
         else:
-            logger.error("❌ API fuzzing failed")
+            await ctx.error("❌ API fuzzing failed")
 
         return result

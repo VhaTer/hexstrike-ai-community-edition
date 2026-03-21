@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_radare2_tools(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def radare2_analyze(binary: str, commands: str = "", additional_args: str = "") -> Dict[str, Any]:
+    async def radare2_analyze(ctx: Context, binary: str, commands: str = "", additional_args: str = "") -> Dict[str, Any]:
         """
         Execute Radare2 for binary analysis and reverse engineering with enhanced logging.
 
@@ -23,13 +24,24 @@ def register_radare2_tools(mcp, hexstrike_client, logger):
             "commands": commands,
             "additional_args": additional_args
         }
-        logger.info(f"🔧 Starting Radare2 analysis: {binary}")
+        await ctx.info(f"🔧 Starting Radare2 analysis: {binary}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/radare2", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/radare2", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Radare2 analysis completed for {binary}")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Radare2 analysis failed for {binary}")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
