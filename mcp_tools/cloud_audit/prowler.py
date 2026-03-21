@@ -2,10 +2,11 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_prowler_tool(mcp, hexstrike_client, logger):
     @mcp.tool()
-    async def prowler_scan(provider: str = "aws", profile: str = "default", region: str = "", checks: str = "", output_dir: str = "/tmp/prowler_output", output_format: str = "json", additional_args: str = "") -> Dict[str, Any]:
+    async def prowler_scan(ctx: Context, provider: str = "aws", profile: str = "default", region: str = "", checks: str = "", output_dir: str = "/tmp/prowler_output", output_format: str = "json", additional_args: str = "") -> Dict[str, Any]:
         """
         Execute Prowler for comprehensive cloud security assessment.
 
@@ -30,13 +31,24 @@ def register_prowler_tool(mcp, hexstrike_client, logger):
             "output_format": output_format,
             "additional_args": additional_args
         }
-        logger.info(f"☁️  Starting Prowler {provider} security assessment")
+        await ctx.info(f"☁️  Starting Prowler {provider} security assessment")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/prowler", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/prowler", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Prowler assessment completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Prowler assessment failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result

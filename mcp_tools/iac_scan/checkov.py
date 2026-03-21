@@ -2,11 +2,12 @@
 
 from typing import Dict, Any
 import asyncio
+from fastmcp import Context
 
 def register_checkov_tool(mcp, hexstrike_client, logger):
     
     @mcp.tool()
-    async def checkov_iac_scan(directory: str = ".", framework: str = "", check: str = "",
+    async def checkov_iac_scan(ctx: Context, directory: str = ".", framework: str = "", check: str = "",
                         skip_check: str = "", output_format: str = "json",
                         additional_args: str = "") -> Dict[str, Any]:
         """
@@ -31,13 +32,24 @@ def register_checkov_tool(mcp, hexstrike_client, logger):
             "output_format": output_format,
             "additional_args": additional_args
         }
-        logger.info(f"🔍 Starting Checkov IaC scan: {directory}")
+        await ctx.info(f"🔍 Starting Checkov IaC scan: {directory}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/checkov", data)
+        future = loop.run_in_executor(
+            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/checkov", data)
         )
+
+        done, _ = await asyncio.wait([future], timeout=30)
+        if not done:
+            await ctx.report_progress(50, 100)
+            await ctx.info("⏳ Still running...")
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Checkov scan completed")
+            await ctx.info("✅ Completed successfully")
         else:
-            logger.error(f"❌ Checkov scan failed")
+            await ctx.error(f"❌ Failed: {result.get('error', 'unknown')}")
         return result
