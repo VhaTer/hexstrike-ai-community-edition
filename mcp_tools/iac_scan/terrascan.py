@@ -37,7 +37,7 @@ def register_terrascan_tool(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_postsafe_post("api/tools/terrascan", data)
+            None, lambda: hexstrike_client.safe_post("api/tools/terrascan", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
