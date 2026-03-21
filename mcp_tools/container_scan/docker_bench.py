@@ -34,7 +34,7 @@ def register_docker_bench_tool(mcp, hexstrike_client, logger):
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/docker-bench-security", data)
+            None, lambda: _security_direct.security_exec("docker-bench", data)
         )
 
         done, _ = await asyncio.wait([future], timeout=30)
