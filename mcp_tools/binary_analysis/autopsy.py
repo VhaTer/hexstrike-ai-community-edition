@@ -3,6 +3,7 @@
 from typing import Dict, Any
 import asyncio
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 
 def register_autopsy_tools(mcp, hexstrike_client, logger):
 
@@ -12,14 +13,14 @@ def register_autopsy_tools(mcp, hexstrike_client, logger):
         Launch the Autopsy digital forensics web server and provide access instructions.
 
         Returns:
-            dict: A dictionary containing connection details or error information for accessing the Autopsy web interface.
+            dict: Connection details or error information for the Autopsy web interface.
         """
         await ctx.info("🔍 Launching Autopsy web server")
         await ctx.report_progress(0, 100)
 
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/binary_analysis/autopsy", {})
+            None, lambda: _misc_direct.misc_exec("autopsy", {})
         )
 
         done, _ = await asyncio.wait([future], timeout=30)

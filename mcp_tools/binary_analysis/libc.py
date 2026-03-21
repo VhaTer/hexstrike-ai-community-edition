@@ -29,7 +29,7 @@ def register_libc_tools(mcp, hexstrike_client, logger):
         logger.info(f"🔧 Starting libc-database {action}: {symbols or libc_id}")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/libc-database", data)
+            None, lambda: _misc_direct.misc_exec("libc", data)
         )
         if result.get("success"):
             logger.info(f"✅ libc-database {action} completed")

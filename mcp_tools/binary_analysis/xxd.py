@@ -28,7 +28,7 @@ def register_xxd_tool(mcp, hexstrike_client, logger):
         logger.info(f"🔧 Starting XXD hex dump: {file_path}")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/xxd", data)
+            None, lambda: _misc_direct.misc_exec("xxd", data)
         )
         if result.get("success"):
             logger.info(f"✅ XXD hex dump completed for {file_path}")
