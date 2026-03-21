@@ -1,10 +1,10 @@
 # mcp_tools/net_scan/arp_scan.py
-
 from typing import Dict, Any
+import asyncio
 from fastmcp import Context
+import mcp_core.net_scan_direct as _net_scan_direct
 
 def register_arp_scan_tool(mcp, hexstrike_client, logger=None):
-
     @mcp.tool()
     async def arp_scan_discovery(
         ctx: Context,
@@ -17,11 +17,9 @@ def register_arp_scan_tool(mcp, hexstrike_client, logger=None):
     ) -> Dict[str, Any]:
         """
         Discover live hosts on a local network using ARP scanning.
-
         Workflow position: FIRST step for local network recon.
         Use before nmap/rustscan to identify which hosts are actually up
         on the same subnet — faster and more reliable than ICMP ping on LAN.
-
         Parameters:
         - target: IP range to scan (e.g. '192.168.1.0/24') — omit if local_network=True
         - interface: network interface to use (e.g. 'eth0', 'wlan0')
@@ -29,13 +27,10 @@ def register_arp_scan_tool(mcp, hexstrike_client, logger=None):
         - timeout: ARP reply timeout in milliseconds (default 500)
         - retry: number of ARP request retries per host (default 3)
         - additional_args: extra arp-scan flags
-
         Prerequisites: must be on the same network segment as targets.
         ARP does not cross router boundaries — LAN only.
-
         Output: list of live hosts with IP address and MAC address.
         MAC vendor prefix reveals device type (useful for IoT/embedded targets).
-
         Typical sequence:
             1. arp_scan_discovery(local_network=True)          — discover live hosts
             2. rustscan_fast_scan(target='192.168.1.x', ...)   — port scan each host
@@ -51,7 +46,10 @@ def register_arp_scan_tool(mcp, hexstrike_client, logger=None):
         }
         scan_target = target if target else "local network"
         await ctx.info(f"🔍 Starting arp-scan: {scan_target}")
-        result = hexstrike_client.safe_post("api/tools/arp-scan", data)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, lambda: _net_scan_direct.net_scan_exec("arp-scan", data)
+        )
         if result.get("success"):
             await ctx.info("✅ arp-scan completed")
         else:
