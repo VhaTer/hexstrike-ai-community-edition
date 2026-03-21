@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from fastmcp import Context
+import mcp_core.password_cracking_direct as _pwdcrack_direct
 
 def register_hashid_tool(mcp, hexstrike_client, logger=None):
 
