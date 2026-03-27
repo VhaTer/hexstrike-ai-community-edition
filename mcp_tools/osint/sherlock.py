@@ -1,9 +1,12 @@
 from typing import Dict, Any
 import asyncio
+import mcp_core.osint_direct as _osint_direct
+from fastmcp import Context
+
 
 def register_osint_sherlock_tool(mcp, hexstrike_client, logger):
     @mcp.tool()
-    async def sherlock(username: str) -> Dict[str, Any]:
+    async def sherlock(ctx: Context, username: str) -> Dict[str, Any]:
         """
         Execute Sherlock for username investigation across social networks.
 
@@ -13,16 +16,30 @@ def register_osint_sherlock_tool(mcp, hexstrike_client, logger):
         Returns:
             Sherlock investigation results
         """
-        data = {
-            "username": username
-        }
-        logger.info(f"🔍 Starting Sherlock: {username}")
+        data = {"username": username}
+
+        await ctx.info(f"🔍 Starting Sherlock: {username}")
+        await ctx.report_progress(0, 100)
+
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: hexstrike_client.safe_post("api/tools/osint/sherlock", data)
+        future = loop.run_in_executor(
+            None, lambda: _osint_direct.osint_exec("sherlock", data)
         )
+
+        phases = [(33, "Searching social networks..."), (66, "Aggregating results...")]
+        tick = 20
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=tick)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
+
         if result.get("success"):
-            logger.info(f"✅ Sherlock completed for {username}")
+            await ctx.info(f"✅ Sherlock completed for {username}")
         else:
-            logger.error(f"❌ Sherlock failed for {username}")
+            await ctx.error(f"❌ Sherlock failed: {result.get('error')}")
         return result

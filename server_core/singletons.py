@@ -9,7 +9,7 @@ Usage:
         cache, session_store, wordlist_store, telemetry,
         enhanced_process_manager, error_handler, degradation_manager,
         cve_intelligence, exploit_generator, vulnerability_correlator,
-        decision_engine, bugbounty_manager, fileupload_framework,
+        decision_engine, bugbounty_manager,
         ctf_manager, ctf_tools, ctf_automator, ctf_coordinator,
     )
 """

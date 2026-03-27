@@ -58,6 +58,7 @@ def register_gateway_tools(mcp, hexstrike_client):
         from mcp_core.web_recon_direct import web_recon_exec
         from mcp_core.security_direct import security_exec
         from mcp_core.misc_direct import misc_exec
+        from mcp_core.osint_direct import osint_exec
 
         DIRECT_ROUTES = {
             # wifi
@@ -159,6 +160,11 @@ def register_gateway_tools(mcp, hexstrike_client):
             "uro": (misc_exec, "uro"),
             "nuclei": (misc_exec, "nuclei"),
             "responder": (misc_exec, "responder"),
+            # osint — Phase 2 migration (rootkitfox)
+            "sherlock":   (osint_exec, "sherlock"),
+            "spiderfoot": (osint_exec, "spiderfoot"),
+            "sublist3r":  (osint_exec, "sublist3r"),
+            "parsero":    (osint_exec, "parsero"),
         }
 
         route = DIRECT_ROUTES.get(tool_name.lower())
