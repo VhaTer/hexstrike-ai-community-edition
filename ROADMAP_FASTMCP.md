@@ -166,7 +166,7 @@ Both are required. Neither replaces the other.
 
 **Target module:** `wifi_pentest` (no existing Flask blueprint conflict)
 
-```
+```bash
 Before:
   mcp_tools/wifi_pentest/airmon_ng.py
     → hexstrike_client.safe_post("api/tools/wifi_pentest/airmon_ng", data)
@@ -178,6 +178,7 @@ After (Phase 1):
 ```
 
 **Why wifi_pentest first:**
+
 - Cleanest module — added in beta/1.0.12, no V6 legacy
 - All tools follow the same pattern
 - No shared state with Flask blueprints
@@ -191,6 +192,7 @@ After (Phase 1):
 `hexstrike_client.safe_post()` calls are replaced module by module.
 
 **Order of migration (suggested):**
+
 1. `wifi_pentest` — Phase 1
 2. `recon`, `dns_enum`, `net_lookup` — stateless, no side effects
 3. `net_scan`, `web_probe`, `web_crawl` — stateless
@@ -324,6 +326,7 @@ async def hexstrike_dashboard(ctx: Context) -> PrefabApp:
 ### What the LLM gains
 
 Because the dashboard is a tool result, the LLM can:
+
 - Read the health data and proactively suggest fixes
 - Notice a missing tool and offer to install it
 - See a running scan and ask if you want to kill it
@@ -334,7 +337,7 @@ and the LLM are completely separate.
 
 ### Dependencies for Phase 4
 
-```
+```bash
 pip install "fastmcp[apps]" prefab-ui
 ```
 
@@ -354,11 +357,11 @@ Note: `prefab-ui` is in early development — pin to a specific version.
 
 ## References
 
-- FastMCP Context: https://gofastmcp.com/servers/context
-- FastMCP Tool Search: https://gofastmcp.com/servers/transforms/tool-search
-- FastMCP Client: https://gofastmcp.com/clients/basic-usage
-- FastMCP HTTP transport: https://gofastmcp.com/deployment/running-server
-- FastMCP Resources: https://gofastmcp.com/servers/resources
-- FastMCP Prompts: https://gofastmcp.com/servers/prompts
-- FastMCP Apps: https://gofastmcp.com/apps/overview
-- Prefab UI: https://prefab.prefect.io
+- FastMCP Context: <https://gofastmcp.com/servers/context>
+- FastMCP Tool Search: <https://gofastmcp.com/servers/transforms/tool-search>
+- FastMCP Client: <https://gofastmcp.com/clients/basic-usage>
+- FastMCP HTTP transport: <https://gofastmcp.com/deployment/running-server>
+- FastMCP Resources: <https://gofastmcp.com/servers/resources>
+- FastMCP Prompts: <https://gofastmcp.com/servers/prompts>
+- FastMCP Apps: <https://gofastmcp.com/apps/overview>
+- Prefab UI: <https://prefab.prefect.io>
