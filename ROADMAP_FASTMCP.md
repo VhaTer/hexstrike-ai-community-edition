@@ -114,24 +114,21 @@ MCP Apps render interactive UIs directly inside the MCP client conversation
 
 ## Current state of `refactor/fastmcp-modernization`
 
-### Done (22 commits ahead of beta/1.0.13)
+### Done (Phase 3 complete ✅)
 
 | What | Files | Status |
 |------|-------|--------|
-| Simplify MCP startup for FastMCP 3.1+ | `mcp_core/mcp_entry.py`, `server_setup.py` | ✅ |
-| `mcp.run(show_banner=False, log_level="WARNING")` | `mcp_core/mcp_entry.py` | ✅ |
-| `BM25SearchTransform` for tool discovery | `mcp_core/server_setup.py` | ✅ |
-| `SkillsDirectoryProvider` for skills/ | `mcp_core/server_setup.py` | ✅ |
-| `ctx: Context` migration — 62 tools across all non-wifi modules | `mcp_tools/` | ✅ |
-| WiFi pentest docstrings — workflow context | all 12 wifi tools | ✅ |
-| Stub `FileUploadTestingFramework` | `server_core/workflows/bugbounty/testing.py` | ✅ |
+| Remove Flask entirely | `hexstrike_server.py` | ✅ |
+| `setup_mcp_server_standalone()` | `mcp_core/server_setup.py` | ✅ |
+| Generic `run_security_tool()` interface | All 92 tools accessible | ✅ |
+| `mcp.run(transport="http")` native transport | No more Flask HTTP routes | ✅ |
+| Direct execution bypass | No HTTP round-trips | ✅ |
 
-### In progress
+### Phase 4 Ready — FastMCP Apps & Resources/Prompts
 
-| What | Status |
-|------|--------|
-| `ctx: Context` + `run_in_executor` — wifi_pentest (12 tools) | 🔄 needs redo after rebase |
-| Unit tests — wifi_pentest mcp_tools | 🔄 in progress |
+**Next:** Implement FastMCP Apps for interactive dashboard in MCP conversation.
+**Goal:** Replace React/Flask UI with native MCP Apps that render directly in Claude/VS Code.
+**Dependencies:** `pip install "fastmcp[apps]" prefab-ui`
 
 ### Known divergence from upstream
 
