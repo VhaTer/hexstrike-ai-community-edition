@@ -4,7 +4,7 @@
 
 # HexStrike AI - Community Edition
 
-### AI-Powered MCP Cybersecurity Automation Platform
+## AI-Powered MCP Cybersecurity Automation Platform
 
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPLv3-green.svg)](LICENSE)
@@ -62,7 +62,6 @@ Served automatically at `http://localhost:8888` the moment the server starts —
 <img src="assets/screenshots/run_tool.png" alt="reports" style="margin-bottom: 20px;"/>
 
 </details>
-
 
 <details>
 <summary>HTB CTF Agent System (@htb-ctf)</summary>

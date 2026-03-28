@@ -3,6 +3,7 @@ __pycache__
 hexstrike.log
 .hexstrike_data/
 node_modules/
+test_mcp.sh
 
 # Web UI build output
 ui/node_modules/
@@ -10,3 +11,8 @@ session.md
 hexstrike_mcp.log
 avant-rebase.md
 validate-phase3.prompt.md
+BACKUP_PHASE2.md
+ROADMAP_FASTMCP.md
+hexstrike-fastmcp-knowloadge-base.md
+STRATEGIC_REFLECTION.md
+VS_CODE_MCP_GUIDE.md
