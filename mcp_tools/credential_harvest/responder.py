@@ -4,6 +4,7 @@ from typing import Dict, Any
 import asyncio
 from fastmcp import Context
 import mcp_core.misc_direct as _misc_direct
+from mcp_core.elicitation import confirm_destructive_action
 
 def register_responder_tool(mcp, hexstrike_client, logger=None):
 
@@ -40,14 +41,27 @@ def register_responder_tool(mcp, hexstrike_client, logger=None):
         hashcat_crack(hash_file='NTLMv2-*.txt', hash_type='5600', ...)
         """
         data = {
-            "interface": interface,
-            "analyze": analyze,
-            "wpad": wpad,
+            "interface":       interface,
+            "analyze":         analyze,
+            "wpad":            wpad,
             "force_wpad_auth": force_wpad_auth,
-            "fingerprint": fingerprint,
-            "duration": duration,
-            "additional_args": additional_args
+            "fingerprint":     fingerprint,
+            "duration":        duration,
+            "additional_args": additional_args,
         }
+
+        # analyze=True is passive — no confirmation needed
+        # Poisoning mode actively intercepts network traffic — requires confirmation
+        if not analyze:
+            confirmed = await confirm_destructive_action(
+                ctx,
+                action=f"Responder LLMNR/NBT-NS poisoning on {interface}",
+                detail=f"Duration: {duration}s | WPAD: {wpad} | Force WPAD auth: {force_wpad_auth}",
+                warning="This actively poisons network traffic and may affect all hosts on the segment.",
+            )
+            if not confirmed:
+                return {"success": False, "error": "Cancelled by user — Responder not started"}
+
         mode = "analyze" if analyze else "poisoning"
         await ctx.info(f"🔍 Starting Responder [{mode}] on {interface} for {duration}s")
         await ctx.report_progress(0, 100)

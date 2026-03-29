@@ -20,13 +20,21 @@ from fastmcp import FastMCP
 # Helpers — same pattern as test_wifi/osint_mcp_tools.py
 # ---------------------------------------------------------------------------
 
-def make_mock_context():
+def make_elicit_result(accepted=True):
+    result = MagicMock()
+    result.action = "accept" if accepted else "decline"
+    result.data = accepted
+    return result
+
+
+def make_mock_context(elicit_accepted=True):
     ctx = MagicMock()
     ctx.info = AsyncMock()
     ctx.error = AsyncMock()
     ctx.warning = AsyncMock()
     ctx.debug = AsyncMock()
     ctx.report_progress = AsyncMock()
+    ctx.elicit = AsyncMock(return_value=make_elicit_result(elicit_accepted))
     return ctx
 
 
@@ -48,7 +56,14 @@ def make_mcp_with(register_fn, logger=None):
 async def call_tool(mcp, name, **kwargs):
     tool = await mcp.get_tool(name)
     assert tool is not None, f"Tool '{name}' not registered."
-    ctx = make_mock_context()
+    ctx = make_mock_context(elicit_accepted=True)
+    return await tool.fn(ctx, **kwargs)
+
+
+async def _call_tool_with_elicit(mcp, name, elicit_accepted=True, **kwargs):
+    tool = await mcp.get_tool(name)
+    assert tool is not None, f"Tool '{name}' not registered."
+    ctx = make_mock_context(elicit_accepted=elicit_accepted)
     return await tool.fn(ctx, **kwargs)
 
 
@@ -257,7 +272,7 @@ class TestCertipyAd:
 
 
 # ===========================================================================
-# mitm6
+# mitm6 — uses ctx.elicit() (destructive tool)
 # ===========================================================================
 
 class TestMitm6:
@@ -273,6 +288,7 @@ class TestMitm6:
         run(assert_tool_registered(self.mcp, "mitm6"))
 
     def test_calls_correct_tool_defaults(self):
+        """Elicitation accepted → mitm6 executes."""
         result = run(call_tool(self.mcp, "mitm6", interface="eth0"))
         self.mock_exec.assert_called_once_with("mitm6", {
             "interface":       "eth0",
@@ -282,6 +298,7 @@ class TestMitm6:
         assert result["success"] is True
 
     def test_calls_with_domain(self):
+        """Elicitation accepted → mitm6 executes with domain."""
         result = run(call_tool(self.mcp, "mitm6", interface="eth0", domain="corp.local"))
         self.mock_exec.assert_called_once_with("mitm6", {
             "interface":       "eth0",
@@ -289,6 +306,13 @@ class TestMitm6:
             "additional_args": "",
         })
         assert result["success"] is True
+
+    def test_cancelled_does_not_execute(self):
+        """Elicitation declined → mitm6 does NOT execute."""
+        result = run(_call_tool_with_elicit(self.mcp, "mitm6",
+            elicit_accepted=False, interface="eth0"))
+        self.mock_exec.assert_not_called()
+        assert result["success"] is False
 
 
 # ===========================================================================

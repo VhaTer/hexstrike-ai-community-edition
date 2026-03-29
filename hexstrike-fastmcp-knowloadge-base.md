@@ -1,9 +1,9 @@
 # HexStrike CE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-03-27  
-**Branch:** `refactor/fastmcp-modernization`  
-**HEAD:** `395375a`  
-**Tag:** `phase2-validated`
+**Last updated:** 2026-03-28 (session 4)
+**Branch:** `refactor/fastmcp-modernization`
+**HEAD:** voir `git log --oneline -1`
+**FastMCP:** 3.1.1
 
 ---
 
@@ -13,122 +13,76 @@
 |---|---|
 | **Fork** | <https://github.com/VhaTer/hexstrike-ai-community-edition> |
 | **Upstream** | <https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition> |
-| **Original** | 0x4m4 |
-| **Community Edition** | CommonHuman-Lab (active dev on `beta/1.0.13`) |
+| **Community Edition** | CommonHuman-Lab (active dev on `beta/rootkitfox`) |
 | **Our fork** | VhaTer — FastMCP 3.x refactor |
 | **Venv** | `hexstrike-env/bin/python3` |
-| **Tests** | `hexstrike-env/bin/pytest tests/test_wifi_mcp_tools.py` → 37/37 ✅ |
+| **FastMCP** | 3.1.1 |
+| **Tests** | 93/93 ✅ (37 wifi + 22 osint + 34 active_directory) |
 
 ---
 
-## ✅ What We Built — Phase 1 & 2
+## ✅ What We Built — Phase 1, 2 & 3
 
 ### Phase 1 — Context Migration
 
-- **40+** tools explicitly using `ctx: Context` parameter (FastMCP 3.x dependency injection)
-- **70+** tools calling `ctx.info()` / `ctx.error()` for structured logging to LLM
-- **15-20** tools with `ctx.report_progress()` on long-running operations (web_fuzz, scanning)
-- **Pattern:** `asyncio.wait([future], timeout=tick)` — non-blocking progress
-- `ctx.info()` / `ctx.error()` streams to LLM in real time (all security tools)
+- **105 tools** migrated to `ctx: Context`
+- **83 tools** with `ctx.report_progress()`
+- `ctx.info()` / `ctx.error()` streams to LLM in real time
 
-### Phase 1 — wifi_direct.py
+### Phase 2 — 13 *_direct.py Modules (101 tools routed)
 
-- First `*_direct.py` module — bypasses Flask entirely
-- 12 WiFi tool handlers — pure Python, no HTTP
-- `wifi_exec("airmon_ng", data)` dispatch table
-
-### Phase 2 — 12 *_direct.py Modules (115 tools total)
-
-```bash
-mcp_core/
-├── wifi_direct.py              # 12 tools — airmon, airodump, aireplay, aircrack...
-├── web_recon_direct.py         # 9 tools  — katana, gau, httpx, arjun, paramspider...
-├── misc_direct.py              # 34 tools — ropgadget, volatility, ghidra, responder...
-├── security_direct.py          # 11 tools — prowler, trivy, docker-bench, kube-hunter...
-├── password_cracking_direct.py # 8 tools  — hydra, hashcat, john, hashid, medusa...
-├── web_scan_direct.py          # 7 tools  — nikto, sqlmap, wpscan, dalfox, jaeles...
-├── web_fuzz_direct.py          # 7 tools  — gobuster, ffuf, feroxbuster, dirb, wfuzz...
-├── smb_enum_direct.py          # 6 tools  — enum4linux, netexec, rpcclient, smbmap...
-├── net_scan_direct.py          # 5 tools  — nmap, masscan, rustscan, arp-scan
-├── exploit_framework_direct.py # 5 tools  — metasploit, msfvenom, pwntools, pwninit...
-├── recon_direct.py             # 7 tools  — amass, subfinder, autorecon, fierce, whois...
-└── osint_direct.py             # 4 tools  — sherlock, spiderfoot, sublist3r, parsero
 ```
-**Total: 115 tools across 12 modules** (Phase 2 complete)
+mcp_core/
+├── wifi_direct.py              # 12 tools — wifi_pentest
+├── recon_direct.py             # 7 tools  — recon, dns_enum, net_lookup
+├── net_scan_direct.py          # 5 tools  — nmap, masscan, rustscan, arp-scan
+├── web_scan_direct.py          # 7 tools  — nikto, sqlmap, wpscan, dalfox...
+├── web_fuzz_direct.py          # 7 tools  — gobuster, ffuf, feroxbuster...
+├── password_cracking_direct.py # 8 tools  — hydra, hashcat, john, hashid...
+├── smb_enum_direct.py          # 6 tools  — enum4linux, netexec, smbmap...
+├── exploit_framework_direct.py # 5 tools  — metasploit, msfvenom, pwntools...
+├── web_recon_direct.py         # 9 tools  — katana, gau, httpx, arjun...
+├── security_direct.py          # 11 tools — cloud, container, k8s, iac
+├── misc_direct.py              # 28 tools — binary, forensics, db, api_scan...
+├── osint_direct.py             # 4 tools  — sherlock, spiderfoot, sublist3r, parsero
+└── active_directory_direct.py  # 8 handlers — impacket, ldapdomaindump, adidnsdump,
+                                #              certipy_ad, mitm6, pywerview, bloodhound
+```
 
-### Phase 2 — gateway.py DIRECT_ROUTES
+**101 tools dans DIRECT_ROUTES** (gateway.py) + **DIRECT_TOOLS** (server_setup.py).
 
-- `run_tool("hashid", {...})` → `pwdcrack_exec()` → `execute_command()` direct
-- No Flask, no HTTP — full bypass
-- Fallback to Flask for unmigrated tools only
+### Phase 3 — Standalone Server (ACTIF ✅)
+
+- `hexstrike_server.py` → `mcp.run(transport="http", port=8888)` — zéro Flask
+- `setup_mcp_server_standalone()` dans `server_setup.py`
+- FastMCP 3.1.1, HTTP/SSE transport natif
 
 ---
 
 ## 🏗️ Architecture
 
-### Before (legacy)
+### Phase 3 (actuelle)
 
-```markdown
-mcp_tool → hexstrike_client.safe_post() → HTTP → Flask → server_api/ → execute_command()
+```
+Claude / MCP client
+    ↓ MCP protocol
+hexstrike_server.py → mcp.run(transport="http", port=8888)
+    ↓ run_security_tool("nmap", '{"target": "..."}')
+mcp_core/*_direct.py → execute_command()
 ```
 
-### After (Phase 2)
+### Legacy (hexstrike_mcp.py — profile-based, toujours fonctionnel)
 
-```markdown
-mcp_tool → *_direct.py → execute_command()  (direct Python call)
-gateway run_tool → DIRECT_ROUTES → *_direct.py → execute_command()
 ```
-
-### Target (Phase 3)
-
-```bash
-mcp_tool → *_direct.py → execute_command()
-Flask removed → mcp.run(transport="http")
-Agents → @mcp.prompt() native
+hexstrike_mcp.py → HexStrikeClient → DIRECT_ROUTES → *_direct.py
+                                    → Flask fallback (tools non migrés)
 ```
 
 ---
 
-## 🔄 Phase 3 — TODO
+## 🔄 Phase 3 — TODO restant
 
-### 1. Remove Flask
-
-```python
-# Replace hexstrike_server.py with:
-mcp.run(transport="http", host="127.0.0.1", port=8888)
-```
-
-### 2. Migrate Agents to mcp_core/
-
-12 agents in `server_core/intelligence/` and `server_core/workflows/`:
-
-- `IntelligentDecisionEngine` — tool selection + param optimization
-- `BugBountyWorkflowManager` — bug bounty orchestration
-- `CTFWorkflowManager` — CTF solving
-- `CVEIntelligenceManager` — CVE intelligence
-- `AIExploitGenerator` — exploit development
-- `VulnerabilityCorrelator` — attack chain discovery
-- `TechnologyDetector` — tech stack identification
-- `RateLimitDetector` — rate limiting detection
-- `FailureRecoverySystem` — error handling
-- `PerformanceMonitor` — system optimization
-- `ParameterOptimizer` — contextual param optimization
-- `GracefulDegradation` — fault tolerance
-
-### 3. FastMCP Prompts — native MCP workflows
-
-```python
-@mcp.prompt()
-async def bug_bounty_workflow(target: str) -> list:
-    workflow = BugBountyWorkflowManager()
-    return workflow.create_reconnaissance_workflow(target)
-
-@mcp.prompt()
-async def wifi_attack_chain(interface: str, bssid: str) -> list:
-    """Full chain: airmon → airodump → aireplay → aircrack"""
-```
-
-### 4. User Elicitation — confirm destructive actions
+### 1. User Elicitation — actions destructives (priorité haute)
 
 ```python
 result = await ctx.elicit(
@@ -139,9 +93,18 @@ if result.action == "accept" and result.data:
     # run aireplay_ng
 ```
 
-**Note:** Supported in Claude Desktop ✅
+**Cibles :** `aireplay_ng`, `responder`, `metasploit`, `mdk4`, `mitm6`
+**Note :** Supporté Claude Desktop ✅
 
-### 5. Resources MCP
+### 2. Migrer les agents en `@mcp.prompt()`
+
+12 agents dans `server_core/intelligence/` et `server_core/workflows/` :
+`IntelligentDecisionEngine`, `BugBountyWorkflowManager`, `CTFWorkflowManager`,
+`CVEIntelligenceManager`, `AIExploitGenerator`, `VulnerabilityCorrelator`,
+`TechnologyDetector`, `RateLimitDetector`, `FailureRecoverySystem`,
+`PerformanceMonitor`, `ParameterOptimizer`, `GracefulDegradation`
+
+### 3. Resources MCP
 
 ```python
 @mcp.resource("scan://{target}/results")
@@ -153,17 +116,15 @@ async def server_health() -> str:
     return get_health_json()
 ```
 
-### 6. Still on Flask — needs Phase 3
+### 4. theHarvester fix
 
-```bash
-ops/ (8)            — complex system utilities
-web_framework/ (2)  — browser_agent + http_framework
-gateway.py          — central orchestrator
-ai_assist/          — IntelligentDecisionEngine
-bugbounty_workflow/ — BugBountyWorkflowManager
-error_handling/     — internal utilities
-ai_payload/         — payload generation
-web_scan/burpsuite  — depends on browser_agent
+`recon_direct.py` — synchroniser la majuscule upstream : `theharvester` → `theHarvester`
+
+### 5. Encore sur Flask legacy — skip Phase 3
+
+```
+ops/ (8), web_framework/ (2), ai_assist/, bugbounty_workflow/,
+error_handling/, ai_payload/, web_scan/burpsuite
 ```
 
 ---
@@ -172,59 +133,49 @@ web_scan/burpsuite  — depends on browser_agent
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ctx.info()` / `ctx.error()` | ✅ 70+ tools | Streams to LLM in real-time |
-| `ctx.report_progress()` | ✅ 15-20 tools | Web fuzzing, scanning modules |
-| `run_in_executor` | ✅ All tools | Non-blocking async I/O |
+| `ctx.info()` / `ctx.error()` | ✅ 105 tools | Streams to LLM |
+| `ctx.report_progress()` | ✅ 83 tools | Non-blocking via asyncio.wait |
 | `BM25SearchTransform` | ✅ server_setup.py | Tool discovery |
-| `SkillsDirectoryProvider` | ✅ server_setup.py | Skills as MCP resources |
-| `@mcp.tool()` decorator | ✅ 115 tools | FastMCP 3.x native |
-| `@mcp.prompt()` | 🔄 Phase 3 | Workflows + LLM sampling |
-| Resources MCP | 🔄 Phase 3 | Scan results via `@mcp.resource()` |
-| User Elicitation | 🔄 Phase 3 | Destructive actions via `ctx.elicit()` |
-| Dependency Injection | ✅ Supported | `ctx: Context = CurrentContext()` |
-| FastMCP Apps | ❌ Low priority | prefab-ui too immature |
+| `SkillsDirectoryProvider` | ✅ server_setup.py | Skills as resources |
+| `run_in_executor` | ✅ All tools | Non-blocking I/O |
+| Phase 3 standalone server | ✅ ACTIF | mcp.run(transport="http") |
+| `@mcp.prompt()` | 🔄 TODO | Workflows agents |
+| Resources MCP | 🔄 TODO | Scan results, health |
+| User Elicitation | 🔄 TODO | Actions destructives |
+| LLM Sampling | ❌ Not yet | Claude Desktop pas encore |
 
 ---
 
-## 🧠 Key Patterns — FastMCP 3.x Aligned
+## 🧠 Key Patterns
 
-### Tool Pattern (FastMCP 3.x — Modern)
+### Tool pattern (complet)
 
-**Recommended: Dependency Injection (v2.14+)**
 ```python
-from fastmcp import FastMCP, Context
-from fastmcp.dependencies import CurrentContext
+from fastmcp import Context
 import asyncio
-import mcp_core.wifi_direct as _wifi_direct  # module-level — patchable
+import mcp_core.wifi_direct as _wifi_direct  # module-level — patchable en tests
 
-mcp = FastMCP(name="HexStrike")
-
-@mcp.tool(description="Start WiFi monitor mode")
-async def airmon_ng(
-    ctx: Context = CurrentContext(),
-    interface: str = "wlan0",
-    action: str = "start"
-) -> Dict[str, Any]:
-    """Start/stop WiFi interface monitor mode."""
-    await ctx.info(f"🔍 {action} monitor on {interface}")
+@mcp.tool()
+async def tool_name(ctx: Context, target: str, ...) -> Dict[str, Any]:
+    data = {"target": target, ...}
+    await ctx.info(f"🔍 Starting on {target}")
     await ctx.report_progress(0, 100)
 
     loop = asyncio.get_running_loop()
     future = loop.run_in_executor(
-        None, lambda: _wifi_direct.wifi_exec("airmon_ng", {"interface": interface, "action": action})
+        None, lambda: _wifi_direct.wifi_exec("tool_key", data)
     )
 
-    # Non-blocking progress polling
     phases = [(25, "Phase 1..."), (50, "Phase 2..."), (75, "Phase 3...")]
-    for progress, msg in phases:
-        done, _ = await asyncio.wait([future], timeout=15)
+    tick = 15
+    for progress, message in phases:
+        done, _ = await asyncio.wait([future], timeout=tick)
         if done: break
         await ctx.report_progress(progress, 100)
-        await ctx.info(msg)
+        await ctx.info(message)
 
     result = await future
     await ctx.report_progress(100, 100)
-    
     if result.get("success"):
         await ctx.info("✅ Done")
     else:
@@ -232,139 +183,108 @@ async def airmon_ng(
     return result
 ```
 
-**Legacy: Type-Hint Injection (still supported)**
-```python
-@mcp.tool()
-async def tool_name(ctx: Context, target: str) -> Dict[str, Any]:
-    # Context auto-injected via type hint
-    await ctx.info(f"Starting on {target}")
-    return {"success": True}
-```
+**IMPORTANT :** `ctx: Context` injecté automatiquement par type hint.
+Ne PAS utiliser `ctx: Context = CurrentContext()`.
 
-### *_direct.py Pattern (Backend executor)
-
-**Location:** `mcp_core/{module}_direct.py` — Pure Python, no Flask
+### *_direct.py pattern
 
 ```python
-# mcp_core/wifi_direct.py
 from server_core.command_executor import execute_command
 
 def _require(data: dict, *keys) -> dict:
-    """Validate required parameters."""
     for key in keys:
         if not data.get(key, ""):
-            return {"success": False, "error": f"Missing: {key}"}
+            return {"success": False, "error": f"'{key}' is required"}
     return {}
 
-def _airmon_ng(data: dict) -> dict:
-    """Execute airmon-ng command."""
-    err = _require(data, "interface", "action")
+def _my_tool(data: dict) -> dict:
+    err = _require(data, "target")
     if err: return err
-    
-    interface = data["interface"]
-    action = data["action"]
-    command = f"sudo airmon-ng {action} {interface}"
-    return execute_command(command)
+    return execute_command(f"tool {data['target']}")
 
-_HANDLERS = {
-    "airmon_ng": _airmon_ng,
-    "airodump_ng": _airodump_ng,
-    # ... more handlers
-}
+_HANDLERS = {"my_tool": _my_tool}
 
-def wifi_exec(tool: str, data: dict) -> dict:
-    """Route tool request to handler."""
+def example_exec(tool: str, data: dict) -> dict:
     handler = _HANDLERS.get(tool)
     if handler is None:
-        return {"success": False, "error": f"Unknown tool: {tool}"}
+        return {"success": False, "error": f"Unknown tool: '{tool}'"}
     return handler(data)
 ```
 
-**Gateway routing** (`mcp_tools/gateway.py`): Maps tool names → direct executors
+### Import pattern — critique pour les tests
+
 ```python
-DIRECT_ROUTES = {
-    "airmon_ng": (wifi_exec, "airmon_ng"),
-    "nmap": (net_scan_exec, "nmap"),
-    "sherlock": (osint_exec, "sherlock"),  # osint_direct.py
-    # ... 110+ tools directly routed
-}
+# ✅ Module-level — patchable
+import mcp_core.wifi_direct as _wifi_direct
+
+# ❌ From import — NOT patchable
+from mcp_core.wifi_direct import wifi_exec
 ```
 
-### Import Pattern for Test Patching
+### Patch pattern dans les tests
 
 ```python
-# ✅ CORRECT: Module-level import — patchable in tests
-import mcp_core.wifi_direct as _wifi_direct
-# Later: _wifi_direct.wifi_exec("tool", data)
+# ✅ Patcher là où le nom est utilisé (pas la source)
+with patch("mcp_core.osint_direct.execute_command") as mock: ...
+with patch("mcp_core.active_directory_direct.ad_exec") as mock: ...
 
-# ❌ WRONG: From import — NOT patchable in tests
-from mcp_core.wifi_direct import wifi_exec
-# Cannot mock: patch("wifi_exec") has no effect
-
-# In tests — patch the module reference
-with patch("mcp_core.wifi_direct.wifi_exec") as mock:
-    mock.return_value = {"success": True}
-    # Call tool, wifi_exec will be mocked
+# ❌ Patcher la source ne fonctionne pas après import
+with patch("server_core.command_executor.execute_command") as mock: ...
 ```
 
 ---
 
-## 🧪 Testing — 200+ Test Functions, 48 Test Classes
+## 🧪 Testing — 93 tests, 24 classes
 
 ```bash
-# All tests in venv pytest
-hexstrike-env/bin/pytest tests/ -v
+# Tous les tests (pytest.ini exclut test_endpoints_exist.py automatiquement)
+hexstrike-env/bin/pytest tests/ -q
 
-# WiFi tests (37 functions, 12 classes)
-hexstrike-env/bin/pytest tests/test_wifi_mcp_tools.py -v
-
-# Endpoint tests (48 classes: system, net, web, crypto, cloud, k8s, forensics...)
-hexstrike-env/bin/pytest tests/test_endpoints_exist.py -v
+# Par module
+hexstrike-env/bin/pytest tests/test_wifi_mcp_tools.py -v           # 37 tests
+hexstrike-env/bin/pytest tests/test_osint_mcp_tools.py -v          # 22 tests
+hexstrike-env/bin/pytest tests/test_active_directory_mcp_tools.py -v # 34 tests
 ```
 
-**Test class breakdown:**
-- System ops, files, processes, wordlists, database (8 classes)
-- Network: scanning, SMB, DNS, lookup (4 classes)
-- Web: fuzzing, scanning, crawling, probing, framework (5 classes)
-- Security: password cracking, exploitation, binary analysis (3 classes)
-- Cloud/Container: audit, exploit, container, k8s (4 classes)
-- Forensics: credential harvest, binary analysis, crypto, data (4 classes)
-- WiFi pentest (12 classes, 37 test functions)
-- Intelligence: workflows, errors, payloads (3 classes)
-
-**Patch pattern for mocking:**
-```python
-with patch("mcp_core.wifi_direct.wifi_exec") as mock:
-    mock.return_value = {"success": True, "output": "..."}
-    tool = await mcp.get_tool("airmon_ng")  # async in FastMCP 3.x
-    result = await tool.fn(ctx, interface="wlan0", action="start")
-```
+**test_endpoints_exist.py** — teste routes Flask, obsolète Phase 3.
+Exclu via `pytest.ini` (`addopts = --ignore=tests/test_endpoints_exist.py`).
 
 ---
 
 ## 🌿 Branch Structure
 
-```bash
+```
 refactor/fastmcp-modernization   ← active development
-backup/phase2-complete-validated ← stable restore point (a909a02)
-feat/wifi-pentest-clean          ← history — merged by upstream ✅
+backup/phase2-complete-validated ← stable restore point — synced HEAD
+feat/wifi-pentest-clean          ← gardée, merged upstream
 ```
 
-### Useful git commands
+### Git commands utiles
 
 ```bash
-# Check upstream changes before rebase
+# Avant tout rebase — analyser le diff
 git fetch upstream
-git diff HEAD..upstream/beta/1.0.13 --name-only | grep "\.py$"
+git log --oneline upstream/beta/rootkitfox ^HEAD | head -30
+git diff --name-only upstream/beta/1.0.13..upstream/beta/rootkitfox
+git diff HEAD..upstream/beta/rootkitfox -- mcp_core/ server_core/ \
+    tool_registry.py mcp_core/tool_profiles.py > /tmp/diff_critique.md
 
-# Rebase on upstream
-git rebase upstream/beta/1.0.13
-git diff --name-only --diff-filter=U | xargs -r git checkout --ours
-GIT_EDITOR=true git rebase --continue
+# Stash session notes avant rebase
+git stash push -u -m "session-notes-pre-rebase"
+
+# Rebase pattern rootkitfox
+git tag pre-rebase-$(date +%Y%m%d) HEAD
+git rebase upstream/beta/rootkitfox
+# Conflits sur nos *_direct.py → toujours --ours
+git checkout --ours mcp_core/exploit_framework_direct.py
+git checkout --ours mcp_core/misc_direct.py
+git checkout --ours mcp_core/mcp_entry.py   # garder log_level="WARNING"
+git add <fichiers> && GIT_EDITOR=true git rebase --continue
 git push --force-with-lease origin refactor/fastmcp-modernization
 
-# Restore to Phase 2 backup
-git checkout backup/phase2-complete-validated
+# Update backup
+git branch -f backup/phase2-complete-validated HEAD
+git push origin backup/phase2-complete-validated --force-with-lease
 ```
 
 ---
@@ -373,42 +293,53 @@ git checkout backup/phase2-complete-validated
 
 | Issue | Solution |
 |---|---|
-| `safe_postsafe_post` doublon | `content.replace("safe_postsafe_post", "safe_post")` then `re.sub` |
-| `GIT_EDITOR=true` | Avoids vim on rebase --continue |
-| ANSI colors in output | `HexStrikeColors` breaks JSON parsing in IDE — remove in Phase 3 |
-| Flask Slowloris CVE-2007-6750 | Port 8888 Werkzeug dev server — fix in Phase 3 |
-| `wsl.exe` in Claude Desktop | Use `cmd.exe /c hexstrike_mcp.bat` wrapper |
-| `run_tool` gateway fallback | If tool not in DIRECT_ROUTES → still uses Flask |
-| CAP_NET_RAW in WSL | nmap needs `-sT -Pn` flags — no raw socket in WSL |
+| `testing.py` WinDefender | Stub GPT-5 en place ✅ |
+| `GIT_EDITOR=true` | Évite vim sur rebase --continue |
+| ANSI colors `HexStrikeColors` | Casse JSON parsing — retirer Phase 3 cleanup |
+| `mcp_entry.py` log_level | rootkitfox supprime `log_level="WARNING"` → toujours `--ours` |
+| `currentContext()` | N'existe pas FastMCP 3.x — utiliser `ctx: Context` type hint |
+| Patch tests | Patcher `mcp_core.module.fn` pas `server_core.command_executor.fn` |
+| `test_endpoints_exist.py` | Obsolète Phase 3 — exclu via `pytest.ini` |
+| 3 tools FastMCP internes | `trace`, `fail`, `sleep` — injectés FastMCP 3.1.1, inoffensifs |
+| Stash double rebase | `git stash pop` x2 — conflit `.gitignore` normal, résoudre `--ours` |
+| `theHarvester` casse | À sync dans `recon_direct.py` — `theharvester` → `theHarvester` |
 
 ---
 
-## 🌍 Upstream Analysis (CommonHuman-Lab)
+## 🌍 Upstream / Contributions externes
 
-**Development approach:**
-- Uses `logger.info(HexStrikeColors.X)` → terminal only, NOT LLM-aware
-- Active on `ui/` React dashboard (Vite/Recharts)
-- Added `active_directory/` module (7 new AD tools: adidnsdump, bloodhound, certipy...)
-- Modified `*_direct.py` in recent commits → **check diffs before rebase**
-- Legacy logging, no `ctx: Context` integration
-- Blocking tool calls (no `run_in_executor`)
-- Skills without FastMCP 3.x context streaming
+### GPT-5 contributions (session 3, 2026-03-28)
 
-**Our Key Differentiators (HexStrike VhaTer):**
+- `hexstrike_server.py` Phase 3 standalone (bug `asyncio` corrigé par nous)
+- `server_setup.py` `setup_mcp_server_standalone()` (corrigé)
+- `testing.py` stub `FileUploadTestingFramework`
+- `AGENTS.md` doc agent (corrigé : `CurrentContext()` retiré, chiffres tests)
+- `STRATEGIC_REFLECTION.md` — bonne doc vision, garder
 
-1. ✅ **Context Streaming** → `ctx.info()/error()` → LLM sees real-time logs
-2. ✅ **Direct Execution** → 12 `*_direct.py` modules → ~150 Flask HTTP calls eliminated
-3. ✅ **Async Non-Blocking** → `run_in_executor` + `asyncio.wait()` → responsive tools
-4. ✅ **Gateway Bypass** → `DIRECT_ROUTES` → 110 tools routed directly
-5. ✅ **Comprehensive Tests** → 200+ test functions, 48 classes (not just 37)
-6. ✅ **FastMCP 3.x Native** → Dependency injection, prompts, resources ready for Phase 3
-7. ✅ **OSINT Integration** → `osint_direct.py` with sherlock, spiderfoot, etc.
+### Différenciateurs vs CommonHuman-Lab
+
+1. `ctx: Context` → LLM voit progress en temps réel
+2. 13 `*_direct.py` → No Flask (~150 HTTP calls éliminés)
+3. `run_in_executor` → Non-blocking async
+4. `gateway DIRECT_ROUTES` → 101 tools routés directement
+5. 93 tests (37 wifi + 22 osint + 34 AD)
+6. `BM25SearchTransform` → Smart tool discovery
+7. Phase 3 standalone server actif — zéro Flask
 
 ---
 
 ## 🚀 Production Setup
 
-### Antigravity IDE config
+### Démarrer le serveur Phase 3
+
+```bash
+cd ~/hexstrike-ai-community-edition
+kill $(lsof -t -i:8888) 2>/dev/null
+hexstrike-env/bin/python3 hexstrike_server.py
+# → FastMCP 3.1.1 sur http://127.0.0.1:8888/mcp
+```
+
+### Antigravity IDE (hexstrike_mcp.py — profile-based)
 
 ```json
 {
@@ -427,27 +358,15 @@ git checkout backup/phase2-complete-validated
 }
 ```
 
-### Start server
+### Validate
 
 ```bash
-cd ~/hexstrike-ai-community-edition
-kill $(lsof -t -i:8888) 2>/dev/null
-hexstrike-env/bin/python3 hexstrike_server.py > /tmp/hexstrike.log 2>&1 &
-sleep 2 && curl -s http://127.0.0.1:8888/health | grep "all_essential"
-```
-
-### Validate Phase 2 direct execution
-
-```bash
-hexstrike-env/bin/python3 - << 'EOF'
-import sys; sys.path.insert(0, '.')
-from mcp_core.password_cracking_direct import pwdcrack_exec
-result = pwdcrack_exec("hashid", {
-    "hash_value": "5f4dcc3b5aa765d61d8327deb882cf99",
-    "additional_args": "-m"
-})
-print("✅ MD5 mode 0" if "MD5" in result.get("output","") else "❌ FAIL")
-EOF
+hexstrike-env/bin/pytest tests/ -q 2>&1 | tail -3
+hexstrike-env/bin/python3 -c "
+import mcp_core.osint_direct
+import mcp_core.active_directory_direct
+print('✅ All direct modules OK')
+"
 ```
 
 ---
@@ -455,20 +374,17 @@ EOF
 ## 📚 FastMCP 3.x Resources
 
 - Context API: <https://gofastmcp.com/servers/context>
-- Tool Search: <https://gofastmcp.com/servers/transforms/tool-search>
-- Client: <https://gofastmcp.com/clients/basic-usage>
-- HTTP Transport: <https://gofastmcp.com/deployment/running-server>
-- FileSystemProvider: <https://gofastmcp.com/servers/providers/filesystem>
+- Elicitation: <https://gofastmcp.com/servers/context#elicitation>
 - Prompts: <https://gofastmcp.com/servers/prompts>
 - Resources: <https://gofastmcp.com/servers/resources>
+- HTTP Transport: <https://gofastmcp.com/deployment/running-server>
 
 ---
 
 ## 🎯 Next Session Priorities
 
-1. **Check upstream diff** on `*_direct.py` — what did they change?
-2. **Rebase** on `upstream/beta/1.0.13` — get `active_directory/` module
-3. **Add `active_directory/` to `misc_direct.py`** — 7 new tools
-4. **Phase 3** — User Elicitation on destructive tools (aireplay_ng, responder, metasploit)
-5. **Resources MCP** — expose health + scan results
-6. **PR** toward CommonHuman-Lab
+1. **User Elicitation** — `aireplay_ng`, `metasploit`, `responder`, `mdk4`, `mitm6`
+2. **`theHarvester` fix** — `recon_direct.py` sync majuscule upstream
+3. **Resources MCP** — `health://server` + `scan://{target}/results`
+4. **`@mcp.prompt()`** — porter `BugBountyWorkflowManager` en prompt natif
+5. **PR** vers CommonHuman-Lab

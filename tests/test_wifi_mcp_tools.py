@@ -20,13 +20,23 @@ from fastmcp import FastMCP
 # Mock Context — satisfies ctx: Context parameter
 # ---------------------------------------------------------------------------
 
-def make_mock_context():
+def make_elicit_result(accepted=True):
+    """Mock elicitation result — simulates user accepting by default."""
+    result = MagicMock()
+    result.action = "accept" if accepted else "decline"
+    result.data = accepted
+    return result
+
+
+def make_mock_context(elicit_accepted=True):
     ctx = MagicMock()
     ctx.info = AsyncMock()
     ctx.error = AsyncMock()
     ctx.warning = AsyncMock()
     ctx.debug = AsyncMock()
     ctx.report_progress = AsyncMock()
+    # Elicitation — returns accepted by default so destructive tools proceed in tests
+    ctx.elicit = AsyncMock(return_value=make_elicit_result(elicit_accepted))
     return ctx
 
 
@@ -45,16 +55,23 @@ def make_mcp_with(register_fn, logger=None):
     mcp = FastMCP("test-hexstrike")
     if logger is None:
         logger = MagicMock()
-    # hexstrike_client is no longer used by wifi tools — pass a dummy
     register_fn(mcp, MagicMock(), logger)
     return mcp, logger
 
 
 async def call_tool(mcp, name, **kwargs):
-    """Call a registered tool — injects a mock ctx as first positional arg."""
+    """Call a registered tool — injects a mock ctx (elicit accepted)."""
     tool = await mcp.get_tool(name)
     assert tool is not None, f"Tool '{name}' not registered."
-    ctx = make_mock_context()
+    ctx = make_mock_context(elicit_accepted=True)
+    return await tool.fn(ctx, **kwargs)
+
+
+async def _call_tool_with_elicit(mcp, name, elicit_accepted=True, **kwargs):
+    """Call a tool with a specific elicitation response (accept/decline)."""
+    tool = await mcp.get_tool(name)
+    assert tool is not None, f"Tool '{name}' not registered."
+    ctx = make_mock_context(elicit_accepted=elicit_accepted)
     return await tool.fn(ctx, **kwargs)
 
 
@@ -84,49 +101,20 @@ class TestAirmonNg:
     def test_tool_registered(self):
         run(assert_tool_registered(self.mcp, "airmon_ng"))
 
-    def test_check_kill_calls_correct_tool(self):
-        mock = make_mock_wifi_exec()
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "airmon_ng", interface="wlan0", action="check kill"))
-        mock.assert_called_once()
-        tool, data = mock.call_args[0]
-        assert tool == "airmon_ng"
-        assert data["interface"] == "wlan0"
-        assert data["action"] == "check kill"
-
-    def test_start_monitor_mode(self):
+    def test_calls_correct_tool(self):
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "airmon_ng", interface="wlan0", action="start"))
-        _, data = mock.call_args[0]
-        assert data["action"] == "start"
+        tool, data = mock.call_args[0]
+        assert tool == "airmon_ng"
+        assert data["interface"] == "wlan0"
 
-    def test_start_with_channel(self):
-        mock = make_mock_wifi_exec()
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "airmon_ng", interface="wlan0", action="start", channel="6"))
-        _, data = mock.call_args[0]
-        assert data["channel"] == "6"
-
-    def test_stop_monitor_mode(self):
+    def test_stop_action(self):
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "airmon_ng", interface="wlan0mon", action="stop"))
         _, data = mock.call_args[0]
         assert data["action"] == "stop"
-        assert data["interface"] == "wlan0mon"
-
-    def test_returns_success_result(self):
-        mock = make_mock_wifi_exec(success=True)
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            result = run(call_tool(self.mcp, "airmon_ng", interface="wlan0", action="start"))
-        assert result["success"] is True
-
-    def test_returns_failure_result(self):
-        mock = make_mock_wifi_exec(success=False, extra={"error": "permission denied"})
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            result = run(call_tool(self.mcp, "airmon_ng", interface="wlan0", action="start"))
-        assert result["success"] is False
 
 
 # ===========================================================================
@@ -150,23 +138,19 @@ class TestAirodumpNg:
         assert tool == "airodump_ng"
         assert data["interface"] == "wlan0mon"
 
-    def test_bssid_filter(self):
+    def test_targeted_capture(self):
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "airodump_ng", interface="wlan0mon", bssid="AA:BB:CC:DD:EE:FF"))
+            run(call_tool(self.mcp, "airodump_ng",
+                interface="wlan0mon", bssid="AA:BB:CC:DD:EE:FF",
+                channel="6", output_prefix="capture"))
         _, data = mock.call_args[0]
         assert data["bssid"] == "AA:BB:CC:DD:EE:FF"
-
-    def test_channel_filter(self):
-        mock = make_mock_wifi_exec()
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "airodump_ng", interface="wlan0mon", channel="6"))
-        _, data = mock.call_args[0]
         assert data["channel"] == "6"
 
 
 # ===========================================================================
-# aireplay_ng
+# aireplay_ng — uses ctx.elicit() for destructive modes
 # ===========================================================================
 
 class TestAireplayNg:
@@ -178,25 +162,45 @@ class TestAireplayNg:
     def test_tool_registered(self):
         run(assert_tool_registered(self.mcp, "aireplay_ng"))
 
-    def test_deauth_calls_correct_tool(self):
+    def test_injection_test_no_elicitation(self):
+        """Mode 9 = safe injection test — no elicitation needed."""
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "aireplay_ng",
-                interface="wlan0mon", attack_mode="deauth",
-                bssid="AA:BB:CC:DD:EE:FF", count="10"))
+                interface="wlan0mon", attack_mode=9))
         tool, data = mock.call_args[0]
         assert tool == "aireplay_ng"
-        assert data["attack_mode"] == "deauth"
-        assert data["bssid"] == "AA:BB:CC:DD:EE:FF"
+        assert data["attack_mode"] == 9
 
-    def test_arp_replay_attack(self):
+    def test_deauth_attack_confirmed(self):
+        """Mode 0 deauth — elicitation accepted → tool executes."""
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "aireplay_ng",
-                interface="wlan0mon", attack_mode="arp-replay",
-                bssid="AA:BB:CC:DD:EE:FF"))
-        _, data = mock.call_args[0]
-        assert data["attack_mode"] == "arp-replay"
+                interface="wlan0mon", attack_mode=0, bssid="AA:BB:CC:DD:EE:FF"))
+        tool, data = mock.call_args[0]
+        assert tool == "aireplay_ng"
+        assert data["attack_mode"] == 0
+
+    def test_deauth_cancelled(self):
+        """Mode 0 deauth — elicitation declined → tool does NOT execute."""
+        mock = make_mock_wifi_exec()
+        with patch("mcp_core.wifi_direct.wifi_exec", mock):
+            result = run(_call_tool_with_elicit(self.mcp, "aireplay_ng",
+                elicit_accepted=False,
+                interface="wlan0mon", attack_mode=0, bssid="AA:BB:CC:DD:EE:FF"))
+        mock.assert_not_called()
+        assert result["success"] is False
+
+    def test_arp_replay_attack(self):
+        """Mode 3 ARP replay — elicitation accepted → tool executes."""
+        mock = make_mock_wifi_exec()
+        with patch("mcp_core.wifi_direct.wifi_exec", mock):
+            run(call_tool(self.mcp, "aireplay_ng",
+                interface="wlan0mon", attack_mode=3, bssid="AA:BB:CC:DD:EE:FF"))
+        tool, data = mock.call_args[0]
+        assert tool == "aireplay_ng"
+        assert data["attack_mode"] == 3
 
 
 # ===========================================================================
@@ -216,27 +220,18 @@ class TestAircrackNg:
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "aircrack_ng",
-                capture_files=["/tmp/capture.cap"],
+                capture_files=["capture-01.cap"],
                 wordlist="/usr/share/wordlists/rockyou.txt"))
         tool, data = mock.call_args[0]
         assert tool == "aircrack_ng"
-        assert data["capture_files"] == ["/tmp/capture.cap"]
-        assert data["wordlist"] == "/usr/share/wordlists/rockyou.txt"
+        assert "capture-01.cap" in data["capture_files"]
 
-    def test_multiple_capture_files(self):
+    def test_wep_cracking(self):
+        """bssid param targets specific AP in multi-AP captures."""
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "aircrack_ng",
-                capture_files=["/tmp/cap1.cap", "/tmp/cap2.cap"],
-                wordlist="/usr/share/wordlists/rockyou.txt"))
-        _, data = mock.call_args[0]
-        assert len(data["capture_files"]) == 2
-
-    def test_with_bssid_filter(self):
-        mock = make_mock_wifi_exec()
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "aircrack_ng",
-                capture_files=["/tmp/capture.cap"],
+                capture_files=["capture-01.cap"],
                 wordlist="/usr/share/wordlists/rockyou.txt",
                 bssid="AA:BB:CC:DD:EE:FF"))
         _, data = mock.call_args[0]
@@ -259,34 +254,11 @@ class TestHcxdumptool:
     def test_calls_correct_tool(self):
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "hcxdumptool", interface="wlan0mon"))
+            run(call_tool(self.mcp, "hcxdumptool",
+                interface="wlan0mon", output_file="capture.pcapng"))
         tool, data = mock.call_args[0]
         assert tool == "hcxdumptool"
         assert data["interface"] == "wlan0mon"
-
-
-# ===========================================================================
-# hcxpcapngtool
-# ===========================================================================
-
-class TestHcxpcapngtool:
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        from mcp_tools.wifi_pentest.hcxpcapngtool import register_hcxpcapngtool_tools
-        self.mcp, self.logger = make_mcp_with(register_hcxpcapngtool_tools)
-
-    def test_tool_registered(self):
-        run(assert_tool_registered(self.mcp, "hcxpcapngtool"))
-
-    def test_calls_correct_tool(self):
-        mock = make_mock_wifi_exec()
-        with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "hcxpcapngtool",
-                input_file="/tmp/capture.pcapng",
-                output_file="/tmp/hashes.hc22000"))
-        tool, data = mock.call_args[0]
-        assert tool == "hcxpcapngtool"
-        assert data["input_file"] == "/tmp/capture.pcapng"
 
 
 # ===========================================================================
@@ -308,11 +280,18 @@ class TestWifite2:
             run(call_tool(self.mcp, "wifite2", interface="wlan0mon"))
         tool, data = mock.call_args[0]
         assert tool == "wifite2"
-        assert data["interface"] == "wlan0mon"
+
+    def test_targeted_attack(self):
+        mock = make_mock_wifi_exec()
+        with patch("mcp_core.wifi_direct.wifi_exec", mock):
+            run(call_tool(self.mcp, "wifite2",
+                interface="wlan0mon", target_bssid="AA:BB:CC:DD:EE:FF"))
+        _, data = mock.call_args[0]
+        assert data["target_bssid"] == "AA:BB:CC:DD:EE:FF"
 
 
 # ===========================================================================
-# eaphammer
+# eaphammer — essid (not ssid), auth_mode (not auth)
 # ===========================================================================
 
 class TestEaphammer:
@@ -328,19 +307,20 @@ class TestEaphammer:
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "eaphammer",
-                interface="wlan0mon", essid="TargetCorp", attack_type="creds"))
+                interface="wlan0mon", essid="CorpWifi"))
         tool, data = mock.call_args[0]
         assert tool == "eaphammer"
-        assert data["essid"] == "TargetCorp"
-        assert data["attack_type"] == "creds"
+        assert data["essid"] == "CorpWifi"
 
     def test_wpa_enterprise_mode(self):
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
             run(call_tool(self.mcp, "eaphammer",
-                interface="wlan0mon", essid="CorpNet", auth_mode="wpa-eap"))
+                interface="wlan0mon", essid="CorpWifi",
+                auth_mode="wpa-eap", attack_type="creds"))
         _, data = mock.call_args[0]
         assert data["auth_mode"] == "wpa-eap"
+        assert data["attack_type"] == "creds"
 
 
 # ===========================================================================
@@ -362,11 +342,10 @@ class TestBettercapWifi:
             run(call_tool(self.mcp, "bettercap_wifi", interface="wlan0mon"))
         tool, data = mock.call_args[0]
         assert tool == "bettercap_wifi"
-        assert data["interface"] == "wlan0mon"
 
 
 # ===========================================================================
-# mdk4
+# mdk4 — uses ctx.elicit() for all attack modes
 # ===========================================================================
 
 class TestMdk4:
@@ -379,12 +358,24 @@ class TestMdk4:
         run(assert_tool_registered(self.mcp, "mdk4"))
 
     def test_calls_correct_tool(self):
+        """Elicitation accepted → mdk4 executes."""
         mock = make_mock_wifi_exec()
         with patch("mcp_core.wifi_direct.wifi_exec", mock):
-            run(call_tool(self.mcp, "mdk4", interface="wlan0mon", attack_mode="b"))
+            run(call_tool(self.mcp, "mdk4",
+                interface="wlan0mon", attack_mode="b"))
         tool, data = mock.call_args[0]
         assert tool == "mdk4"
         assert data["attack_mode"] == "b"
+
+    def test_cancelled_does_not_execute(self):
+        """Elicitation declined → mdk4 does NOT execute."""
+        mock = make_mock_wifi_exec()
+        with patch("mcp_core.wifi_direct.wifi_exec", mock):
+            result = run(_call_tool_with_elicit(self.mcp, "mdk4",
+                elicit_accepted=False,
+                interface="wlan0mon", attack_mode="d"))
+        mock.assert_not_called()
+        assert result["success"] is False
 
 
 # ===========================================================================

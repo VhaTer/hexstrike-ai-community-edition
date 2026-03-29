@@ -263,4 +263,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         return result
 
     logger.info(f"🚀 Phase 3: {len(DIRECT_TOOLS)} tools registered — no Flask")
+    
+    # ========================================================================
+    # MCP APP TOOLS — Prefab UI interfaces
+    # ========================================================================
+    try:
+        from mcp_core.mcp_app_direct import register_mcp_app_tools
+        register_mcp_app_tools(mcp, logger)
+    except ImportError as e:
+        logger.warning(f"⚠️ MCP App tools not available: {e}")
+    
     return mcp
