@@ -106,7 +106,8 @@ def _theharvester(data: dict) -> dict:
     domain = data["domain"].strip()
     additional_args = data.get("additional_args", "")
 
-    command = f"theharvester -d {domain} {additional_args}"
+    # theHarvester — capital H, sync with upstream fix
+    command = f"theHarvester -d {domain} {additional_args}"
     return execute_command(command, use_cache=True)
 
 

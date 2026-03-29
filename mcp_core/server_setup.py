@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
@@ -20,6 +21,13 @@ try:
     from fastmcp.server.transforms.search import BM25SearchTransform
 except ImportError:
     BM25SearchTransform = None
+
+# ---------------------------------------------------------------------------
+# In-memory scan result cache — populated by run_security_tool
+# ---------------------------------------------------------------------------
+_scan_cache: Dict[str, Dict] = {}
+_server_start_time = time.time()
+
 
 def _register_skills(mcp: FastMCP, logger) -> None:
     """Mount the local skills/ directory as MCP resources if it exists."""
@@ -111,6 +119,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.security_direct import security_exec
     from mcp_core.misc_direct import misc_exec
     from mcp_core.osint_direct import osint_exec
+    from mcp_core.active_directory_direct import ad_exec
 
     DIRECT_TOOLS = {
         # wifi
@@ -213,11 +222,25 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "nuclei":       (misc_exec, "nuclei"),
         "responder":    (misc_exec, "responder"),
         # osint
-        "sherlock":     (osint_exec, "sherlock"),
-        "spiderfoot":   (osint_exec, "spiderfoot"),
-        "sublist3r":    (osint_exec, "sublist3r"),
-        "parsero":      (osint_exec, "parsero"),
+        "sherlock":            (osint_exec, "sherlock"),
+        "spiderfoot":          (osint_exec, "spiderfoot"),
+        "sublist3r":           (osint_exec, "sublist3r"),
+        "parsero":             (osint_exec, "parsero"),
+        # active_directory
+        "impacket":            (ad_exec, "impacket"),
+        "ldapdomaindump":      (ad_exec, "ldapdomaindump"),
+        "adidnsdump":          (ad_exec, "adidnsdump"),
+        "certipy":             (ad_exec, "certipy_ad"),
+        "certipy_ad":          (ad_exec, "certipy_ad"),
+        "mitm6":               (ad_exec, "mitm6"),
+        "pywerview":           (ad_exec, "pywerview"),
+        "bloodhound":          (ad_exec, "bloodhound"),
+        "bloodhound_python":   (ad_exec, "bloodhound"),
     }
+
+    # ========================================================================
+    # Main tool — run any security tool by name
+    # ========================================================================
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
     async def run_security_tool(
@@ -257,20 +280,99 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
+            # Cache result for Resource access — key: "tool:target"
+            target = params.get("target") or params.get("domain") or params.get("interface", "")
+            if target:
+                cache_key = f"{tool_name}:{target}"
+                _scan_cache[cache_key] = {
+                    "tool":      tool_name,
+                    "target":    target,
+                    "result":    result,
+                    "timestamp": time.time(),
+                }
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
         return result
 
     logger.info(f"🚀 Phase 3: {len(DIRECT_TOOLS)} tools registered — no Flask")
-    
+
     # ========================================================================
-    # MCP APP TOOLS — Prefab UI interfaces
+    # Resources MCP — health + scan results
     # ========================================================================
-    try:
-        from mcp_core.mcp_app_direct import register_mcp_app_tools
-        register_mcp_app_tools(mcp, logger)
-    except ImportError as e:
-        logger.warning(f"⚠️ MCP App tools not available: {e}")
-    
+
+    @mcp.resource("health://server")
+    async def server_health() -> str:
+        """Server health and runtime statistics."""
+        uptime = int(time.time() - _server_start_time)
+        return json.dumps({
+            "status":         "healthy",
+            "server":         "hexstrike-ai-mcp",
+            "fastmcp":        "3.1.1",
+            "uptime_seconds": uptime,
+            "tools_count":    len(DIRECT_TOOLS),
+            "cached_scans":   len(_scan_cache),
+        }, indent=2)
+
+    @mcp.resource("scan://{target}/latest")
+    async def scan_latest(target: str) -> str:
+        """Most recent scan result for a given target across all tools."""
+        matches = [
+            v for k, v in _scan_cache.items()
+            if v.get("target") == target
+        ]
+        if not matches:
+            return json.dumps({
+                "target": target,
+                "status": "no_results",
+                "message": f"No scan results cached for {target}",
+            }, indent=2)
+
+        # Return most recent
+        latest = max(matches, key=lambda x: x["timestamp"])
+        return json.dumps({
+            "target":    target,
+            "tool":      latest["tool"],
+            "timestamp": latest["timestamp"],
+            "result":    latest["result"],
+        }, indent=2)
+
+    @mcp.resource("scan://{target}/{tool_name}")
+    async def scan_result(target: str, tool_name: str) -> str:
+        """Cached result for a specific tool + target combination."""
+        cache_key = f"{tool_name}:{target}"
+        entry = _scan_cache.get(cache_key)
+        if not entry:
+            return json.dumps({
+                "target":    target,
+                "tool":      tool_name,
+                "status":    "no_results",
+                "message":   f"No cached result for {tool_name} on {target}",
+            }, indent=2)
+
+        return json.dumps({
+            "target":    target,
+            "tool":      tool_name,
+            "timestamp": entry["timestamp"],
+            "result":    entry["result"],
+        }, indent=2)
+
+    @mcp.resource("scan://cache/list")
+    async def scan_cache_list() -> str:
+        """List all cached scan results with timestamps."""
+        entries = [
+            {
+                "key":       k,
+                "tool":      v["tool"],
+                "target":    v["target"],
+                "timestamp": v["timestamp"],
+                "success":   v["result"].get("success", False),
+            }
+            for k, v in _scan_cache.items()
+        ]
+        entries.sort(key=lambda x: x["timestamp"], reverse=True)
+        return json.dumps({"count": len(entries), "scans": entries}, indent=2)
+
+    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}")
+
     return mcp
