@@ -280,7 +280,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
-            # Cache result for Resource access — key: "tool:target"
+            # Cache result for Resource access
             target = params.get("target") or params.get("domain") or params.get("interface", "")
             if target:
                 cache_key = f"{tool_name}:{target}"
@@ -328,7 +328,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 "message": f"No scan results cached for {target}",
             }, indent=2)
 
-        # Return most recent
         latest = max(matches, key=lambda x: x["timestamp"])
         return json.dumps({
             "target":    target,
@@ -374,5 +373,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)
 
     logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}")
+
+    # ========================================================================
+    # Workflow Prompts — native MCP prompts for multi-tool attack chains
+    # ========================================================================
+
+    from mcp_core.prompts import register_prompts
+    register_prompts(mcp)
+    logger.info("🎯 Workflow prompts registered: bug_bounty_recon, wifi_attack_chain, ctf_web_challenge, smb_lateral_movement, cloud_security_audit")
 
     return mcp
