@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-04-03 (session 5)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** `f295c75` — feat(phase3): Resources MCP + theHarvester fix + elicitation
+**HEAD:** `ce82936` — docs(kb): update session 5 (après pull 75d031a feat(prompts))
 **FastMCP:** 3.1.1
 
 ---
@@ -17,7 +17,7 @@
 | **Our fork** | VhaTer — FastMCP 3.x refactor |
 | **Venv** | `hexstrike-env/bin/python3` |
 | **FastMCP** | 3.1.1 |
-| **Tests** | 90/90 ✅ (37 wifi + 22 osint + 34 AD — elicitation + resources dans server_setup) |
+| **Tests** | 129/129 ✅ (37 wifi + 22 osint + 34 AD + 36 prompts) |
 
 ---
 
@@ -60,6 +60,7 @@ mcp_core/
 - Resources MCP — 4 resources : `health://server`, `scan://{target}/latest`, `scan://{target}/{tool_name}`, `scan://cache/list`
 - Cache in-memory `_scan_cache` dans `server_setup.py` — alimenté par `run_security_tool`
 - `theHarvester` fix — clé `"theharvester"` dans `DIRECT_TOOLS` ✅
+- `@mcp.prompt()` — 5 workflow prompts natifs dans `mcp_core/prompts.py`
 
 ---
 
@@ -86,15 +87,7 @@ hexstrike_mcp.py → HexStrikeClient → DIRECT_ROUTES → *_direct.py
 
 ## 🔄 Phase 3 — TODO restant
 
-### 1. Migrer les agents en `@mcp.prompt()`
-
-12 agents dans `server_core/intelligence/` et `server_core/workflows/` :
-`IntelligentDecisionEngine`, `BugBountyWorkflowManager`, `CTFWorkflowManager`,
-`CVEIntelligenceManager`, `AIExploitGenerator`, `VulnerabilityCorrelator`,
-`TechnologyDetector`, `RateLimitDetector`, `FailureRecoverySystem`,
-`PerformanceMonitor`, `ParameterOptimizer`, `GracefulDegradation`
-
-### 2. Encore sur Flask legacy — skip Phase 3
+### 1. Encore sur Flask legacy — skip Phase 3
 
 ```
 ops/ (8), web_framework/ (2), ai_assist/, bugbounty_workflow/,
@@ -115,7 +108,7 @@ error_handling/, ai_payload/, web_scan/burpsuite
 | Phase 3 standalone server | ✅ ACTIF | mcp.run(transport="http") |
 | `ctx.elicit()` | ✅ ACTIF | `mcp_core/elicitation.py` — 5 outils destructifs |
 | Resources MCP | ✅ ACTIF | 4 resources dans server_setup.py |
-| `@mcp.prompt()` | 🔄 TODO | Workflows agents |
+| `@mcp.prompt()` | ✅ ACTIF | 5 prompts dans `mcp_core/prompts.py` |
 | LLM Sampling | ❌ Not yet | Claude Desktop pas encore |
 
 ---
@@ -391,8 +384,7 @@ Cache alimenté automatiquement par `run_security_tool()` à chaque succès.
 
 ## 🎯 Next Session Priorities
 
-1. **`@mcp.prompt()`** — porter `BugBountyWorkflowManager` + `CTFWorkflowManager` en prompts natifs
-2. **`ctx.read_resource()`** — implémenter dans les tools (lire résultats de scans précédents)
-3. **Rebase upstream/beta/rootkitfox** — vérifier nouveaux tools CommonHuman-Lab
-4. **PR** vers CommonHuman-Lab
-5. **Cleanup** — retirer `HexStrikeColors` ANSI (casse JSON parsing)
+1. **`ctx.read_resource()`** — implémenter dans les tools (lire résultats de scans précédents)
+2. **Rebase upstream/beta/rootkitfox** — vérifier nouveaux tools CommonHuman-Lab
+3. **PR** vers CommonHuman-Lab
+4. **Cleanup** — retirer `HexStrikeColors` ANSI (casse JSON parsing)
