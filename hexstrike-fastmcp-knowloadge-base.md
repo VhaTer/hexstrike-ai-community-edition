@@ -1,8 +1,8 @@
 # HexStrike CE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-03-28 (session 4)
+**Last updated:** 2026-04-03 (session 5)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** voir `git log --oneline -1`
+**HEAD:** `f295c75` — feat(phase3): Resources MCP + theHarvester fix + elicitation
 **FastMCP:** 3.1.1
 
 ---
@@ -17,7 +17,7 @@
 | **Our fork** | VhaTer — FastMCP 3.x refactor |
 | **Venv** | `hexstrike-env/bin/python3` |
 | **FastMCP** | 3.1.1 |
-| **Tests** | 93/93 ✅ (37 wifi + 22 osint + 34 active_directory) |
+| **Tests** | 90/90 ✅ (37 wifi + 22 osint + 34 AD — elicitation + resources dans server_setup) |
 
 ---
 
@@ -51,11 +51,15 @@ mcp_core/
 
 **101 tools dans DIRECT_ROUTES** (gateway.py) + **DIRECT_TOOLS** (server_setup.py).
 
-### Phase 3 — Standalone Server (ACTIF ✅)
+### Phase 3 — Standalone Server + Elicitation + Resources (ACTIF ✅)
 
 - `hexstrike_server.py` → `mcp.run(transport="http", port=8888)` — zéro Flask
 - `setup_mcp_server_standalone()` dans `server_setup.py`
 - FastMCP 3.1.1, HTTP/SSE transport natif
+- `ctx.elicit()` — `mcp_core/elicitation.py` → `confirm_destructive_action()` sur 5 outils
+- Resources MCP — 4 resources : `health://server`, `scan://{target}/latest`, `scan://{target}/{tool_name}`, `scan://cache/list`
+- Cache in-memory `_scan_cache` dans `server_setup.py` — alimenté par `run_security_tool`
+- `theHarvester` fix — clé `"theharvester"` dans `DIRECT_TOOLS` ✅
 
 ---
 
@@ -82,21 +86,7 @@ hexstrike_mcp.py → HexStrikeClient → DIRECT_ROUTES → *_direct.py
 
 ## 🔄 Phase 3 — TODO restant
 
-### 1. User Elicitation — actions destructives (priorité haute)
-
-```python
-result = await ctx.elicit(
-    "Confirm deauth attack on AA:BB:CC:DD:EE:FF?",
-    response_type=bool
-)
-if result.action == "accept" and result.data:
-    # run aireplay_ng
-```
-
-**Cibles :** `aireplay_ng`, `responder`, `metasploit`, `mdk4`, `mitm6`
-**Note :** Supporté Claude Desktop ✅
-
-### 2. Migrer les agents en `@mcp.prompt()`
+### 1. Migrer les agents en `@mcp.prompt()`
 
 12 agents dans `server_core/intelligence/` et `server_core/workflows/` :
 `IntelligentDecisionEngine`, `BugBountyWorkflowManager`, `CTFWorkflowManager`,
@@ -104,23 +94,7 @@ if result.action == "accept" and result.data:
 `TechnologyDetector`, `RateLimitDetector`, `FailureRecoverySystem`,
 `PerformanceMonitor`, `ParameterOptimizer`, `GracefulDegradation`
 
-### 3. Resources MCP
-
-```python
-@mcp.resource("scan://{target}/results")
-async def scan_result(target: str) -> str:
-    return get_cached_scan(target)
-
-@mcp.resource("health://server")
-async def server_health() -> str:
-    return get_health_json()
-```
-
-### 4. theHarvester fix
-
-`recon_direct.py` — synchroniser la majuscule upstream : `theharvester` → `theHarvester`
-
-### 5. Encore sur Flask legacy — skip Phase 3
+### 2. Encore sur Flask legacy — skip Phase 3
 
 ```
 ops/ (8), web_framework/ (2), ai_assist/, bugbounty_workflow/,
@@ -139,9 +113,9 @@ error_handling/, ai_payload/, web_scan/burpsuite
 | `SkillsDirectoryProvider` | ✅ server_setup.py | Skills as resources |
 | `run_in_executor` | ✅ All tools | Non-blocking I/O |
 | Phase 3 standalone server | ✅ ACTIF | mcp.run(transport="http") |
+| `ctx.elicit()` | ✅ ACTIF | `mcp_core/elicitation.py` — 5 outils destructifs |
+| Resources MCP | ✅ ACTIF | 4 resources dans server_setup.py |
 | `@mcp.prompt()` | 🔄 TODO | Workflows agents |
-| Resources MCP | 🔄 TODO | Scan results, health |
-| User Elicitation | 🔄 TODO | Actions destructives |
 | LLM Sampling | ❌ Not yet | Claude Desktop pas encore |
 
 ---
@@ -302,7 +276,7 @@ git push origin backup/phase2-complete-validated --force-with-lease
 | `test_endpoints_exist.py` | Obsolète Phase 3 — exclu via `pytest.ini` |
 | 3 tools FastMCP internes | `trace`, `fail`, `sleep` — injectés FastMCP 3.1.1, inoffensifs |
 | Stash double rebase | `git stash pop` x2 — conflit `.gitignore` normal, résoudre `--ours` |
-| `theHarvester` casse | À sync dans `recon_direct.py` — `theharvester` → `theHarvester` |
+| `theHarvester` casse | ✅ Fixé — clé `"theharvester"` dans `DIRECT_TOOLS` |
 
 ---
 
@@ -381,10 +355,44 @@ print('✅ All direct modules OK')
 
 ---
 
+## 🔬 Elicitation — Détails implémentation
+
+### `mcp_core/elicitation.py`
+
+```python
+from mcp_core.elicitation import confirm_destructive_action
+
+confirmed = await confirm_destructive_action(
+    ctx,
+    action="Deauth attack on AA:BB:CC",
+    detail="interface: wlan0mon",
+    warning="Will disconnect all clients"
+)
+if not confirmed:
+    return {"success": False, "error": "Cancelled by user"}
+```
+
+**Outils protégés :** `aireplay_ng`, `responder`, `metasploit`, `mdk4`, `mitm6`
+**Fallback :** `NotImplementedError` → action bloquée + message explicite (Cursor, VS Code)
+**Supporté :** Claude Desktop ✅, Antigravity IDE ✅
+
+### Resources MCP — Détails
+
+| Resource | URI | Description |
+|---|---|---|
+| `server_health` | `health://server` | Uptime, tool count, cache stats |
+| `scan_latest` | `scan://{target}/latest` | Dernier scan pour un target |
+| `scan_result` | `scan://{target}/{tool_name}` | Résultat spécifique tool+target |
+| `scan_cache_list` | `scan://cache/list` | Liste de tous les scans cachés |
+
+Cache alimenté automatiquement par `run_security_tool()` à chaque succès.
+
+---
+
 ## 🎯 Next Session Priorities
 
-1. **User Elicitation** — `aireplay_ng`, `metasploit`, `responder`, `mdk4`, `mitm6`
-2. **`theHarvester` fix** — `recon_direct.py` sync majuscule upstream
-3. **Resources MCP** — `health://server` + `scan://{target}/results`
-4. **`@mcp.prompt()`** — porter `BugBountyWorkflowManager` en prompt natif
-5. **PR** vers CommonHuman-Lab
+1. **`@mcp.prompt()`** — porter `BugBountyWorkflowManager` + `CTFWorkflowManager` en prompts natifs
+2. **`ctx.read_resource()`** — implémenter dans les tools (lire résultats de scans précédents)
+3. **Rebase upstream/beta/rootkitfox** — vérifier nouveaux tools CommonHuman-Lab
+4. **PR** vers CommonHuman-Lab
+5. **Cleanup** — retirer `HexStrikeColors` ANSI (casse JSON parsing)
