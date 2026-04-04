@@ -28,6 +28,44 @@ except ImportError:
 _scan_cache: Dict[str, Dict] = {}
 _server_start_time = time.time()
 
+# ---------------------------------------------------------------------------
+# Tool → Skill mapping for ctx.read_resource()
+# ---------------------------------------------------------------------------
+_TOOL_SKILL_MAP = {
+    # nmap-recon
+    "nmap": "nmap-recon", "nmap_advanced": "nmap-recon",
+    "masscan": "nmap-recon", "rustscan": "nmap-recon", "arp_scan": "nmap-recon",
+    # subdomain-enum
+    "subfinder": "subdomain-enum", "amass": "subdomain-enum",
+    "dnsenum": "subdomain-enum", "fierce": "subdomain-enum",
+    "theharvester": "subdomain-enum",
+    # web-recon
+    "wafw00f": "web-recon", "httpx": "web-recon", "katana": "web-recon",
+    "gobuster": "web-recon", "ffuf": "web-recon", "feroxbuster": "web-recon",
+    "dirsearch": "web-recon", "wpscan": "web-recon",
+    # web-vuln
+    "nuclei": "web-vuln", "nikto": "web-vuln", "sqlmap": "web-vuln",
+    "dalfox": "web-vuln", "xsser": "web-vuln", "dotdotpwn": "web-vuln",
+    "jaeles": "web-vuln",
+    # password-cracking
+    "hashid": "password-cracking", "john": "password-cracking",
+    "hashcat": "password-cracking", "hydra": "password-cracking",
+    "medusa": "password-cracking", "ophcrack": "password-cracking",
+    # smb-enum
+    "nbtscan": "smb-enum", "smbmap": "smb-enum", "enum4linux": "smb-enum",
+    "netexec": "smb-enum", "rpcclient": "smb-enum",
+    # exploitation
+    "metasploit": "exploitation", "msfvenom": "exploitation",
+    "exploit_db": "exploitation", "searchsploit": "exploitation",
+    # binary-analysis
+    "checksec": "binary-analysis", "strings": "binary-analysis",
+    "binwalk": "binary-analysis", "radare2": "binary-analysis",
+    "ropgadget": "binary-analysis", "gdb": "binary-analysis",
+    # cloud-audit
+    "prowler": "cloud-audit", "trivy": "cloud-audit",
+    "kube_hunter": "cloud-audit", "kube_bench": "cloud-audit",
+}
+
 
 def _register_skills(mcp: FastMCP, logger) -> None:
     """Mount the local skills/ directory as MCP resources if it exists."""
@@ -123,124 +161,120 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     DIRECT_TOOLS = {
         # wifi
-        "airmon_ng":    (wifi_exec, "airmon_ng"),
-        "airodump_ng":  (wifi_exec, "airodump_ng"),
-        "aireplay_ng":  (wifi_exec, "aireplay_ng"),
-        "aircrack_ng":  (wifi_exec, "aircrack_ng"),
-        "hcxdumptool":  (wifi_exec, "hcxdumptool"),
-        "wifite":       (wifi_exec, "wifite2"),
-        "wifite2":      (wifi_exec, "wifite2"),
+        "airmon_ng":         (wifi_exec, "airmon_ng"),
+        "airodump_ng":       (wifi_exec, "airodump_ng"),
+        "aireplay_ng":       (wifi_exec, "aireplay_ng"),
+        "aircrack_ng":       (wifi_exec, "aircrack_ng"),
+        "hcxdumptool":       (wifi_exec, "hcxdumptool"),
+        "wifite":            (wifi_exec, "wifite2"),
+        "wifite2":           (wifi_exec, "wifite2"),
         # recon
-        "amass":        (recon_exec, "amass"),
-        "subfinder":    (recon_exec, "subfinder"),
-        "autorecon":    (recon_exec, "autorecon"),
-        "theharvester": (recon_exec, "theharvester"),
-        "dnsenum":      (recon_exec, "dnsenum"),
-        "fierce":       (recon_exec, "fierce"),
-        "whois":        (recon_exec, "whois"),
+        "amass":             (recon_exec, "amass"),
+        "subfinder":         (recon_exec, "subfinder"),
+        "autorecon":         (recon_exec, "autorecon"),
+        "theharvester":      (recon_exec, "theharvester"),
+        "dnsenum":           (recon_exec, "dnsenum"),
+        "fierce":            (recon_exec, "fierce"),
+        "whois":             (recon_exec, "whois"),
         # net_scan
-        "nmap":         (net_scan_exec, "nmap"),
-        "nmap_advanced":(net_scan_exec, "nmap-advanced"),
-        "masscan":      (net_scan_exec, "masscan"),
-        "rustscan":     (net_scan_exec, "rustscan"),
-        "arp_scan":     (net_scan_exec, "arp-scan"),
+        "nmap":              (net_scan_exec, "nmap"),
+        "nmap_advanced":     (net_scan_exec, "nmap-advanced"),
+        "masscan":           (net_scan_exec, "masscan"),
+        "rustscan":          (net_scan_exec, "rustscan"),
+        "arp_scan":          (net_scan_exec, "arp-scan"),
         # web_scan
-        "nikto":        (web_scan_exec, "nikto"),
-        "sqlmap":       (web_scan_exec, "sqlmap"),
-        "wpscan":       (web_scan_exec, "wpscan"),
-        "dalfox":       (web_scan_exec, "dalfox"),
-        "jaeles":       (web_scan_exec, "jaeles"),
-        "xsser":        (web_scan_exec, "xsser"),
-        "zap":          (web_scan_exec, "zap"),
+        "nikto":             (web_scan_exec, "nikto"),
+        "sqlmap":            (web_scan_exec, "sqlmap"),
+        "wpscan":            (web_scan_exec, "wpscan"),
+        "dalfox":            (web_scan_exec, "dalfox"),
+        "jaeles":            (web_scan_exec, "jaeles"),
+        "xsser":             (web_scan_exec, "xsser"),
+        "zap":               (web_scan_exec, "zap"),
         # web_fuzz
-        "gobuster":     (web_fuzz_exec, "gobuster"),
-        "ffuf":         (web_fuzz_exec, "ffuf"),
-        "feroxbuster":  (web_fuzz_exec, "feroxbuster"),
-        "dirsearch":    (web_fuzz_exec, "dirsearch"),
-        "dirb":         (web_fuzz_exec, "dirb"),
-        "wfuzz":        (web_fuzz_exec, "wfuzz"),
-        "dotdotpwn":    (web_fuzz_exec, "dotdotpwn"),
+        "gobuster":          (web_fuzz_exec, "gobuster"),
+        "ffuf":              (web_fuzz_exec, "ffuf"),
+        "feroxbuster":       (web_fuzz_exec, "feroxbuster"),
+        "dirsearch":         (web_fuzz_exec, "dirsearch"),
+        "dirb":              (web_fuzz_exec, "dirb"),
+        "wfuzz":             (web_fuzz_exec, "wfuzz"),
+        "dotdotpwn":         (web_fuzz_exec, "dotdotpwn"),
         # password_cracking
-        "hydra":        (pwdcrack_exec, "hydra"),
-        "hashcat":      (pwdcrack_exec, "hashcat"),
-        "john":         (pwdcrack_exec, "john"),
-        "medusa":       (pwdcrack_exec, "medusa"),
-        "patator":      (pwdcrack_exec, "patator"),
-        "hashid":       (pwdcrack_exec, "hashid"),
-        "ophcrack":     (pwdcrack_exec, "ophcrack"),
+        "hydra":             (pwdcrack_exec, "hydra"),
+        "hashcat":           (pwdcrack_exec, "hashcat"),
+        "john":              (pwdcrack_exec, "john"),
+        "medusa":            (pwdcrack_exec, "medusa"),
+        "patator":           (pwdcrack_exec, "patator"),
+        "hashid":            (pwdcrack_exec, "hashid"),
+        "ophcrack":          (pwdcrack_exec, "ophcrack"),
         # smb_enum
-        "enum4linux":   (smb_enum_exec, "enum4linux"),
-        "netexec":      (smb_enum_exec, "netexec"),
-        "rpcclient":    (smb_enum_exec, "rpcclient"),
-        "smbmap":       (smb_enum_exec, "smbmap"),
-        "nbtscan":      (smb_enum_exec, "nbtscan"),
+        "enum4linux":        (smb_enum_exec, "enum4linux"),
+        "netexec":           (smb_enum_exec, "netexec"),
+        "rpcclient":         (smb_enum_exec, "rpcclient"),
+        "smbmap":            (smb_enum_exec, "smbmap"),
+        "nbtscan":           (smb_enum_exec, "nbtscan"),
         # exploit
-        "metasploit":   (exploit_exec, "metasploit"),
-        "msfvenom":     (exploit_exec, "msfvenom"),
-        "searchsploit": (exploit_exec, "exploit_db"),
-        "exploit_db":   (exploit_exec, "exploit_db"),
+        "metasploit":        (exploit_exec, "metasploit"),
+        "msfvenom":          (exploit_exec, "msfvenom"),
+        "searchsploit":      (exploit_exec, "exploit_db"),
+        "exploit_db":        (exploit_exec, "exploit_db"),
         # web_recon
-        "katana":       (web_recon_exec, "katana"),
-        "hakrawler":    (web_recon_exec, "hakrawler"),
-        "gau":          (web_recon_exec, "gau"),
-        "waybackurls":  (web_recon_exec, "waybackurls"),
-        "httpx":        (web_recon_exec, "httpx"),
-        "wafw00f":      (web_recon_exec, "wafw00f"),
-        "arjun":        (web_recon_exec, "arjun"),
-        "paramspider":  (web_recon_exec, "paramspider"),
-        "x8":           (web_recon_exec, "x8"),
+        "katana":            (web_recon_exec, "katana"),
+        "hakrawler":         (web_recon_exec, "hakrawler"),
+        "gau":               (web_recon_exec, "gau"),
+        "waybackurls":       (web_recon_exec, "waybackurls"),
+        "httpx":             (web_recon_exec, "httpx"),
+        "wafw00f":           (web_recon_exec, "wafw00f"),
+        "arjun":             (web_recon_exec, "arjun"),
+        "paramspider":       (web_recon_exec, "paramspider"),
+        "x8":                (web_recon_exec, "x8"),
         # security
-        "prowler":      (security_exec, "prowler"),
-        "trivy":        (security_exec, "trivy"),
-        "kube_hunter":  (security_exec, "kube-hunter"),
-        "kube_bench":   (security_exec, "kube-bench"),
-        "checkov":      (security_exec, "checkov"),
-        "terrascan":    (security_exec, "terrascan"),
+        "prowler":           (security_exec, "prowler"),
+        "trivy":             (security_exec, "trivy"),
+        "kube_hunter":       (security_exec, "kube-hunter"),
+        "kube_bench":        (security_exec, "kube-bench"),
+        "checkov":           (security_exec, "checkov"),
+        "terrascan":         (security_exec, "terrascan"),
         # misc
-        "ropgadget":    (misc_exec, "ropgadget"),
-        "ropper":       (misc_exec, "ropper"),
-        "one_gadget":   (misc_exec, "one_gadget"),
-        "volatility":   (misc_exec, "volatility"),
-        "volatility3":  (misc_exec, "volatility3"),
-        "gdb":          (misc_exec, "gdb"),
-        "radare2":      (misc_exec, "radare2"),
-        "strings":      (misc_exec, "strings"),
-        "objdump":      (misc_exec, "objdump"),
-        "checksec":     (misc_exec, "checksec"),
-        "binwalk":      (misc_exec, "binwalk"),
-        "ghidra":       (misc_exec, "ghidra"),
-        "angr":         (misc_exec, "angr"),
-        "xxd":          (misc_exec, "xxd"),
-        "mysql":        (misc_exec, "mysql"),
-        "sqlite":       (misc_exec, "sqlite"),
-        "exiftool":     (misc_exec, "exiftool"),
-        "foremost":     (misc_exec, "foremost"),
-        "steghide":     (misc_exec, "steghide"),
-        "hashpump":     (misc_exec, "hashpump"),
-        "anew":         (misc_exec, "anew"),
-        "uro":          (misc_exec, "uro"),
-        "nuclei":       (misc_exec, "nuclei"),
-        "responder":    (misc_exec, "responder"),
+        "ropgadget":         (misc_exec, "ropgadget"),
+        "ropper":            (misc_exec, "ropper"),
+        "one_gadget":        (misc_exec, "one_gadget"),
+        "volatility":        (misc_exec, "volatility"),
+        "volatility3":       (misc_exec, "volatility3"),
+        "gdb":               (misc_exec, "gdb"),
+        "radare2":           (misc_exec, "radare2"),
+        "strings":           (misc_exec, "strings"),
+        "objdump":           (misc_exec, "objdump"),
+        "checksec":          (misc_exec, "checksec"),
+        "binwalk":           (misc_exec, "binwalk"),
+        "ghidra":            (misc_exec, "ghidra"),
+        "angr":              (misc_exec, "angr"),
+        "xxd":               (misc_exec, "xxd"),
+        "mysql":             (misc_exec, "mysql"),
+        "sqlite":            (misc_exec, "sqlite"),
+        "exiftool":          (misc_exec, "exiftool"),
+        "foremost":          (misc_exec, "foremost"),
+        "steghide":          (misc_exec, "steghide"),
+        "hashpump":          (misc_exec, "hashpump"),
+        "anew":              (misc_exec, "anew"),
+        "uro":               (misc_exec, "uro"),
+        "nuclei":            (misc_exec, "nuclei"),
+        "responder":         (misc_exec, "responder"),
         # osint
-        "sherlock":            (osint_exec, "sherlock"),
-        "spiderfoot":          (osint_exec, "spiderfoot"),
-        "sublist3r":           (osint_exec, "sublist3r"),
-        "parsero":             (osint_exec, "parsero"),
+        "sherlock":          (osint_exec, "sherlock"),
+        "spiderfoot":        (osint_exec, "spiderfoot"),
+        "sublist3r":         (osint_exec, "sublist3r"),
+        "parsero":           (osint_exec, "parsero"),
         # active_directory
-        "impacket":            (ad_exec, "impacket"),
-        "ldapdomaindump":      (ad_exec, "ldapdomaindump"),
-        "adidnsdump":          (ad_exec, "adidnsdump"),
-        "certipy":             (ad_exec, "certipy_ad"),
-        "certipy_ad":          (ad_exec, "certipy_ad"),
-        "mitm6":               (ad_exec, "mitm6"),
-        "pywerview":           (ad_exec, "pywerview"),
-        "bloodhound":          (ad_exec, "bloodhound"),
-        "bloodhound_python":   (ad_exec, "bloodhound"),
+        "impacket":          (ad_exec, "impacket"),
+        "ldapdomaindump":    (ad_exec, "ldapdomaindump"),
+        "adidnsdump":        (ad_exec, "adidnsdump"),
+        "certipy":           (ad_exec, "certipy_ad"),
+        "certipy_ad":        (ad_exec, "certipy_ad"),
+        "mitm6":             (ad_exec, "mitm6"),
+        "pywerview":         (ad_exec, "pywerview"),
+        "bloodhound":        (ad_exec, "bloodhound"),
+        "bloodhound_python": (ad_exec, "bloodhound"),
     }
-
-    # ========================================================================
-    # Main tool — run any security tool by name
-    # ========================================================================
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
     async def run_security_tool(
@@ -259,6 +293,22 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             Tool execution results
         """
         await ctx.info(f"🔍 Executing {tool_name}")
+
+        # ctx.read_resource() — load skill context before execution
+        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+        if skill_name:
+            try:
+                skill_resource = await ctx.read_resource(f"skill://{skill_name}/SKILL.md")
+                # Extract text content from ResourceResult
+                contents = getattr(skill_resource, "contents", None) or getattr(skill_resource, "content", None)
+                if contents:
+                    first = contents[0] if isinstance(contents, list) else contents
+                    text = getattr(first, "text", None) or str(first)
+                    # Show first 3 lines as context hint — not the whole file
+                    hint = "\n".join(text.splitlines()[:3])
+                    await ctx.info(f"📖 Skill context [{skill_name}]: {hint}")
+            except Exception:
+                pass  # Graceful fallback — skill read is optional
 
         try:
             params = json.loads(parameters) if isinstance(parameters, str) else parameters
@@ -280,15 +330,12 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
-            # Cache result for Resource access
             target = params.get("target") or params.get("domain") or params.get("interface", "")
             if target:
                 cache_key = f"{tool_name}:{target}"
                 _scan_cache[cache_key] = {
-                    "tool":      tool_name,
-                    "target":    target,
-                    "result":    result,
-                    "timestamp": time.time(),
+                    "tool": tool_name, "target": target,
+                    "result": result, "timestamp": time.time(),
                 }
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
@@ -323,8 +370,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         ]
         if not matches:
             return json.dumps({
-                "target": target,
-                "status": "no_results",
+                "target":  target,
+                "status":  "no_results",
                 "message": f"No scan results cached for {target}",
             }, indent=2)
 
@@ -343,10 +390,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         entry = _scan_cache.get(cache_key)
         if not entry:
             return json.dumps({
-                "target":    target,
-                "tool":      tool_name,
-                "status":    "no_results",
-                "message":   f"No cached result for {tool_name} on {target}",
+                "target":  target,
+                "tool":    tool_name,
+                "status":  "no_results",
+                "message": f"No cached result for {tool_name} on {target}",
             }, indent=2)
 
         return json.dumps({
