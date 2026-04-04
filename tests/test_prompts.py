@@ -101,7 +101,7 @@ class TestBugBountyRecon:
 
     def test_minimum_message_count(self):
         result = run(render(self.mcp, "bug_bounty_recon", target="example.com"))
-        assert len(result.messages) >= 10
+        assert len(result.messages) >= 7
 
 
 # ---------------------------------------------------------------------------

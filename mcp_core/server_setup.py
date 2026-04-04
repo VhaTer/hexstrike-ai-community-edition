@@ -299,14 +299,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         if skill_name:
             try:
                 skill_resource = await ctx.read_resource(f"skill://{skill_name}/SKILL.md")
-                # Extract text content from ResourceResult
-                contents = getattr(skill_resource, "contents", None) or getattr(skill_resource, "content", None)
+                # ResourceResult.contents is a list[ResourceContent], each has .content (str|bytes)
+                contents = getattr(skill_resource, "contents", None)
                 if contents:
                     first = contents[0] if isinstance(contents, list) else contents
-                    text = getattr(first, "text", None) or str(first)
-                    # Show first 3 lines as context hint — not the whole file
-                    hint = "\n".join(text.splitlines()[:3])
-                    await ctx.info(f"📖 Skill context [{skill_name}]: {hint}")
+                    raw = getattr(first, "content", None)
+                    if raw is not None:
+                        text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
+                        # Show first 3 lines as context hint — not the whole file
+                        hint = "\n".join(text.splitlines()[:3])
+                        await ctx.info(f"📖 Skill context [{skill_name}]: {hint}")
             except Exception:
                 pass  # Graceful fallback — skill read is optional
 
