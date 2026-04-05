@@ -42,7 +42,7 @@ _TOOL_SKILL_MAP = {
     # web-recon
     "wafw00f": "web-recon", "httpx": "web-recon", "katana": "web-recon",
     "gobuster": "web-recon", "ffuf": "web-recon", "feroxbuster": "web-recon",
-    "dirsearch": "web-recon", "wpscan": "web-recon",
+    "dirsearch": "web-recon", "wpscan": "web-recon", "testssl": "web-recon",
     # web-vuln
     "nuclei": "web-vuln", "nikto": "web-vuln", "sqlmap": "web-vuln",
     "dalfox": "web-vuln", "xsser": "web-vuln", "dotdotpwn": "web-vuln",
@@ -158,6 +158,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.misc_direct import misc_exec
     from mcp_core.osint_direct import osint_exec
     from mcp_core.active_directory_direct import ad_exec
+    from mcp_core.testssl_direct import testssl_exec
 
     DIRECT_TOOLS = {
         # wifi
@@ -264,6 +265,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "spiderfoot":        (osint_exec, "spiderfoot"),
         "sublist3r":         (osint_exec, "sublist3r"),
         "parsero":           (osint_exec, "parsero"),
+        # web_probe
+        "testssl":           (testssl_exec, "testssl"),
         # active_directory
         "impacket":          (ad_exec, "impacket"),
         "ldapdomaindump":    (ad_exec, "ldapdomaindump"),
