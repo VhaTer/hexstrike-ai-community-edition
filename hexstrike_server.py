@@ -3,14 +3,14 @@
 HexStrike AI - FastMCP 3.x Standalone Server (Phase 3)
 
 🚀 Direct tool execution, no Flask, native HTTP/SSE transport
-📊 Dashboard served from server_static/ via Starlette StaticFiles mount
+📊 Dashboard served from server_static/ via Starlette StaticFiles
 """
 
 import os
 import logging
 from pathlib import Path
 
-from starlette.routing import Mount
+from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from mcp_core.server_setup import setup_mcp_server_standalone
@@ -36,34 +36,44 @@ if __name__ == "__main__":
     mcp = setup_mcp_server_standalone(logger)
 
     # -------------------------------------------------------------------------
-    # Dashboard — serve server_static/ as static files
+    # Dashboard — serve server_static/ assets + SPA index
+    # index.html uses absolute paths (/assets/...) so we mount assets on /assets
+    # and serve index.html on /dashboard
     # -------------------------------------------------------------------------
     static_dir = Path(__file__).parent / "server_static"
     if static_dir.exists():
-        @mcp.custom_route("/dashboard/{path:path}", methods=["GET"])
-        async def dashboard_files(request):
-            """Serve dashboard static files."""
-            from starlette.responses import FileResponse, Response
-            path = request.path_params.get("path", "")
-            file_path = static_dir / path
-            if file_path.is_file():
-                return FileResponse(file_path)
-            # Fallback to index.html for SPA routing
-            index = static_dir / "index.html"
-            if index.exists():
-                return FileResponse(index)
-            return Response("Not found", status_code=404)
+        assets_dir = static_dir / "assets"
 
+        # Mount /assets — Starlette StaticFiles handles MIME types correctly
+        if assets_dir.exists():
+            mcp._additional_http_routes.append(
+                __import__("starlette.routing", fromlist=["Mount"]).Mount(
+                    "/assets",
+                    app=StaticFiles(directory=str(assets_dir)),
+                    name="assets",
+                )
+            )
+
+        # Serve /dashboard — SPA entry point
         @mcp.custom_route("/dashboard", methods=["GET"])
         async def dashboard_index(request):
-            """Serve dashboard index."""
-            from starlette.responses import FileResponse, Response
+            """Serve dashboard SPA index."""
             index = static_dir / "index.html"
             if index.exists():
-                return FileResponse(index)
+                return FileResponse(str(index), media_type="text/html")
+            return Response("Dashboard not found", status_code=404)
+
+        # Serve static root files (favicon, icons)
+        @mcp.custom_route("/{filename:str}", methods=["GET"])
+        async def root_static(request):
+            """Serve root static files (favicon, icons)."""
+            filename = request.path_params.get("filename", "")
+            file_path = static_dir / filename
+            if file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt"):
+                return FileResponse(str(file_path))
             return Response("Not found", status_code=404)
 
-        logger.info(f"📊 Dashboard available at http://{API_HOST}:{API_PORT}/dashboard")
+        logger.info(f"📊 Dashboard at http://{API_HOST}:{API_PORT}/dashboard")
     else:
         logger.warning("⚠️ server_static/ not found — dashboard not available")
 
