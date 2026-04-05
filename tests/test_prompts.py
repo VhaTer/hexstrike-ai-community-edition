@@ -264,6 +264,13 @@ class TestCloudSecurityAudit:
         result = run(render(self.mcp, "cloud_security_audit"))
         assert "trivy" in messages_text(result)
 
-    def test_contains_kube_hunter(self):
-        result = run(render(self.mcp, "cloud_security_audit"))
+    def test_contains_kube_hunter_with_ip(self):
+        """kube_hunter only runs when k8s_api_ip is provided."""
+        result = run(render(self.mcp, "cloud_security_audit",
+            k8s_api_ip="10.10.10.1"))
         assert "kube_hunter" in messages_text(result)
+
+    def test_kube_hunter_skipped_without_ip(self):
+        """Without k8s_api_ip, kube_hunter step shows skip message."""
+        result = run(render(self.mcp, "cloud_security_audit"))
+        assert "k8s_api_ip" in messages_text(result)

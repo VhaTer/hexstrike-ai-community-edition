@@ -27,6 +27,13 @@ def register_prompts(mcp: FastMCP) -> None:
         Full bug bounty reconnaissance workflow.
         Skills: subdomain-enum + nmap-recon + web-recon + web-vuln
 
+        Ordering rationale:
+          1. WAF detection FIRST — prevents gobuster/nuclei from being blocked
+          2. Subdomain enum — passive, no noise
+          3. Port scan — after knowing live hosts
+          4. Directory discovery — after WAF is known
+          5. Vuln scan — last, noisiest
+
         Args:
             target: Root domain to recon (e.g. 'example.com')
         """
@@ -36,31 +43,31 @@ def register_prompts(mcp: FastMCP) -> None:
                 "Execute each step in order using run_security_tool()."
             ),
             Message(
-                f"STEP 1 — Subdomain enumeration:\n"
+                f"STEP 1 — WAF detection and tech stack fingerprint (run first to avoid blocks):\n"
+                f'run_security_tool(tool_name="wafw00f", parameters=\'{{"url": "https://{target}"}}\')\n'
+                f'run_security_tool(tool_name="httpx", parameters=\'{{"target": "{target}", "probe": true, "tech_detect": true, "title": true, "status_code": true}}\')',
+                role="assistant",
+            ),
+            Message(
+                f"STEP 2 — Subdomain enumeration (passive, no noise):\n"
                 f'run_security_tool(tool_name="subfinder", parameters=\'{{"domain": "{target}", "silent": true}}\')\n'
                 f'run_security_tool(tool_name="amass", parameters=\'{{"domain": "{target}", "mode": "enum"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 2 — Probe live hosts and fingerprint tech stack:\n"
-                f'run_security_tool(tool_name="httpx", parameters=\'{{"target": "{target}", "probe": true, "tech_detect": true, "title": true, "status_code": true}}\')',
-                role="assistant",
-            ),
-            Message(
-                f"STEP 3 — Fast port discovery then service detection:\n"
+                f"STEP 3 — Port discovery and service detection:\n"
                 f'run_security_tool(tool_name="rustscan", parameters=\'{{"target": "{target}", "ports": "1-65535"}}\')\n'
                 f'run_security_tool(tool_name="nmap", parameters=\'{{"target": "{target}", "additional_args": "-sV -sC -T4"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 4 — Web content and directory discovery:\n"
-                f'run_security_tool(tool_name="wafw00f", parameters=\'{{"url": "https://{target}"}}\')\n'
+                f"STEP 4 — Web content discovery (post-WAF fingerprint):\n"
                 f'run_security_tool(tool_name="katana", parameters=\'{{"url": "https://{target}"}}\')\n'
                 f'run_security_tool(tool_name="gobuster", parameters=\'{{"url": "https://{target}", "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt", "additional_args": "-x php,html,txt"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 5 — Broad CVE and vulnerability scan:\n"
+                f"STEP 5 — Vulnerability scan (last — noisiest step):\n"
                 f'run_security_tool(tool_name="nuclei", parameters=\'{{"target": "https://{target}", "severity": "critical,high"}}\')\n'
                 f'run_security_tool(tool_name="nikto", parameters=\'{{"target": "https://{target}"}}\')',
                 role="assistant",
@@ -155,8 +162,7 @@ def register_prompts(mcp: FastMCP) -> None:
                 f"STEP 3 — Vulnerability scan and injection testing:\n"
                 f'run_security_tool(tool_name="nuclei", parameters=\'{{"target": "{url}"}}\')\n'
                 f'run_security_tool(tool_name="sqlmap", parameters=\'{{"url": "{url}", "additional_args": "--batch --level=3 --risk=2 --dbs"}}\')\n'
-                f'run_security_tool(tool_name="dalfox", parameters=\'{{"url": "{url}"}}\')\n'
-                f'run_security_tool(tool_name="dotdotpwn", parameters=\'{{"target": "{url}", "additional_args": "-m http -o unix"}}\')',
+                f'run_security_tool(tool_name="dalfox", parameters=\'{{"url": "{url}"}}\')',
                 role="assistant",
             ),
             Message(
@@ -212,15 +218,23 @@ def register_prompts(mcp: FastMCP) -> None:
         ]
 
     @mcp.prompt()
-    async def cloud_security_audit(provider: str = "aws", profile: str = "default") -> list[Message]:
+    async def cloud_security_audit(
+        provider: str = "aws",
+        profile: str = "default",
+        target_image: str = "",
+        k8s_api_ip: str = "",
+    ) -> list[Message]:
         """
         Cloud security audit workflow.
         Skills: cloud-audit
 
         Args:
-            provider: Cloud provider ('aws', 'azure', 'gcp')
-            profile:  Cloud credential profile (default 'default')
+            provider:     Cloud provider ('aws', 'azure', 'gcp')
+            profile:      Cloud credential profile (default 'default')
+            target_image: Container image to scan (e.g. 'myapp:latest', default 'nginx:latest')
+            k8s_api_ip:   Kubernetes API IP for cluster assessment (optional)
         """
+        image = target_image or "nginx:latest"
         return [
             Message(
                 f"You are running a cloud security audit — provider: {provider} | profile: {profile}. "
@@ -232,17 +246,20 @@ def register_prompts(mcp: FastMCP) -> None:
                 role="assistant",
             ),
             Message(
-                f"STEP 2 — Container image vulnerability scan:\n"
-                f'run_security_tool(tool_name="trivy", parameters=\'{{"target": "nginx:latest", "scan_type": "image", "severity": "HIGH,CRITICAL"}}\')',
+                f"STEP 2 — Container image vulnerability scan (target: {image}):\n"
+                f'run_security_tool(tool_name="trivy", parameters=\'{{"target": "{image}", "scan_type": "image", "severity": "HIGH,CRITICAL"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 3 — Kubernetes cluster assessment:\n"
-                f'run_security_tool(tool_name="kube_hunter", parameters=\'{{"additional_args": "--remote <k8s_api_ip>"}}\')',
+                f"STEP 3 — Kubernetes cluster assessment"
+                + (f" (API: {k8s_api_ip}):\n"
+                   f'run_security_tool(tool_name="kube_hunter", parameters=\'{{"additional_args": "--remote {k8s_api_ip}"}}\')'
+                   if k8s_api_ip else
+                   ":\nSkip if no Kubernetes cluster — provide k8s_api_ip parameter to enable."),
                 role="assistant",
             ),
             Message(
                 f"FINAL — Cloud audit report for {provider}: IAM misconfigurations, public resources, "
-                "container CVEs, Kubernetes attack surface. Prioritise CRITICAL findings."
+                f"container CVEs ({image}), Kubernetes attack surface. Prioritise CRITICAL findings."
             ),
         ]
