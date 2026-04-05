@@ -47,7 +47,7 @@ _TOOL_SKILL_MAP = {
     # web-vuln
     "nuclei": "web-vuln", "nikto": "web-vuln", "sqlmap": "web-vuln",
     "dalfox": "web-vuln", "xsser": "web-vuln", "dotdotpwn": "web-vuln",
-    "jaeles": "web-vuln", "commix": "web-vuln",
+    "jaeles": "web-vuln", "commix": "web-vuln", "vulnx": "web-vuln",
     # password-cracking
     "hashid": "password-cracking", "john": "password-cracking",
     "hashcat": "password-cracking", "hydra": "password-cracking",
@@ -161,6 +161,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.active_directory_direct import ad_exec
     from mcp_core.testssl_direct import testssl_exec
     from mcp_core.web_probe_direct import web_probe_exec
+    from mcp_core.vuln_intel_direct import vuln_intel_exec
 
     DIRECT_TOOLS = {
         # wifi
@@ -272,6 +273,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "whatweb":           (web_probe_exec, "whatweb"),
         "commix":            (web_probe_exec, "commix"),
         "joomscan":          (web_probe_exec, "joomscan"),
+        # vuln_intel
+        "vulnx":             (vuln_intel_exec, "vulnx"),
         # active_directory
         "impacket":          (ad_exec, "impacket"),
         "ldapdomaindump":    (ad_exec, "ldapdomaindump"),
