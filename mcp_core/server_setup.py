@@ -43,10 +43,11 @@ _TOOL_SKILL_MAP = {
     "wafw00f": "web-recon", "httpx": "web-recon", "katana": "web-recon",
     "gobuster": "web-recon", "ffuf": "web-recon", "feroxbuster": "web-recon",
     "dirsearch": "web-recon", "wpscan": "web-recon", "testssl": "web-recon",
+    "whatweb": "web-recon", "joomscan": "web-recon",
     # web-vuln
     "nuclei": "web-vuln", "nikto": "web-vuln", "sqlmap": "web-vuln",
     "dalfox": "web-vuln", "xsser": "web-vuln", "dotdotpwn": "web-vuln",
-    "jaeles": "web-vuln",
+    "jaeles": "web-vuln", "commix": "web-vuln",
     # password-cracking
     "hashid": "password-cracking", "john": "password-cracking",
     "hashcat": "password-cracking", "hydra": "password-cracking",
@@ -159,6 +160,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.osint_direct import osint_exec
     from mcp_core.active_directory_direct import ad_exec
     from mcp_core.testssl_direct import testssl_exec
+    from mcp_core.web_probe_direct import web_probe_exec
 
     DIRECT_TOOLS = {
         # wifi
@@ -267,6 +269,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "parsero":           (osint_exec, "parsero"),
         # web_probe
         "testssl":           (testssl_exec, "testssl"),
+        "whatweb":           (web_probe_exec, "whatweb"),
+        "commix":            (web_probe_exec, "commix"),
+        "joomscan":          (web_probe_exec, "joomscan"),
         # active_directory
         "impacket":          (ad_exec, "impacket"),
         "ldapdomaindump":    (ad_exec, "ldapdomaindump"),
