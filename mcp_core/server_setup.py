@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
 from mcp_tools.gateway import register_gateway_tools
+from mcp_core.parameter_optimizer import ParameterOptimizer
+from mcp_core.technology_detector import TechProfile
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
     DEFAULT_PROFILE,
@@ -27,6 +29,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 _scan_cache: Dict[str, Dict] = {}
 _server_start_time = time.time()
+_optimizer = ParameterOptimizer()
 
 # ---------------------------------------------------------------------------
 # Tool → Skill mapping for ctx.read_resource()
@@ -335,6 +338,31 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
 
         exec_func, tool_key = route
+
+        # ParameterOptimizer — enrich params before execution
+        # Caller can pass _profile (stealth/normal/aggressive) and _tech (dict) in params
+        opt_profile = params.pop("_profile", "normal")
+        tech_dict   = params.pop("_tech", None)
+        tech_profile: Optional[TechProfile] = None
+        if isinstance(tech_dict, dict):
+            try:
+                tech_profile = TechProfile(
+                    web_servers = tech_dict.get("web_servers", []),
+                    frameworks  = tech_dict.get("frameworks", []),
+                    cms         = tech_dict.get("cms", []),
+                    databases   = tech_dict.get("databases", []),
+                    languages   = tech_dict.get("languages", []),
+                    security    = tech_dict.get("security", []),
+                    services    = tech_dict.get("services", []),
+                )
+            except Exception:
+                pass
+        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
+        optimizer_meta = params.pop("_optimizer", {})
+        if optimizer_meta.get("forced_stealth"):
+            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
+        elif opt_profile != "normal":
+            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
