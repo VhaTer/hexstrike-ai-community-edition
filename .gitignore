@@ -21,3 +21,8 @@ VS_CODE_MCP_GUIDE.md
 # Local session notes — not for repo
 Hexstrike-skills-system.md
 skills-100-percent-plan.md
+.cline/
+.roo/
+
+# Local docs/reports — dev reference only, not for repo
+Projects_reports_docs/
