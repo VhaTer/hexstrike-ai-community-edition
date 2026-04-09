@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
 from mcp_tools.gateway import register_gateway_tools
 from mcp_core.parameter_optimizer import ParameterOptimizer
-from mcp_core.technology_detector import TechProfile
+from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
     DEFAULT_PROFILE,
@@ -29,7 +29,49 @@ except ImportError:
 # ---------------------------------------------------------------------------
 _scan_cache: Dict[str, Dict] = {}
 _server_start_time = time.time()
-_optimizer = ParameterOptimizer()
+_optimizer  = ParameterOptimizer()
+_detector   = TechnologyDetector()
+
+
+def _detect_from_cache(target: str) -> Optional[TechProfile]:
+    """
+    Build a TechProfile from cached scan results for a given target.
+
+    Looks for whatweb or httpx results in _scan_cache and passes
+    their output text to TechnologyDetector.detect().
+    Returns None if no usable cache entry is found.
+    """
+    # Tools whose output is useful for tech detection, in priority order
+    PROBE_TOOLS = ("whatweb", "httpx", "nikto", "wpscan")
+
+    content_parts = []
+    headers: Dict[str, str] = {}
+
+    for tool in PROBE_TOOLS:
+        entry = _scan_cache.get(f"{tool}:{target}")
+        if not entry:
+            continue
+        result = entry.get("result", {})
+        # Most direct modules return output in result["output"] or result["data"]
+        output = (
+            result.get("output")
+            or result.get("data")
+            or result.get("stdout")
+            or ""
+        )
+        if isinstance(output, str) and output.strip():
+            content_parts.append(output)
+        # httpx sometimes returns structured headers
+        if tool == "httpx" and isinstance(result.get("headers"), dict):
+            headers.update(result["headers"])
+
+    if not content_parts and not headers:
+        return None
+
+    return _detector.detect(
+        headers=headers,
+        content="\n".join(content_parts),
+    )
 
 # ---------------------------------------------------------------------------
 # Tool → Skill mapping for ctx.read_resource()
@@ -344,7 +386,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         opt_profile = params.pop("_profile", "normal")
         tech_dict   = params.pop("_tech", None)
         tech_profile: Optional[TechProfile] = None
+
         if isinstance(tech_dict, dict):
+            # Caller passed explicit tech info
             try:
                 tech_profile = TechProfile(
                     web_servers = tech_dict.get("web_servers", []),
@@ -357,6 +401,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 )
             except Exception:
                 pass
+        else:
+            # Auto-detect from cache (whatweb/httpx results for this target)
+            target = params.get("target") or params.get("url") or params.get("domain", "")
+            if target:
+                tech_profile = _detect_from_cache(target)
+                if tech_profile:
+                    await ctx.info(f"🧠 Tech detected from cache: {tech_profile.summary()}")
+
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
         optimizer_meta = params.pop("_optimizer", {})
         if optimizer_meta.get("forced_stealth"):
