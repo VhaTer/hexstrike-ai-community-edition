@@ -7,6 +7,7 @@ from fastmcp import FastMCP, Context
 from mcp_tools.gateway import register_gateway_tools
 from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
+from mcp_core.elicitation import confirm_destructive_action
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
     DEFAULT_PROFILE,
@@ -31,6 +32,15 @@ _scan_cache: Dict[str, Dict] = {}
 _server_start_time = time.time()
 _optimizer  = ParameterOptimizer()
 _detector   = TechnologyDetector()
+
+# Tools requiring user confirmation before execution
+_DESTRUCTIVE_TOOLS = {
+    "aireplay_ng": ("Deauth/injection attack",      "Can disconnect all clients on the target AP"),
+    "mdk4":        ("MDK4 wireless attack",          "Can cause denial of service on wireless networks"),
+    "responder":   ("Responder LLMNR/NBT-NS poison", "Intercepts credentials on the local network"),
+    "metasploit":  ("Metasploit exploit execution",  "Will attempt to exploit the target system"),
+    "mitm6":       ("MitM6 IPv6 attack",             "Poisons IPv6 DNS on the local network"),
+}
 
 
 def _detect_from_cache(target: str) -> Optional[TechProfile]:
@@ -379,6 +389,19 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.error(f"❌ Unknown tool: {tool_name}")
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
 
+        # Elicitation — destructive tools require explicit user confirmation
+        destructive = _DESTRUCTIVE_TOOLS.get(tool_name.lower())
+        if destructive:
+            action, warning = destructive
+            target_hint = params.get("target") or params.get("interface") or params.get("url", "")
+            confirmed = await confirm_destructive_action(
+                ctx,
+                action=f"{action}: {target_hint}" if target_hint else action,
+                warning=warning,
+            )
+            if not confirmed:
+                return {"success": False, "error": f"Action cancelled — {action} requires explicit confirmation"}
+
         exec_func, tool_key = route
 
         # ParameterOptimizer — enrich params before execution
@@ -423,7 +446,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
-            target = params.get("target") or params.get("domain") or params.get("interface", "")
+            # Cache key — use target, url, or domain (fixes url-based tools like whatweb)
+            target = (
+                params.get("target")
+                or params.get("url")
+                or params.get("domain")
+                or params.get("interface", "")
+            )
             if target:
                 cache_key = f"{tool_name}:{target}"
                 _scan_cache[cache_key] = {
