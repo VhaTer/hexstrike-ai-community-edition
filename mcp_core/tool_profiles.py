@@ -1,5 +1,17 @@
-from mcp_core.hexstrikecolors import HexStrikeColors
+# HexStrikeColors removed — ANSI codes only relevant in hexstrike_mcp.py terminal client
+# Wrappers that accepted HexStrikeColors as param now receive None (Phase 3 doesn't use them)
 from mcp_tools import *
+
+# Stub for legacy wrappers that still accept HexStrikeColors as a param
+class HexStrikeColors:
+    """Null stub — ANSI colors only used in hexstrike_mcp.py terminal client.
+    Passed as None-equivalent to legacy mcp_tools/ wrappers for backward compat.
+    """
+    RESET = ''
+    def __getattr__(self, name):
+        return ''
+
+HexStrikeColors = HexStrikeColors()
 
 def resolve_profile_dependencies(profiles):
     resolved = set()
