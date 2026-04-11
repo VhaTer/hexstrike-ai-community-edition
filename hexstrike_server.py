@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HexStrike AI - FastMCP 3.x Standalone Server (Phase 3)
+HexStrike AI-PULSE — FastMCP 3.x Standalone Server (Phase 3)
 
 🚀 Direct tool execution, no Flask, native HTTP/SSE transport
 📊 Dashboard served from server_static/ via Starlette StaticFiles
