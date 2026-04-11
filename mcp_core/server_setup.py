@@ -148,7 +148,7 @@ def setup_mcp_server(hexstrike_client, logger, compact: bool = False, profiles: 
         Configured FastMCP instance
     """
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai-mcp", transforms=transforms)
+    mcp = FastMCP("hexstrike-ai-pulse", transforms=transforms)
 
     _register_skills(mcp, logger)
 
@@ -196,7 +196,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         logger = logging.getLogger(__name__)
 
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai-mcp", transforms=transforms)
+    mcp = FastMCP("hexstrike-ai-pulse", transforms=transforms)
 
     _register_skills(mcp, logger)
 
@@ -476,7 +476,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         uptime = int(time.time() - _server_start_time)
         return json.dumps({
             "status":         "healthy",
-            "server":         "hexstrike-ai-mcp",
+            "server":         "hexstrike-ai-pulse",
             "fastmcp":        "3.1.1",
             "uptime_seconds": uptime,
             "tools_count":    len(DIRECT_TOOLS),
