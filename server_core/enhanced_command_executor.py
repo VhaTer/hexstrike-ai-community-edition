@@ -213,6 +213,14 @@ class EnhancedCommandExecutor:
                 self.return_code = -1
                 telemetry.record_execution(False, execution_time)
 
+                # Force-join reader threads after kill — prevents thread leak (Z.AI finding 4.2)
+                # Threads are daemon=True so they won't block process exit,
+                # but joining with timeout ensures stdout_data/stderr_data are flushed
+                if self.stdout_thread and self.stdout_thread.is_alive():
+                    self.stdout_thread.join(timeout=2)
+                if self.stderr_thread and self.stderr_thread.is_alive():
+                    self.stderr_thread.join(timeout=2)
+
             # Timeout = never success, even with partial output (CODEX P0 fix)
             # partial_results flag carries the "we got some data" signal instead
             success = (self.return_code == 0) and not self.timed_out
