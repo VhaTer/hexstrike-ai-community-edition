@@ -36,11 +36,102 @@ _detector   = TechnologyDetector()
 # Tools requiring user confirmation before execution
 _DESTRUCTIVE_TOOLS = {
     "aireplay_ng": ("Deauth/injection attack",      "Can disconnect all clients on the target AP"),
-    "mdk4":        ("MDK4 wireless attack",          "Can cause denial of service on wireless networks"),
+    "mdk4":        ("MDK4 wireless attack",         "Can cause denial of service on wireless networks"),
     "responder":   ("Responder LLMNR/NBT-NS poison", "Intercepts credentials on the local network"),
-    "metasploit":  ("Metasploit exploit execution",  "Will attempt to exploit the target system"),
-    "mitm6":       ("MitM6 IPv6 attack",             "Poisons IPv6 DNS on the local network"),
+    "metasploit":  ("Metasploit exploit execution", "Will attempt to exploit the target system"),
+    "mitm6":       ("MitM6 IPv6 attack",            "Poisons IPv6 DNS on the local network"),
 }
+
+
+def _build_destructive_confirmation(tool_name: str, params: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """
+    Mirror the safety rules already present in transitional wrappers.
+
+    The standalone Phase 3 path must not be more permissive than the wrapper path,
+    but it should keep the same safe exceptions:
+    - aireplay-ng mode 9 injection test is allowed without confirmation
+    - Responder analyze mode is passive and allowed without confirmation
+    - Metasploit auxiliary scanner/gather modules are allowed without confirmation
+    """
+    tool = tool_name.lower()
+
+    if tool == "aireplay_ng":
+        try:
+            attack_mode = int(params.get("attack_mode"))
+        except (TypeError, ValueError):
+            attack_mode = None
+
+        if attack_mode == 9:
+            return None
+
+        interface = str(params.get("interface", "")).strip() or "unknown interface"
+        bssid = str(params.get("bssid", "")).strip()
+        client_mac = str(params.get("client_mac", "")).strip()
+        target_info = f"BSSID: {bssid}" if bssid else "all visible networks"
+        client_info = f" | Client: {client_mac}" if client_mac else " | all clients"
+        warning = "This will disrupt active network connections." if attack_mode == 0 else ""
+        mode_label = f"-{attack_mode}" if attack_mode is not None else "unknown mode"
+        return {
+            "action": f"aireplay-ng {mode_label} on {interface}",
+            "detail": f"{target_info}{client_info}",
+            "warning": warning,
+        }
+
+    if tool == "responder":
+        if params.get("analyze", False):
+            return None
+
+        interface = str(params.get("interface", "eth0")).strip() or "eth0"
+        duration = params.get("duration", 300)
+        wpad = params.get("wpad", True)
+        force_wpad_auth = params.get("force_wpad_auth", False)
+        return {
+            "action": f"Responder LLMNR/NBT-NS poisoning on {interface}",
+            "detail": f"Duration: {duration}s | WPAD: {wpad} | Force WPAD auth: {force_wpad_auth}",
+            "warning": "This actively poisons network traffic and may affect all hosts on the segment.",
+        }
+
+    if tool == "metasploit":
+        module = str(params.get("module", "")).strip()
+        if module.startswith("auxiliary/scanner/") or module.startswith("auxiliary/gather/"):
+            return None
+
+        options = params.get("options", {})
+        if not isinstance(options, dict):
+            options = {}
+        rhosts = options.get("RHOSTS", options.get("rhosts", "unknown target"))
+        return {
+            "action": f"Metasploit: {module or 'unknown module'}",
+            "detail": f"Target: {rhosts}",
+            "warning": "Active exploitation - this may trigger IDS/IPS and alter target state.",
+        }
+
+    if tool == "mitm6":
+        interface = str(params.get("interface", "")).strip() or "unknown interface"
+        domain = str(params.get("domain", "")).strip()
+        return {
+            "action": f"mitm6 IPv6 DNS takeover on {interface}",
+            "detail": f"Domain: {domain}" if domain else "All domains",
+            "warning": "This poisons IPv6 DNS for all hosts on the network segment.",
+        }
+
+    destructive = _DESTRUCTIVE_TOOLS.get(tool)
+    if destructive:
+        action, warning = destructive
+        target_hint = (
+            params.get("target")
+            or params.get("interface")
+            or params.get("url")
+            or params.get("domain")
+            or ""
+        )
+        return {
+            "action": f"{action}: {target_hint}" if target_hint else action,
+            "detail": "",
+            "warning": warning,
+        }
+
+    return None
 
 
 def _detect_from_cache(target: str) -> Optional[TechProfile]:
@@ -389,18 +480,20 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.error(f"❌ Unknown tool: {tool_name}")
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
 
-        # Elicitation — destructive tools require explicit user confirmation
-        destructive = _DESTRUCTIVE_TOOLS.get(tool_name.lower())
-        if destructive:
-            action, warning = destructive
-            target_hint = params.get("target") or params.get("interface") or params.get("url", "")
+        # Elicitation - destructive tools require explicit user confirmation
+        destructive_request = _build_destructive_confirmation(tool_name, params)
+        if destructive_request:
             confirmed = await confirm_destructive_action(
                 ctx,
-                action=f"{action}: {target_hint}" if target_hint else action,
-                warning=warning,
+                action=destructive_request["action"],
+                detail=destructive_request["detail"],
+                warning=destructive_request["warning"],
             )
             if not confirmed:
-                return {"success": False, "error": f"Action cancelled — {action} requires explicit confirmation"}
+                return {
+                    "success": False,
+                    "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
+                }
 
         exec_func, tool_key = route
 
