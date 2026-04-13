@@ -213,8 +213,9 @@ class EnhancedCommandExecutor:
                 self.return_code = -1
                 telemetry.record_execution(False, execution_time)
 
-            # Always consider it a success if we have output, even with timeout
-            success = True if self.timed_out and (self.stdout_data or self.stderr_data) else (self.return_code == 0)
+            # Timeout = never success, even with partial output (CODEX P0 fix)
+            # partial_results flag carries the "we got some data" signal instead
+            success = (self.return_code == 0) and not self.timed_out
 
             # Log enhanced final results with summary using ModernVisualEngine
             output_size = len(self.stdout_data) + len(self.stderr_data)
