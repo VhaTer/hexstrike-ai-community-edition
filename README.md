@@ -1,6 +1,6 @@
-# HexStrike AI-PULSE 🐻
+# HexStrike AI-PULSE 
 
-> AI-powered penetration testing platform — 150+ security tools, real-time LLM feedback, FastMCP 3.x native.
+## _AI-powered penetration testing platform — 150+ security tools, real-time LLM feedback, FastMCP 3.x native._
 
 <p align="center">
   <img src="assets/hexstrike-pulse-logo.png" alt="HexStrike AI-PULSE" width="260"/>
