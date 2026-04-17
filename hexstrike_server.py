@@ -29,6 +29,8 @@ API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 
 if __name__ == "__main__":
+    os.environ["FASTMCP_SHOW_SERVER_BANNER"] = "false"
+    os.environ["FASTMCP_CHECK_FOR_UPDATES"] = "off"
     print(ModernVisualEngine.create_banner())
     logger.info("🚀 Starting HexStrike Pulse Standalone Server")
     logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
