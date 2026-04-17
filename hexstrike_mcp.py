@@ -17,7 +17,7 @@ from mcp_core.args import parse_args
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="[%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stderr)

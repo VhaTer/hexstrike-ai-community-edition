@@ -1,9 +1,9 @@
 # Global configuration for HexStrike AI Community Edition
 
 _config = {
-    "APP_NAME": "HexStrike AI Community Edition",
-    "VERSION": "1.2.1 - shellshark",
-    "DATA_DIR_NAME": ".hexstrike_data",  # Root data directory name (relative to cwd, override with HEXSTRIKE_DATA_DIR env var)
+    "APP_NAME": "HexStrike AI Pulse",
+    "VERSION": "1.0.0",
+    "DATA_DIR_NAME": "/home/vhater/hexstrike-ai-community-edition/.hexstrike_data",  # Root data directory name (relative to cwd, override with HEXSTRIKE_DATA_DIR env var)
     "COMMAND_TIMEOUT": 300,
     "CACHE_SIZE": 1000,
     "CACHE_TTL": 3600,  # 1 hour

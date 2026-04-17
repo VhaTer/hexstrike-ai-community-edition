@@ -1,8 +1,8 @@
 # HexStrike CE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-04-03 (session 5)
+**Last updated:** 2026-04-16 (session 6)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** `ce82936` — docs(kb): update session 5 (après pull 75d031a feat(prompts))
+**HEAD:** `30bb83c`
 **FastMCP:** 3.1.1
 
 ---
@@ -61,6 +61,9 @@ mcp_core/
 - Cache in-memory `_scan_cache` dans `server_setup.py` — alimenté par `run_security_tool`
 - `theHarvester` fix — clé `"theharvester"` dans `DIRECT_TOOLS` ✅
 - `@mcp.prompt()` — 5 workflow prompts natifs dans `mcp_core/prompts.py`
+- Skills MCP — `SkillsDirectoryProvider(..., supporting_files="resources", reload=True)`
+- `get_tool_skill(tool_name)` — récupère `SKILL.md` + supporting docs par mapping outil → skill
+- Typed MCP tools — wrappers auto-générés depuis `tool_registry.py` pour les outils directs ayant un schéma compact
 
 ---
 
@@ -103,12 +106,14 @@ error_handling/, ai_payload/, web_scan/burpsuite
 | `ctx.info()` / `ctx.error()` | ✅ 105 tools | Streams to LLM |
 | `ctx.report_progress()` | ✅ 83 tools | Non-blocking via asyncio.wait |
 | `BM25SearchTransform` | ✅ server_setup.py | Tool discovery |
-| `SkillsDirectoryProvider` | ✅ server_setup.py | Skills as resources |
+| `SkillsDirectoryProvider` | ✅ server_setup.py | Skills exposed as resources with reload enabled |
 | `run_in_executor` | ✅ All tools | Non-blocking I/O |
 | Phase 3 standalone server | ✅ ACTIF | mcp.run(transport="http") |
 | `ctx.elicit()` | ✅ ACTIF | `mcp_core/elicitation.py` — 5 outils destructifs |
 | Resources MCP | ✅ ACTIF | 4 resources dans server_setup.py |
 | `@mcp.prompt()` | ✅ ACTIF | 5 prompts dans `mcp_core/prompts.py` |
+| `get_tool_skill()` | ✅ ACTIF | Runtime access to skill bundles |
+| Typed tool wrappers | ✅ ACTIF | Auto-registered from compact tool registry metadata |
 | LLM Sampling | ❌ Not yet | Claude Desktop pas encore |
 
 ---
@@ -150,8 +155,43 @@ async def tool_name(ctx: Context, target: str, ...) -> Dict[str, Any]:
     return result
 ```
 
-**IMPORTANT :** `ctx: Context` injecté automatiquement par type hint.
-Ne PAS utiliser `ctx: Context = CurrentContext()`.
+**IMPORTANT :**
+
+- `ctx: Context` injecté automatiquement par type hint reste valide
+- `ctx: Context = CurrentContext()` est aussi supporté en FastMCP 3.x et constitue maintenant la forme explicite recommandée dans la doc upstream
+
+### Skills pattern — actuel
+
+Les skills ne sont plus juste des playbooks monolithiques. Le repo les expose comme bundles filesystem:
+
+```text
+skills/<skill-name>/
+├── SKILL.md
+└── REFERENCE.md
+```
+
+Notes:
+
+- `SKILL.md` = quand utiliser la skill + workflow opératoire
+- `REFERENCE.md` = syntaxe typed MCP tool calls (`nmap(...)`, `sqlmap(...)`, etc.) + fallback `run_security_tool(...)`
+- `SkillsDirectoryProvider(..., supporting_files="resources")` expose ces fichiers via `skill://...`
+- `get_tool_skill(tool_name)` permet de récupérer le bundle local associé à un outil
+
+### Skill runtime pattern
+
+```python
+@mcp.tool
+async def get_tool_skill(ctx: Context, tool_name: str) -> Dict[str, Any]:
+    skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+    documents = await _read_skill_bundle(ctx, skill_name)
+    return {
+        "success": True,
+        "tool_name": tool_name,
+        "skill_name": skill_name,
+        "documents": documents,
+        "available_files": sorted(documents),
+    }
+```
 
 ### *_direct.py pattern
 
@@ -257,6 +297,12 @@ git push origin backup/phase2-complete-validated --force-with-lease
 ---
 
 ## ⚠️ Known Issues / Notes
+
+- The standalone server still exposes one generic execution tool, `run_security_tool(tool_name, parameters)`, rather than fully typed MCP tools per security utility. This keeps Phase 3 stable but means skill references remain the main place for per-tool invocation guidance.
+- Skill examples should prefer typed MCP tools when available, with `run_security_tool(...)` used as the fallback for advanced or not-yet-modeled cases.
+- Anthropic-style "agent skill" semantics and FastMCP resource-provider semantics are related but not identical:
+  - Anthropic / Claude Code: filesystem skill bundle loaded progressively by the agent
+  - FastMCP: skill bundle exposed as MCP resources/templates, then consumed by clients or helper tools
 
 | Issue | Solution |
 |---|---|

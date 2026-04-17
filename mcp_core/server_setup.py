@@ -1,13 +1,16 @@
 import asyncio
+import inspect
 import json
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
+from fastmcp.server.dependencies import get_context
 from mcp_tools.gateway import register_gateway_tools
 from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
+from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
     DEFAULT_PROFILE,
@@ -178,26 +181,41 @@ def _detect_from_cache(target: str) -> Optional[TechProfile]:
 # Tool → Skill mapping for ctx.read_resource()
 # ---------------------------------------------------------------------------
 _TOOL_SKILL_MAP = {
+    # wifi-pentest
+    "airmon_ng": "wifi-pentest", "airodump_ng": "wifi-pentest",
+    "aireplay_ng": "wifi-pentest", "aircrack_ng": "wifi-pentest",
+    "hcxdumptool": "wifi-pentest", "wifite": "wifi-pentest",
+    "wifite2": "wifi-pentest",
     # nmap-recon
     "nmap": "nmap-recon", "nmap_advanced": "nmap-recon",
     "masscan": "nmap-recon", "rustscan": "nmap-recon", "arp_scan": "nmap-recon",
+    "autorecon": "nmap-recon",
     # subdomain-enum
     "subfinder": "subdomain-enum", "amass": "subdomain-enum",
     "dnsenum": "subdomain-enum", "fierce": "subdomain-enum",
     "theharvester": "subdomain-enum",
+    # osint-recon
+    "whois": "osint-recon", "sherlock": "osint-recon",
+    "spiderfoot": "osint-recon", "sublist3r": "osint-recon",
+    "parsero": "osint-recon",
     # web-recon
     "wafw00f": "web-recon", "httpx": "web-recon", "katana": "web-recon",
     "gobuster": "web-recon", "ffuf": "web-recon", "feroxbuster": "web-recon",
     "dirsearch": "web-recon", "wpscan": "web-recon", "testssl": "web-recon",
-    "whatweb": "web-recon", "joomscan": "web-recon",
+    "whatweb": "web-recon", "joomscan": "web-recon", "hakrawler": "web-recon",
+    "gau": "web-recon", "waybackurls": "web-recon", "arjun": "web-recon",
+    "paramspider": "web-recon", "x8": "web-recon", "anew": "web-recon",
+    "uro": "web-recon",
     # web-vuln
     "nuclei": "web-vuln", "nikto": "web-vuln", "sqlmap": "web-vuln",
     "dalfox": "web-vuln", "xsser": "web-vuln", "dotdotpwn": "web-vuln",
     "jaeles": "web-vuln", "commix": "web-vuln", "vulnx": "web-vuln",
+    "zap": "web-vuln",
     # password-cracking
     "hashid": "password-cracking", "john": "password-cracking",
     "hashcat": "password-cracking", "hydra": "password-cracking",
     "medusa": "password-cracking", "ophcrack": "password-cracking",
+    "patator": "password-cracking",
     # smb-enum
     "nbtscan": "smb-enum", "smbmap": "smb-enum", "enum4linux": "smb-enum",
     "netexec": "smb-enum", "rpcclient": "smb-enum",
@@ -207,11 +225,168 @@ _TOOL_SKILL_MAP = {
     # binary-analysis
     "checksec": "binary-analysis", "strings": "binary-analysis",
     "binwalk": "binary-analysis", "radare2": "binary-analysis",
-    "ropgadget": "binary-analysis", "gdb": "binary-analysis",
+    "ropgadget": "binary-analysis", "ropper": "binary-analysis",
+    "one_gadget": "binary-analysis", "gdb": "binary-analysis",
     # cloud-audit
     "prowler": "cloud-audit", "trivy": "cloud-audit",
     "kube_hunter": "cloud-audit", "kube_bench": "cloud-audit",
+    "checkov": "cloud-audit", "terrascan": "cloud-audit",
+    # active-directory
+    "impacket": "active-directory", "ldapdomaindump": "active-directory",
+    "adidnsdump": "active-directory", "certipy": "active-directory",
+    "certipy_ad": "active-directory", "mitm6": "active-directory",
+    "pywerview": "active-directory", "bloodhound": "active-directory",
+    "bloodhound_python": "active-directory",
 }
+
+_SKILL_SUPPORT_FILES = ("REFERENCE.md", "CHECKLIST.md", "EXAMPLES.md")
+_TOOL_REGISTRY_ALIASES = {
+    "aircrack_ng": "aircrack-ng",
+    "airmon_ng": "airmon-ng",
+    "airodump_ng": "airodump-ng",
+    "aireplay_ng": "aireplay-ng",
+    "arp_scan": "arp-scan",
+    "kube_hunter": "kube-hunter",
+    "one_gadget": "one-gadget",
+    "theharvester": "theHarvester",
+}
+
+
+async def _read_skill_document(ctx: Context, skill_name: str, filename: str) -> Optional[str]:
+    """Best-effort resource read for one file inside a skill bundle."""
+    try:
+        resource = await ctx.read_resource(f"skill://{skill_name}/{filename}")
+    except Exception:
+        return None
+
+    contents = getattr(resource, "contents", None)
+    if not contents:
+        return None
+
+    first = contents[0] if isinstance(contents, list) else contents
+    raw = getattr(first, "content", None)
+    if raw is None:
+        return None
+
+    return raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
+
+
+async def _read_skill_bundle(ctx: Context, skill_name: str) -> Dict[str, str]:
+    """Load the main skill file plus common supporting files, if present."""
+    documents: Dict[str, str] = {}
+    for filename in ("SKILL.md",) + _SKILL_SUPPORT_FILES:
+        text = await _read_skill_document(ctx, skill_name, filename)
+        if text:
+            documents[filename] = text
+    return documents
+
+
+def _get_registry_tool_definition(tool_name: str) -> Optional[Dict[str, Any]]:
+    """Resolve a direct tool name to a compact registry schema if one exists."""
+    tool_def = get_tool(tool_name)
+    if tool_def:
+        return tool_def
+
+    alias = _TOOL_REGISTRY_ALIASES.get(tool_name)
+    if alias:
+        return get_tool(alias)
+    return None
+
+
+def _infer_param_type(default: Any) -> type:
+    """Infer a simple Python type from a default value."""
+    if isinstance(default, bool):
+        return bool
+    if isinstance(default, int):
+        return int
+    if isinstance(default, float):
+        return float
+    if isinstance(default, dict):
+        return dict
+    if isinstance(default, list):
+        return list
+    return str
+
+
+def _resolve_required_param_type(spec: Dict[str, Any]) -> type:
+    """Resolve a required parameter type from optional registry metadata."""
+    declared_type = spec.get("type")
+    if declared_type == "bool":
+        return bool
+    if declared_type == "int":
+        return int
+    if declared_type == "float":
+        return float
+    if declared_type == "dict":
+        return dict
+    if declared_type == "list":
+        return list
+    return str
+
+
+def _build_typed_tool_doc(tool_name: str, description: str, tool_def: Dict[str, Any]) -> str:
+    """Generate a concise docstring for a typed wrapper tool."""
+    lines = [description, "", "Args:"]
+    for param_name, spec in tool_def.get("params", {}).items():
+        annotation = _resolve_required_param_type(spec)
+        lines.append(f"    {param_name}: Required parameter")
+    for param_name, default in tool_def.get("optional", {}).items():
+        lines.append(f"    {param_name}: Optional parameter. Default: {default!r}")
+    lines.extend(
+        [
+            "",
+            "Returns:",
+            "    Tool execution results",
+            "",
+            "Notes:",
+            f"    This is a typed wrapper over run_security_tool(tool_name={tool_name!r}, parameters=...).",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _create_typed_tool_wrapper(tool_name: str, tool_def: Dict[str, Any], run_security_tool):
+    """Create a typed MCP tool wrapper around run_security_tool()."""
+    required_params = list(tool_def.get("params", {}).keys())
+    optional_params = tool_def.get("optional", {})
+    annotations: Dict[str, Any] = {"return": Dict[str, Any]}
+
+    async def typed_tool(**kwargs) -> Dict[str, Any]:
+        ctx = get_context()
+        payload = {name: kwargs[name] for name in required_params}
+        for name in optional_params:
+            if name in kwargs:
+                payload[name] = kwargs[name]
+        return await run_security_tool(ctx, tool_name, payload)
+
+    parameters = []
+    for name in required_params:
+        annotation = _resolve_required_param_type(tool_def["params"][name])
+        annotations[name] = annotation
+        parameters.append(
+            inspect.Parameter(
+                name,
+                inspect.Parameter.KEYWORD_ONLY,
+                annotation=annotation,
+            )
+        )
+    for name, default in optional_params.items():
+        annotation = _infer_param_type(default)
+        annotations[name] = annotation
+        parameters.append(
+            inspect.Parameter(
+                name,
+                inspect.Parameter.KEYWORD_ONLY,
+                default=default,
+                annotation=annotation,
+            )
+        )
+
+    typed_tool.__name__ = f"{tool_name.replace('-', '_')}_typed"
+    typed_tool.__doc__ = _build_typed_tool_doc(tool_name, tool_def["desc"], tool_def)
+    typed_tool.__annotations__ = annotations
+    typed_tool.__signature__ = inspect.Signature(parameters=parameters)
+    return typed_tool
 
 
 def _register_skills(mcp: FastMCP, logger) -> None:
@@ -222,8 +397,14 @@ def _register_skills(mcp: FastMCP, logger) -> None:
     skills_dir = Path(__file__).parent.parent / "skills"
     if not skills_dir.exists():
         return
-    mcp.add_provider(SkillsDirectoryProvider(roots=skills_dir))
-    logger.info(f"🤖 Skills initialized")
+    mcp.add_provider(
+        SkillsDirectoryProvider(
+            roots=skills_dir,
+            supporting_files="resources",
+            reload=True,
+        )
+    )
+    logger.info("🤖 Skills initialized (supporting files exposed as resources, reload enabled)")
 
 def setup_mcp_server(hexstrike_client, logger, compact: bool = False, profiles: Optional[list] = None) -> FastMCP:
     """
@@ -451,24 +632,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         """
         await ctx.info(f"🔍 Executing {tool_name}")
 
-        # ctx.read_resource() — load skill context before execution
-        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
-        if skill_name:
-            try:
-                skill_resource = await ctx.read_resource(f"skill://{skill_name}/SKILL.md")
-                # ResourceResult.contents is a list[ResourceContent], each has .content (str|bytes)
-                contents = getattr(skill_resource, "contents", None)
-                if contents:
-                    first = contents[0] if isinstance(contents, list) else contents
-                    raw = getattr(first, "content", None)
-                    if raw is not None:
-                        text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
-                        # Show first 3 lines as context hint — not the whole file
-                        hint = "\n".join(text.splitlines()[:3])
-                        await ctx.info(f"📖 Skill context [{skill_name}]: {hint}")
-            except Exception:
-                pass  # Graceful fallback — skill read is optional
-
         try:
             params = json.loads(parameters) if isinstance(parameters, str) else parameters
         except json.JSONDecodeError as e:
@@ -557,7 +720,50 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         return result
 
-    logger.info(f"🚀 Phase 3: {len(DIRECT_TOOLS)} tools registered — no Flask")
+    @mcp.tool(description="Return the local skill bundle associated with a HexStrike tool")
+    async def get_tool_skill(
+        ctx: Context,
+        tool_name: str,
+    ) -> Dict[str, Any]:
+        """Fetch the local skill documents mapped to a given tool."""
+        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+        if not skill_name:
+            return {
+                "success": False,
+                "error": f"No skill mapping found for tool: {tool_name}",
+            }
+
+        documents = await _read_skill_bundle(ctx, skill_name)
+        if not documents:
+            return {
+                "success": False,
+                "error": f"Skill bundle not readable for: {skill_name}",
+                "skill_name": skill_name,
+            }
+
+        return {
+            "success": True,
+            "tool_name": tool_name,
+            "skill_name": skill_name,
+            "documents": documents,
+            "available_files": sorted(documents),
+        }
+
+    typed_tools_registered = 0
+    for public_name in sorted(DIRECT_TOOLS):
+        tool_def = _get_registry_tool_definition(public_name)
+        if not tool_def:
+            continue
+        wrapper = _create_typed_tool_wrapper(public_name, tool_def, run_security_tool)
+        mcp.tool(
+            name=public_name,
+            description=tool_def["desc"],
+        )(wrapper)
+        typed_tools_registered += 1
+
+    logger.info(
+        f"🚀 Phase 3: {len(DIRECT_TOOLS)} direct routes, {typed_tools_registered} typed MCP tools, + skill bundle helper — no Flask"
+    )
 
     # ========================================================================
     # Resources MCP — health + scan results

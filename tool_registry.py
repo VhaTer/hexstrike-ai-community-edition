@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # fits well under the context window of smaller models when serialized.
 # ---------------------------------------------------------------------------
 
+
 TOOLS: Dict[str, dict] = {
     # ---- Vulnerability Intelligence ----
     "vulnx": {
@@ -157,6 +158,22 @@ TOOLS: Dict[str, dict] = {
         "optional": {"additional_args": ""},
         "effectiveness": 0.75,
     },
+    "netexec": {
+        "desc": "NetExec protocol-aware authentication and enumeration wrapper",
+        "endpoint": "/api/tools/netexec",
+        "method": "POST",
+        "category": "network_recon",
+        "params": {"target": {"required": True}},
+        "optional": {
+            "protocol": "smb",
+            "username": "",
+            "password": "",
+            "hash": "",
+            "module": "",
+            "additional_args": "",
+        },
+        "effectiveness": 0.88,
+    },
 
 
     # ---- Web Recon ----
@@ -241,6 +258,35 @@ TOOLS: Dict[str, dict] = {
         "optional": {"additional_args": ""},
         "effectiveness": 0.90,
     },
+    "testssl": {
+        "desc": "SSL/TLS configuration and vulnerability scanner",
+        "endpoint": "/api/tools/testssl",
+        "method": "POST",
+        "category": "web_recon",
+        "params": {"target": {"required": True}},
+        "optional": {
+            "protocols": True,
+            "server_defaults": True,
+            "server_preference": False,
+            "forward_secrecy": False,
+            "headers": False,
+            "vulnerable": False,
+            "full": False,
+            "client_simulation": False,
+            "rating_only": False,
+            "starttls": "",
+            "severity": "",
+            "json_output": False,
+            "jsonfile": "/tmp/testssl_output.json",
+            "quiet": True,
+            "proxy": "",
+            "ipv4_only": False,
+            "ipv6_only": False,
+            "ip": "",
+            "additional_args": "",
+        },
+        "effectiveness": 0.88,
+    },
 
     # ---- Web Vuln ----
     "nuclei": {
@@ -306,6 +352,25 @@ TOOLS: Dict[str, dict] = {
         "optional": {"additional_args": ""},
         "effectiveness": 0.92,
     },
+    "zap": {
+        "desc": "OWASP ZAP quick scan or daemon mode",
+        "endpoint": "/api/tools/zap",
+        "method": "POST",
+        "category": "web_recon",
+        "params": {},
+        "optional": {
+            "target": "",
+            "scan_type": "baseline",
+            "api_key": "",
+            "daemon": False,
+            "port": 8090,
+            "host": "0.0.0.0",
+            "format": "xml",
+            "output_file": "",
+            "additional_args": "",
+        },
+        "effectiveness": 0.86,
+    },
 
     # ---- Exploitation ----
     "commix": {
@@ -325,6 +390,24 @@ TOOLS: Dict[str, dict] = {
         "params": {"payload": {"required": True}},
         "optional": {"format": "elf", "lhost": "", "lport": "4444", "additional_args": ""},
         "effectiveness": 0.85,
+    },
+    "metasploit": {
+        "desc": "Execute a Metasploit module via resource script",
+        "endpoint": "/api/tools/metasploit",
+        "method": "POST",
+        "category": "exploitation",
+        "params": {"module": {"required": True}},
+        "optional": {"options": {}, "additional_args": ""},
+        "effectiveness": 0.90,
+    },
+    "exploit_db": {
+        "desc": "Search Exploit-DB via searchsploit",
+        "endpoint": "/api/tools/exploit-db",
+        "method": "POST",
+        "category": "exploitation",
+        "params": {"query": {"required": True}},
+        "optional": {"additional_args": ""},
+        "effectiveness": 0.88,
     },
     # ---- Brute Force ----
     "hydra": {
@@ -399,6 +482,93 @@ TOOLS: Dict[str, dict] = {
         "params": {"hostname": {"required": True}},
         "optional": {"username": "", "password": "", "authtype" : "NTLM"},
         "effectiveness": 0.85,
+    },
+    "adidnsdump": {
+        "desc": "Dump AD-integrated DNS records",
+        "endpoint": "/api/tools/active_directory/adidnsdump",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {"target": {"required": True}},
+        "optional": {"username": "", "password": "", "zone": "", "additional_args": ""},
+        "effectiveness": 0.84,
+    },
+    "certipy": {
+        "desc": "Certipy AD CS enumeration and abuse helper",
+        "endpoint": "/api/tools/active_directory/certipy",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {"action": {"required": True}},
+        "optional": {"target": "", "username": "", "password": "", "dc_ip": "", "additional_args": ""},
+        "effectiveness": 0.90,
+    },
+    "certipy_ad": {
+        "desc": "Certipy AD CS enumeration and abuse helper",
+        "endpoint": "/api/tools/active_directory/certipy",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {"action": {"required": True}},
+        "optional": {"target": "", "username": "", "password": "", "dc_ip": "", "additional_args": ""},
+        "effectiveness": 0.90,
+        "parent_tool": "certipy",
+    },
+    "mitm6": {
+        "desc": "IPv6 DNS takeover and credential interception helper",
+        "endpoint": "/api/tools/active_directory/mitm6",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {"interface": {"required": True}},
+        "optional": {"domain": "", "additional_args": ""},
+        "effectiveness": 0.82,
+    },
+    "pywerview": {
+        "desc": "PowerView-style AD reconnaissance in Python",
+        "endpoint": "/api/tools/active_directory/pywerview",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {"request": {"required": True}, "target": {"required": True}},
+        "optional": {"username": "", "password": "", "dc_ip": "", "additional_args": ""},
+        "effectiveness": 0.85,
+    },
+    "bloodhound": {
+        "desc": "Collect BloodHound graph data from Active Directory",
+        "endpoint": "/api/tools/active_directory/bloodhound",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {
+            "domain": {"required": True},
+            "username": {"required": True},
+            "password": {"required": True},
+            "dc_ip": {"required": True},
+        },
+        "optional": {"additional_args": ""},
+        "effectiveness": 0.90,
+    },
+    "bloodhound_python": {
+        "desc": "Collect BloodHound graph data from Active Directory",
+        "endpoint": "/api/tools/active_directory/bloodhound",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {
+            "domain": {"required": True},
+            "username": {"required": True},
+            "password": {"required": True},
+            "dc_ip": {"required": True},
+        },
+        "optional": {"additional_args": ""},
+        "effectiveness": 0.90,
+        "parent_tool": "bloodhound",
+    },
+    "impacket": {
+        "desc": "Execute a validated Impacket script with explicit options",
+        "endpoint": "/api/tools/active_directory/impacket",
+        "method": "POST",
+        "category": "active_directory",
+        "params": {
+            "script": {"required": True},
+            "target": {"required": True},
+        },
+        "optional": {"options": {}, "extra_args": ""},
+        "effectiveness": 0.89,
     },
     "impacket-scripts": {
         "desc": "Execute Impacket scripts with dynamic arguments (e.g. GetADUsers, secretsdump, smbclient, psexec)",
@@ -585,7 +755,7 @@ TOOLS: Dict[str, dict] = {
         "method": "POST",
         "category": "wifi_pentest",
         "params": {
-            "capture_files": {"required": True},
+            "capture_files": {"required": True, "type": "list"},
             "wordlist":      {"required": True},
         },
         "optional": {"bssid": ""},
@@ -624,7 +794,7 @@ TOOLS: Dict[str, dict] = {
         "category": "wifi_pentest",
         "params": {
             "interface":   {"required": True},
-            "attack_mode": {"required": True},
+            "attack_mode": {"required": True, "type": "int"},
         },
         "optional": {
             "bssid":      "",
@@ -725,6 +895,33 @@ TOOLS: Dict[str, dict] = {
         "params": {},
         "optional": {"additional_args": ""},
         "effectiveness": 0.82,
+    },
+    "kube_bench": {
+        "desc": "Kubernetes CIS benchmark scanner",
+        "endpoint": "/api/tools/kube-bench",
+        "method": "POST",
+        "category": "cloud",
+        "params": {},
+        "optional": {"targets": "", "version": "", "config_dir": "", "output_format": "json", "additional_args": ""},
+        "effectiveness": 0.84,
+    },
+    "checkov": {
+        "desc": "Infrastructure-as-code misconfiguration scanner",
+        "endpoint": "/api/tools/checkov",
+        "method": "POST",
+        "category": "cloud",
+        "params": {},
+        "optional": {"directory": ".", "framework": "", "check": "", "skip_check": "", "output_format": "json", "additional_args": ""},
+        "effectiveness": 0.86,
+    },
+    "terrascan": {
+        "desc": "Terraform and IaC policy scanner",
+        "endpoint": "/api/tools/terrascan",
+        "method": "POST",
+        "category": "cloud",
+        "params": {},
+        "optional": {"scan_type": "all", "iac_dir": ".", "policy_type": "", "output_format": "json", "severity": "", "additional_args": ""},
+        "effectiveness": 0.84,
     },
     # ---- Bots and AI-driven tools ----
     "bbot": {
@@ -833,6 +1030,24 @@ TOOLS: Dict[str, dict] = {
         "params": {"binary": {"required": True}},
         "optional": {"commands": "", "script_file": "", "additional_args": ""},
         "effectiveness": 0.88,
+    },
+    "volatility3": {
+        "desc": "Volatility 3 memory forensics framework",
+        "endpoint": "/api/tools/volatility3",
+        "method": "POST",
+        "category": "forensics",
+        "params": {"memory_file": {"required": True}, "plugin": {"required": True}},
+        "optional": {"output_file": "", "additional_args": ""},
+        "effectiveness": 0.84,
+    },
+    "sqlite": {
+        "desc": "Execute a SQLite query directly against a database file",
+        "endpoint": "/api/tools/sqlite",
+        "method": "POST",
+        "category": "forensics",
+        "params": {"db_path": {"required": True}, "query": {"required": True}},
+        "optional": {},
+        "effectiveness": 0.78,
     },
     # ---- Exploitation (extended) ----
     "pwntools": {

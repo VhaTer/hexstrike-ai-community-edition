@@ -1,153 +1,34 @@
 ---
 name: cloud-audit
-description: Cloud and container security auditing workflow using prowler, trivy, kube-hunter, and docker-bench for AWS, GCP, Azure, Kubernetes, and container images
+description: Cloud, container, and Kubernetes security workflows for HexStrike tools. Use when the target is a cloud account, image, cluster, or IaC project rather than a traditional host scan.
 ---
 
-# cloud-audit
+# Cloud Audit
 
-Cloud and container security auditing workflow for HexStrike AI. Use this skill when a user wants to audit AWS/Azure/GCP configurations, scan container images for CVEs, assess a Kubernetes cluster, or check Docker host security.
+## When to use
 
-## Workflow
+Use this skill for:
 
-### AWS / Azure / GCP audit (prowler)
+- cloud posture review
+- container image or filesystem CVE scanning
+- Kubernetes exposure assessment
+- IaC security checks
 
-Prowler runs hundreds of compliance checks against cloud provider APIs.
+## Working Style
 
-**AWS (default profile):**
+1. identify the environment first: cloud account, image, cluster, or IaC repo
+2. use the environment-specific tool instead of forcing one scanner onto everything
+3. keep active cluster testing explicit
 
-```
-run_tool(tool="prowler", provider="aws", profile="default")
-```
+Preferred entrypoint:
 
-**AWS with specific region and checks:**
-
-```
-run_tool(tool="prowler", provider="aws",
-         profile="default",
-         region="us-east-1",
-         checks="s3,iam,ec2")
+```python
+prowler(provider="aws", profile="default")
 ```
 
-**Azure:**
+See `REFERENCE.md` for common cloud and container calls.
 
-```
-run_tool(tool="prowler", provider="azure",
-         additional_args="--az-cli-auth")
-```
+## Notes
 
-**GCP:**
-
-```
-run_tool(tool="prowler", provider="gcp",
-         additional_args="--project-id <gcp_project_id>")
-```
-
-Key prowler check categories:
-
-| Category | Checks |
-|---|---|
-| `iam` | Overprivileged roles, unused access keys, MFA |
-| `s3` | Public buckets, encryption, logging |
-| `ec2` | Security groups, IMDSv2, public snapshots |
-| `rds` | Encryption, public access, backups |
-| `cloudtrail` | Logging enabled, log validation |
-| `guardduty` | Threat detection enabled |
-
-### Container image vulnerability scan (trivy)
-
-Scan a container image for CVEs, secrets, and misconfigurations:
-
-```
-# Scan a Docker image
-run_tool(tool="trivy", target="<image>:<tag>", scan_type="image")
-
-# Filter by severity
-run_tool(tool="trivy", target="nginx:latest",
-         scan_type="image",
-         severity="HIGH,CRITICAL")
-
-# Scan a local filesystem
-run_tool(tool="trivy", target="/path/to/project", scan_type="fs")
-
-# Scan a running container
-run_tool(tool="trivy", target="<container_id>", scan_type="image")
-```
-
-### Docker host security benchmark (docker_bench)
-
-Check the Docker host and daemon configuration against CIS Docker Benchmark:
-
-```
-run_tool(tool="docker_bench")
-```
-
-Focus areas:
-- Docker daemon configuration
-- Container runtime settings
-- Image security (no root, minimal base images)
-- Network and logging configuration
-
-### Kubernetes penetration testing (kube-hunter)
-
-Assess a Kubernetes cluster for known attack vectors:
-
-```
-# Passive discovery (safe, no exploit attempts)
-run_tool(tool="kube-hunter", additional_args="--remote <k8s_api_ip>")
-
-# Active testing (attempts exploitation)
-run_tool(tool="kube-hunter", additional_args="--remote <k8s_api_ip> --active")
-```
-
-Kube-hunter checks for:
-- Unauthenticated API server access
-- Exposed kubelet ports (10250/10255)
-- RBAC misconfigurations
-- Container escape vulnerabilities
-- etcd exposure
-
-## Cloud security priorities by risk
-
-| Finding | Severity | Tool |
-|---|---|---|
-| Public S3 bucket | Critical | prowler (s3) |
-| Root account has access keys | Critical | prowler (iam) |
-| Critical CVE in container image | Critical | trivy |
-| K8s API server unauthenticated | Critical | kube-hunter |
-| MFA not enabled | High | prowler (iam) |
-| Overprivileged IAM role | High | prowler (iam) |
-| Container running as root | High | trivy, docker_bench |
-| RDS publicly accessible | High | prowler (rds) |
-| CloudTrail not enabled | Medium | prowler (cloudtrail) |
-
-## Typical engagement flow
-
-```
-1. prowler (cloud config audit)
-   → identify misconfigurations and overprivileged IAM
-
-2. trivy (container/image scan)
-   → identify CVEs in deployed images
-
-3. docker_bench (if Docker host access)
-   → CIS benchmark gaps
-
-4. kube-hunter (if Kubernetes)
-   → runtime cluster attack surface
-```
-
-## Tips
-
-- Prowler requires cloud credentials configured (`aws configure`, `az login`, etc.) before running.
-- Trivy `CRITICAL` findings should always be addressed before deployment — use it in CI/CD pipelines.
-- Kube-hunter `--active` mode actually attempts exploits — only use with explicit authorisation.
-- Run trivy against base images as well as final images — vulnerabilities often come from upstream layers.
-
-## HexStrike Tool Reference
-
-| Tool | Use case |
-|---|---|
-| `prowler` | AWS/Azure/GCP compliance and security audit |
-| `trivy` | Container image / filesystem CVE scan |
-| `docker_bench` | Docker CIS benchmark assessment |
-| `kube-hunter` | Kubernetes cluster penetration testing |
+- some tools require local credentials or cloud CLI configuration before use
+- active Kubernetes probing should be treated as higher risk than passive config review

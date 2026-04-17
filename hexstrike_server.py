@@ -28,9 +28,8 @@ API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 
 if __name__ == "__main__":
-    logger.info("🚀 Starting HexStrike Pulse Standalone Server (Phase 3)")
+    logger.info("🚀 Starting HexStrike Pulse Standalone Server")
     logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
-    logger.info("🔧 Direct tool execution - no more Flask dependency")
 
     # Phase 3: Standalone MCP server with native HTTP transport
     mcp = setup_mcp_server_standalone(logger)
