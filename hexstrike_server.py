@@ -14,6 +14,7 @@ from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from mcp_core.server_setup import setup_mcp_server_standalone
+from server_core.modern_visual_engine import ModernVisualEngine
 
 # ============================================================================
 # LOGGING CONFIGURATION (MUST BE FIRST)
@@ -28,6 +29,7 @@ API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 
 if __name__ == "__main__":
+    print(ModernVisualEngine.create_banner())
     logger.info("🚀 Starting HexStrike Pulse Standalone Server")
     logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
 
@@ -81,4 +83,5 @@ if __name__ == "__main__":
         transport="http",
         host=API_HOST,
         port=API_PORT,
+        log_level="warning",
     )
