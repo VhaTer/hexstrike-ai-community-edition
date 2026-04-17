@@ -1,8 +1,8 @@
 # HexStrike CE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-04-16 (session 6)
+**Last updated:** 2026-04-17 (session 7)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** `30bb83c`
+**HEAD:** `249aac9`
 **FastMCP:** 3.1.1
 
 ---
@@ -158,7 +158,7 @@ async def tool_name(ctx: Context, target: str, ...) -> Dict[str, Any]:
 **IMPORTANT :**
 
 - `ctx: Context` injecté automatiquement par type hint reste valide
-- `ctx: Context = CurrentContext()` est aussi supporté en FastMCP 3.x et constitue maintenant la forme explicite recommandée dans la doc upstream
+- `CurrentContext()` **existe** dans FastMCP 3.1.1 mais dans `fastmcp.server.dependencies` — c'est un **helper de DI** (dependency injection) utilisé comme valeur par défaut : `ctx: Context = CurrentContext()`. Le framework l'injecte **automatiquement** via `transform_context_annotations()` sur tout paramètre `ctx: Context` sans default. Donc écrire `ctx: Context` suffit — `CurrentContext()` explicite est redondant mais valide. Ne pas confondre avec un appel runtime `CurrentContext()` hors d'une tool function (lève RuntimeError).
 
 ### Skills pattern — actuel
 
