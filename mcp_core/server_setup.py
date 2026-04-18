@@ -468,7 +468,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         logger = logging.getLogger(__name__)
 
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai-pulse", transforms=transforms)
+    mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
 
     _register_skills(mcp, logger)
 

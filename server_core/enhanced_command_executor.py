@@ -143,9 +143,23 @@ class EnhancedCommandExecutor:
         logger.info(f"⏱️  TIMEOUT: {self.timeout}s | PID: Starting...")
 
         try:
+            # Use argv list when possible to avoid shell injection (CODEX P0 fix)
+            # Fall back to shell=True only when the command contains shell operators
+            import shlex
+            _SHELL_OPERATORS = ('|', '>', '<', '&&', '||', ';', '`', '$(')
+            needs_shell = any(op in self.command for op in _SHELL_OPERATORS)
+            if needs_shell:
+                cmd_arg = self.command
+            else:
+                try:
+                    cmd_arg = shlex.split(self.command)
+                except ValueError:
+                    cmd_arg = self.command
+                    needs_shell = True
+
             self.process = subprocess.Popen(
-                self.command,
-                shell=True,
+                cmd_arg,
+                shell=needs_shell,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
