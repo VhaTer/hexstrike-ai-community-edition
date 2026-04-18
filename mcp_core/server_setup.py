@@ -720,7 +720,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         return result
 
-    @mcp.tool(description="Return the local skill bundle associated with a HexStrike tool")
+    @mcp.tool(
+        description="Return the local skill bundle associated with a HexStrike tool",
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+    )
     async def get_tool_skill(
         ctx: Context,
         tool_name: str,
@@ -758,6 +761,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         mcp.tool(
             name=public_name,
             description=tool_def["desc"],
+            annotations={"readOnlyHint": False, "openWorldHint": True},
         )(wrapper)
         typed_tools_registered += 1
 
@@ -776,7 +780,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         return json.dumps({
             "status":         "healthy",
             "server":         "hexstrike-ai-pulse",
-            "fastmcp":        "3.1.1",
+            "fastmcp":        "3.2.4",
             "uptime_seconds": uptime,
             "tools_count":    len(DIRECT_TOOLS),
             "cached_scans":   len(_scan_cache),
