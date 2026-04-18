@@ -696,9 +696,22 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, lambda: exec_func(tool_key, params)
+        future = asyncio.ensure_future(
+            loop.run_in_executor(None, lambda: exec_func(tool_key, params))
         )
+
+        await ctx.report_progress(0, 100)
+        phases = [(25, "🔧 Preparing..."), (50, "⚙️  Running..."), (75, "📊 Processing results...")]
+        tick = 12
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=tick)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        result = await future
+        await ctx.report_progress(100, 100)
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
