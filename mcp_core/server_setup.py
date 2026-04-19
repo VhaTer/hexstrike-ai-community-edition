@@ -643,6 +643,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.error(f"❌ Unknown tool: {tool_name}")
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
 
+        # Skill guidance — inject relevant SKILL.md context before execution
+        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+        if skill_name:
+            skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
+            if skill_doc:
+                # Extract first meaningful lines (skip frontmatter, get title + when-to-use)
+                lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
+                header = "\n".join(lines[:4])
+                await ctx.info(f"📚 [{skill_name}] {header}")
+
         # Elicitation - destructive tools require explicit user confirmation
         destructive_request = _build_destructive_confirmation(tool_name, params)
         if destructive_request:
