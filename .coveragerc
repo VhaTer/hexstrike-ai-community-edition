@@ -1,0 +1,25 @@
+[run]
+branch = True
+omit = 
+    tests/*
+    */__pycache__/*
+    */*_direct.py
+    mcp_tools/*/__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise AssertionError
+    raise NotImplementedError
+    def main\(\):
+    logging.getLogger\(__name__\)
+    args = parse_args\(\)
+    run_mcp\(args,
+
+[paths]
+source = .
+
+[pytest]
+testpaths = tests
+python_files = test_*.py *_test.py
