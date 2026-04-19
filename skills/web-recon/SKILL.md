@@ -1,31 +1,40 @@
 ---
 name: web-recon
-description: Web application reconnaissance workflows for HexStrike tools. Use when you need HTTP probing, content discovery, crawling, parameter discovery, vhost enumeration, or lightweight fingerprinting.
+description: Web application reconnaissance via endpoint mapping, content discovery, and technology fingerprinting. Use to build complete request surface before vulnerability scanning.
 ---
 
 # Web Recon
 
 ## When to use
 
-Use this skill when a target is primarily HTTP or HTTPS and the goal is to map surface area before exploitation.
+Use this skill in **Phase 2: Enumeration** when mapping HTTP/HTTPS application surface:
+
+- Fingerprint web technologies, WAF, and server configuration
+- Enumerate hidden content (directories, files, backup copies)
+- Extract parameters, forms, and endpoints via crawling/spidering
+- Identify virtual hosts and subdomain patterns
+- Collect historical endpoints via archived sources
 
 ## Working Style
 
-1. fingerprint first with `httpx`, `whatweb`, `wafw00f`, or `testssl`
-2. choose content discovery with `ffuf`, `feroxbuster`, `gobuster`, or `dirsearch`
-3. crawl and expand with `katana`, `gau`, `waybackurls`, `arjun`, `paramspider`, or `x8`
-4. hand off interesting endpoints to `web-vuln`
+**Controlled expansion prevents WAF triggers and noise:**
 
-Preferred entrypoint:
+1. **Fingerprint** — `httpx -p -t` or `whatweb` → detect tech, WAF, SSL config
+2. **Check WAF** — `wafw00f` automatically triggers adaptive parameter optimization (stealth mode)
+3. **Content Discovery** — `ffuf` or `feroxbuster` with detected tech wordlists; avoid aggressive `-t` unless authorized
+4. **Crawling** — `katana` (modern) or `waybackurls` (historical); then `arjun`/`paramspider` for params
+5. **Handoff** → `web-vuln` with refined URL list
+
+**Entry point:**
 
 ```python
-httpx(target="app.example.com", probe=True, tech_detect=True)
+httpx(target="app.example.com", ports="80,443", probe=True, tech_detect=True)
 ```
-
-For concrete calls and common parameters, read `REFERENCE.md`.
 
 ## Notes
 
-- do not brute-force blindly before checking whether a WAF is present
-- adapt extensions and wordlists to detected tech
-- `anew` and `uro` are cleanup helpers and should be used to reduce noise, not as primary recon steps
+- **WAF Avoidance:** Always detect WAF first; HexStrike auto-applies stealth mode when detected
+- **Effectiveness:** httpx (0.95), ffuf (0.90), katana (0.92); dalfox crawl has 15% FP on XSS
+- **Wordlists:** Adapt to detected CMS (WordPress → wp-content, Drupal → sites/default)
+- **False Positives:** Collect 404 baseline before brute-forcing to filter noise
+- **Avoid:** Brute-forcing before WAF check; aggressive timing on unverified targets

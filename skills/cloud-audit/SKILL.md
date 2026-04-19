@@ -1,34 +1,41 @@
 ---
 name: cloud-audit
-description: Cloud, container, and Kubernetes security workflows for HexStrike tools. Use when the target is a cloud account, image, cluster, or IaC project rather than a traditional host scan.
+description: Cloud infrastructure, container image, and Kubernetes security assessment via IAM review, secrets detection, and RBAC analysis.
 ---
 
 # Cloud Audit
 
 ## When to use
 
-Use this skill for:
+Use this skill when target is cloud infrastructure rather than traditional network:
 
-- cloud posture review
-- container image or filesystem CVE scanning
-- Kubernetes exposure assessment
-- IaC security checks
+- Cloud account security posture (AWS, Azure, GCP, DO)
+- Container image CVE and secrets scanning (Docker, OCI)
+- Kubernetes cluster RBAC and exposure assessment
+- Infrastructure-as-Code (Terraform, CloudFormation) security review
+- S3/blob storage misconfiguration detection
 
 ## Working Style
 
-1. identify the environment first: cloud account, image, cluster, or IaC repo
-2. use the environment-specific tool instead of forcing one scanner onto everything
-3. keep active cluster testing explicit
+**Environment-specific tools prevent wasted effort:**
 
-Preferred entrypoint:
+1. **Identify Platform** — AWS, Azure, GCP, Kubernetes, Docker, etc.
+2. **Cloud Account** — `prowler` (AWS/Azure/GCP compliance) or `pacu` (AWS exploitation path)
+3. **Container Image** — `trivy` (fast CVE + secrets scan) or `grype` (detailed report)
+4. **Kubernetes** — `kube-hunter` (passive), `kubectl` (active RBAC/secret enumeration) — passive only without authorization
+5. **IaC Review** — `checkov` or `terrascan` on Terraform/CloudFormation before deployment
+
+**Entry point:**
 
 ```python
-prowler(provider="aws", profile="default")
+prowler(provider="aws", profile="default", region="us-east-1")
 ```
-
-See `REFERENCE.md` for common cloud and container calls.
 
 ## Notes
 
-- some tools require local credentials or cloud CLI configuration before use
-- active Kubernetes probing should be treated as higher risk than passive config review
+- **Effectiveness:** prowler (0.91), trivy (0.95), kube-hunter (0.85), checkov (0.89)
+- **Credentials Required:** AWS CLI config, Azure CLI login, or Kubernetes kubeconfig
+- **Detection:** Cloud audit is immediately logged in CloudTrail/Activity Log; assume blue team visibility
+- **Active Cluster Testing:** `kubectl exec`, pod escape, and RBAC abuse require explicit scope confirmation
+- **Secrets in Images:** Use `trivy` with registry scan; private registries require auth credentials
+- **Avoid:** Credential harvesting from containers without incident response plan; active Kubernetes exploitation without blue team coordination

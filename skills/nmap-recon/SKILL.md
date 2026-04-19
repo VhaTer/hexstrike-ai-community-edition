@@ -1,37 +1,36 @@
 ---
 name: nmap-recon
-description: Network and service reconnaissance workflows for HexStrike tools. Use when you need host discovery, port discovery, service enumeration, or scripted Nmap follow-up.
+description: Network reconnaissance via host discovery, port scanning, and service fingerprinting. Use during early reconnaissance phase to map attack surface and identify services.
 ---
 
 # Nmap Recon
 
 ## When to use
 
-Use this skill when the task is primarily network reconnaissance:
+Use this skill in **Phase 1: Reconnaissance** when the objective is network-layer intelligence:
 
-- identify live hosts on a subnet
-- discover open TCP or UDP ports
-- enumerate service banners and versions
-- follow up with targeted NSE scripts
+- Identify live hosts on internal/external subnet (ARP, ICMP, TCP)
+- Discover open ports and services (UDP/TCP)
+- Enumerate service versions and OS fingerprints
+- Apply NSE scripts for targeted service interrogation
 
 ## Working Style
 
-Start broad, then narrow:
+**Staged scanning minimizes noise and false positives:**
 
-1. use `arp_scan`, `rustscan`, or `masscan` to discover hosts or ports quickly
-2. confirm and enrich with `nmap`
-3. use `nmap_advanced` only once you know which services justify extra NSE traffic
+1. **Discovery** — `arp_scan` (subnet), `masscan` (fast port sweep), or `rustscan` (dual-mode)
+2. **Enumeration** — `nmap -sCV` on confirmed ports (versions + scripts)
+3. **Enrichment** — `nmap_advanced` only on services requiring deeper interrogation (e.g., SMB, LDAP, HTTP)
 
-Prefer the runtime entrypoint:
+**Entry point:**
 
 ```python
-nmap(target="10.10.10.10", ports="22,80,443", scan_type="-sCV")
+nmap(target="10.10.10.0/24", ports="22,80,443,445", scan_type="-sCV")
 ```
-
-For the exact parameter shapes and copy-pasteable calls, read `REFERENCE.md`.
 
 ## Notes
 
-- keep scans scoped to authorised targets only
-- start with lower-noise modes before aggressive timing or broad NSE runs
-- if a user asks how to approach recon, explain the sequence first instead of jumping straight to a noisy full-port scan
+- **Authorization:** Verify scope explicitly before scanning; network scans are immediately detectable
+- **Stealth:** Timing templates `-T1` to `-T2` reduce detection; avoid `-T5` in monitored networks
+- **Handoff:** Pass live hosts and open ports → `web-recon`, `smb-enum`, or `active-directory`
+- **Avoid:** Full port scans before verifying target scope (noise, signatures logged)

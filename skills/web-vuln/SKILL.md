@@ -1,30 +1,38 @@
 ---
 name: web-vuln
-description: Web vulnerability assessment workflows for HexStrike tools. Use when a web target has already been identified and you need focused scanning for CVEs, injection, XSS, traversal, or framework-specific weaknesses.
+description: Web vulnerability scanning via template-based CVE matching, injection testing, and traversal detection. Use after endpoint mapping to find exploitable weaknesses.
 ---
 
 # Web Vuln
 
 ## When to use
 
-Use this skill after recon has produced concrete URLs, parameters, technologies, or candidate weaknesses.
+Use this skill in **Phase 3: Vulnerability Assessment** after recon has identified concrete endpoints:
+
+- Identify known CVEs in detected frameworks/plugins (nuclei)
+- Test injection vectors (SQLi, command injection, template injection)
+- Detect path traversal, XXE, SSRF, or authentication bypass
+- Validate parameter handling and input validation flaws
 
 ## Working Style
 
-1. start with `nuclei` or `nikto` for broad signal
-2. move to targeted tools such as `sqlmap`, `dalfox`, `xsser`, `dotdotpwn`, or `commix`
-3. reserve more invasive actions for URLs and parameters that justify them
+**Reduce false positives by targeting confirmed attack surface:**
 
-Preferred entrypoint:
+1. **Broad Scan** — `nuclei` with severity filter (critical, high only on first pass)
+2. **Targeted Injection** — `sqlmap` or `commix` only on identified params; avoid blind without evidence
+3. **XSS/Traversal** — `dalfox` or `xsser` on forms; `dotdotpwn` on suspected traversal endpoints
+4. **Parameter Fuzzing** — `arjun` output feeds refined fuzzing (minimize noise)
+
+**Entry point:**
 
 ```python
-nuclei(target="https://app.example.com", severity="critical,high")
+nuclei(target="https://app.example.com", tags="cve,auth", severity="critical,high")
 ```
-
-Read `REFERENCE.md` before constructing targeted payload-heavy requests.
 
 ## Notes
 
-- web recon should feed this skill, not the other way around
-- use focused URLs and parameters whenever possible; generic blanket scans produce noise
-- if the user is asking for exploitation or payload generation after a confirmed finding, switch to `exploitation`
+- **Prerequisites:** Always run `web-recon` first; blind scanning produces noise and false positives
+- **Effectiveness:** nuclei (0.93), sqlmap (0.85), dalfox (0.82); dalfox XSS has 15% FP rate
+- **Targeted Over Blanket:** Use specific URLs/params, not full domain scans
+- **Avoid:** Invasive payload injection on endpoints not confirmed via recon; test timeout management on long scans
+- **Handoff:** Confirmed vulns → `exploitation` for payload crafting

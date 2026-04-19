@@ -1,35 +1,38 @@
 ---
 name: password-cracking
-description: Hash identification, offline cracking, and credential attack workflows for HexStrike tools. Use when you have hashes, captured handshakes, or login services that need controlled password testing.
+description: Hash identification, offline cracking, and credential testing against services. Use to recover passwords from captured hashes or validate weak credentials.
 ---
 
 # Password Cracking
 
 ## When to use
 
-Use this skill for:
+Use this skill when you have:
 
-- unknown hash identification
-- offline cracking with `john` or `hashcat`
-- credential brute-force against a specific service
-- validating password reuse with approved scope
+- Captured hashes (NTLM, SHA, bcrypt, WordPress, etc.)
+- WiFi handshakes (WPA2/WPA3 PMKID/EAPOL)
+- Weak credentials to test against services (SMB, SSH, HTTP)
+- Password spraying opportunity (low lockout threshold)
 
 ## Working Style
 
-1. identify the format first with `hashid`
-2. prefer offline cracking before network brute-force
-3. keep brute-force targeted and rate-aware
+**Always offline before online; avoid account lockout:**
 
-Preferred entrypoint:
+1. **Identify** — `hashid` on unknown format; confirm via hash characteristics (length, prefix)
+2. **Crack Offline** — `hashcat` (GPU fast) or `john` (CPU/rule-based); prefer wordlist + rules over bruteforce
+3. **Online Testing** — `hydra` or `medusa` with rate limiting; confirm target lockout policy first
+4. **Validation** — Confirm creds on actual service before moving to exploitation
+
+**Entry point:**
 
 ```python
-hashid(hash="<paste_hash_here>")
+hashid(hash="5d41402abc4b2a76b9719d911017c592")
 ```
-
-See `REFERENCE.md` for common cracking and brute-force calls.
 
 ## Notes
 
-- do not guess the hash type
-- for web, SMB, or service-specific follow-up, combine this skill with the relevant recon skill
-- if the user only needs enumeration of shares or auth methods, use `smb-enum` or `active-directory` first
+- **Prerequisites:** Never guess hash type; `hashid` eliminates misidentification
+- **Effectiveness:** hashcat (0.95 GPU), john (0.85), hydra (0.80 with rate limiting)
+- **Lockout Risk:** Check account lockout policy; use `--spraying` mode (low, distributed attempts)
+- **Handoff:** Confirmed creds → `smb-enum`, `active-directory`, or `exploitation`
+- **Avoid:** Online brute-force without prior service enumeration; dictionary attacks on protected services without frequency analysis

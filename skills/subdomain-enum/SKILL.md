@@ -1,37 +1,40 @@
 ---
 name: subdomain-enum
-description: Domain and subdomain discovery workflows for HexStrike recon tools. Use when the target is an internet-facing domain and you need asset expansion before web or network follow-up.
+description: Passive and active subdomain discovery via DNS, certificates, and source harvesting. Use to expand internet-facing attack surface before web recon.
 ---
 
 # Subdomain Enum
 
 ## When to use
 
-Use this skill for passive-first asset discovery on a domain:
+Use this skill in **Phase 1: Reconnaissance** for external asset discovery:
 
-- subdomain collection
-- DNS enumeration
-- certificate and public source harvesting
-- expanding a bug bounty or external attack surface
+- Passive subdomain collection (DNS, certificates, historical sources)
+- Zone transfer attempts and DNS bruteforce (only on authorized targets)
+- Subdomain takeover validation
+- Virtual host enumeration via DNS/HTTP
 
 ## Working Style
 
-Sequence the work:
+**Passive-first avoids detection; active only when authorized:**
 
-1. start with `subfinder` and `amass`
-2. add `theharvester`, `dnsenum`, or `fierce` when you need broader DNS context
-3. probe live hosts afterward with `httpx` or feed results into `web-recon`
+1. **Passive** — `subfinder` (50+ sources) or `amass` (passive mode); fast, undetectable
+2. **Historical** — `theharvester` or `dnsenum` (cert history, archived DNS)
+3. **Active DNS** — `fierce` or `dnsbrute` (zone transfer, dict attack) only if scope includes active DNS
+4. **Validation** — Probe live subdomains with `httpx`, then hand off to `web-recon`
+5. **Cleanup** — Deduplicate and normalize before downstream tools
 
-Prefer:
+**Entry point:**
 
 ```python
-subfinder(domain="example.com")
+subfinder(domain="example.com", passive=True)
 ```
-
-See `REFERENCE.md` for the main tool calls.
 
 ## Notes
 
-- keep passive enumeration first when stealth matters
-- normalise and deduplicate before downstream web scanning
-- if the request is really OSINT on people, usernames, or org metadata, use `osint-recon` instead
+- **Stealth:** Passive sources are invisible; active DNS enumeration is immediately logged
+- **Effectiveness:** subfinder (0.92), amass passive (0.90), fierce (0.78)
+- **False Positives:** DNS wildcards inflate results; use resolver confirmation before web scanning
+- **Takeover Risk:** Check CNAME records for orphaned/vulnerable subdomains
+- **Handoff:** Live subdomains → `web-recon`, then `web-vuln`
+- **Avoid:** Active DNS enumeration before confirming authorization; zone transfers on production domains
