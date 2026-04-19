@@ -1,9 +1,9 @@
 # HexStrike AI-PULSE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-04-16 (session 7)
+**Last updated:** 2026-04-19 (session 8)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** `5edad09` — fix(thread-leak): join reader threads after timeout kill
-**FastMCP:** 3.1.1
+**HEAD:** `pending`
+**FastMCP:** 3.2.4
 
 ---
 
