@@ -691,12 +691,44 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             except Exception:
                 pass
         else:
-            # Auto-detect from cache (whatweb/httpx results for this target)
+            # Auto-detect: session state first, then scan cache
             target = params.get("target") or params.get("url") or params.get("domain", "")
             if target:
-                tech_profile = _detect_from_cache(target)
-                if tech_profile:
-                    await ctx.info(f"🧠 Tech detected from cache: {tech_profile.summary()}")
+                # 1. Try session-persisted TechProfile (fastest — no recompute)
+                try:
+                    cached_dict = await ctx.get_state(f"tech:{target}")
+                    if cached_dict and isinstance(cached_dict, dict):
+                        tech_profile = TechProfile(
+                            web_servers = cached_dict.get("web_servers", []),
+                            frameworks  = cached_dict.get("frameworks", []),
+                            cms         = cached_dict.get("cms", []),
+                            databases   = cached_dict.get("databases", []),
+                            languages   = cached_dict.get("languages", []),
+                            security    = cached_dict.get("security", []),
+                            services    = cached_dict.get("services", []),
+                        )
+                        await ctx.info(f"🧠 Tech profile restored from session: {tech_profile.summary()}")
+                except Exception:
+                    pass
+
+                # 2. Fall back to scan cache if no session state
+                if tech_profile is None:
+                    tech_profile = _detect_from_cache(target)
+                    if tech_profile:
+                        await ctx.info(f"🧠 Tech detected from cache: {tech_profile.summary()}")
+                        # Persist to session state for subsequent calls
+                        try:
+                            await ctx.set_state(f"tech:{target}", {
+                                "web_servers": tech_profile.web_servers,
+                                "frameworks":  tech_profile.frameworks,
+                                "cms":         tech_profile.cms,
+                                "databases":   tech_profile.databases,
+                                "languages":   tech_profile.languages,
+                                "security":    tech_profile.security,
+                                "services":    tech_profile.services,
+                            })
+                        except Exception:
+                            pass  # session state unavailable — no-op
 
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
         optimizer_meta = params.pop("_optimizer", {})
