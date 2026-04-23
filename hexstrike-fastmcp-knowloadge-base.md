@@ -1,9 +1,10 @@
 # HexStrike AI-PULSE — FastMCP 3.x Knowledge Base
 
-**Last updated:** 2026-04-19 (session 8)
+**Last updated:** 2026-04-23 (session 9)
 **Branch:** `refactor/fastmcp-modernization`
-**HEAD:** `pending`
+**HEAD:** `9cb6e88`
 **FastMCP:** 3.2.4
+**Tests:** 1227 passed, 6 xfailed ✅
 
 ---
 
@@ -14,152 +15,137 @@
 | **Project** | **HexStrike AI-PULSE** 🐻🔴 |
 | **Fork** | <https://github.com/VhaTer/hexstrike-ai-community-edition> |
 | **Upstream** | <https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition> |
-| **Upstream branch** | `beta/nullbytecobra` (tag 1.3.0) |
-| **Our branch** | `refactor/fastmcp-modernization` → mergé sur `master` |
+| **Our branch** | `refactor/fastmcp-modernization` |
 | **Venv** | `hexstrike-env/bin/python3` |
-| **FastMCP** | 3.1.1 |
-| **Tests** | 261/261 ✅ |
+| **FastMCP** | 3.2.4 |
 | **Philosophy** | Fork indépendant — FastMCP 3.x natif, no Flask, real-time LLM streaming |
+
+### Machines
+
+| Machine | Path | OS |
+|---|---|---|
+| Laptop | `~/hexstrike-ai-community-edition` | Kali Linux WSL |
+| Desktop (PureHate) | `~/Labs/hexstrike-ai-community-edition` | Kali Linux natif |
 
 ---
 
 ## 🏗️ Architecture Phase 3 (Active)
 
-```bash
+```
 LLM / MCP Client
     ↓ MCP protocol (HTTP/SSE)
-hexstrike_server.py  →  mcp.run(transport="http", port=8888)
-    ↓ run_security_tool("gobuster", '{"url": "..."}')
-mcp_core/server_setup.py
-    ├── ctx.read_resource("skill://web-recon/SKILL.md")   # skill context
-    ├── _detect_from_cache(target)                         # auto TechProfile
-    ├── _build_destructive_confirmation()                  # granular safety
-    ├── _optimizer.optimize(tool, params, tech_profile)   # param optimization
-    └── exec_func(tool_key, params)                        # direct execution
+hexstrike_server.py  →  mcp.run(transport="http", port=8888, show_banner=False)
+    ↓
+mcp_core/server_setup.py — setup_mcp_server_standalone()
+    ├── SkillsDirectoryProvider(skills/, supporting_files="resources", reload=True)
+    ├── BM25SearchTransform — tool discovery
+    ├── run_security_tool()  — generic entrypoint
+    ├── get_tool_skill()     — skill bundle helper
+    ├── typed MCP tool wrappers (auto-générés depuis tool_registry.py)
+    ├── Resources: health://server, scan://{target}/latest|{tool}, scan://cache/list
+    └── Prompts: 5 workflow prompts (bug_bounty_recon, wifi_attack_chain, ...)
           ↓
     mcp_core/*_direct.py  →  server_core/command_executor.py  →  subprocess
 ```
 
 ---
 
-## ✅ Ce qui est fait — Sessions 1-7
+## ✅ Features MCP Context — Complètes
 
-### Phase 1 — Context Migration
+| Feature | Implémentation | Notes |
+|---|---|---|
+| `ctx.info()` / `ctx.error()` | ✅ run_security_tool | Streaming vers LLM |
+| `ctx.report_progress()` | ✅ run_security_tool | Phases 0/25/50/75/100%, tick 12s |
+| `ctx.elicit()` | ✅ elicitation.py | 5 tools destructifs, `response_type=bool` |
+| `ctx.read_resource()` | ✅ server_setup.py | SKILL.md injecté avant exécution |
+| `ctx.set_state()` / `ctx.get_state()` | ✅ server_setup.py | TechProfile persisté par session/target |
+| LLM Sampling | — hors scope | Nécessite client supportant sampling |
 
-- 105 tools migrés à `ctx: Context`
-- 83 tools avec `ctx.report_progress()`
+### ctx.set_state() — comportement
 
-### Phase 2 — 16 *_direct.py Modules (101+ tools)
+```python
+# Lecture : session state d'abord (plus rapide), puis scan cache
+cached_dict = await ctx.get_state(f"tech:{target}")
+# → reconstruit TechProfile depuis dict JSON
 
-```markdown
-wifi_direct.py, recon_direct.py, net_scan_direct.py, web_scan_direct.py,
-web_fuzz_direct.py, password_cracking_direct.py, smb_enum_direct.py,
-exploit_framework_direct.py, web_recon_direct.py, security_direct.py,
-misc_direct.py, osint_direct.py, active_directory_direct.py,
-testssl_direct.py, web_probe_direct.py, vuln_intel_direct.py
+# Écriture : après détection depuis scan cache
+await ctx.set_state(f"tech:{target}", {
+    "web_servers": [...], "frameworks": [...], "cms": [...], ...
+})
+# Graceful degradation : except Exception: pass si session indisponible
 ```
-
-### Phase 3 — Standalone Server (Active ✅)
-
-- `hexstrike_server.py` → `mcp.run(transport="http", port=8888)` — zéro Flask
-- `setup_mcp_server_standalone()` dans `server_setup.py`
-- Resources MCP : `health://server`, `scan://{target}/latest`, `scan://{target}/{tool_name}`, `scan://cache/list`
-- `@mcp.prompt()` — 5 workflow prompts : `bug_bounty_recon`, `wifi_attack_chain`, `ctf_web_challenge`, `smb_lateral_movement`, `cloud_security_audit`
-- `ctx.elicit()` — elicitation sur 5 tools destructifs via `_build_destructive_confirmation()`
-- `SkillsDirectoryProvider` + `BM25SearchTransform`
-
-### IntelligentDecisionEngine ✅
-
-- `mcp_core/technology_detector.py` — `TechProfile` + `TechnologyDetector`
-- `mcp_core/parameter_optimizer.py` — profiles stealth/normal/aggressive, WAF auto-stealth
-- `_detect_from_cache()` — auto TechProfile depuis whatweb/httpx cache
-- `_optimizer` singleton dans `server_setup.py`
-
-### Sécurité & Fixes (CODEX + Z.AI) ✅
-
-- `command_executor.py` — `_executor` singleton → instance par appel (thread safety)
-- `enhanced_command_executor.py` — timeout ne retourne plus `success=True`
-- `enhanced_command_executor.py` — `shell=True` → argv explicit avec fallback
-- `enhanced_command_executor.py` — thread leak fix (join reader threads après kill)
-- `_build_destructive_confirmation()` — logique granulaire par tool :
-  - `aireplay_ng` mode 9 → pas de confirmation
-  - `responder` analyze=True → pas de confirmation
-  - `metasploit` auxiliary/scanner|gather → pas de confirmation
-
-### Rebrand HexStrike AI-PULSE ✅
-
-- FastMCP server name : `hexstrike-ai-pulse`
-- README public orienté utilisateur
-- Logo `assets/hexstrike-pulse-logo.png`
-- `master` = PULSE (`6ac0009`)
-
-### Cleanup ✅
-
-- `mcp_core/hexstrikecolors.py` — supprimé
-- `tool_profiles.py` — stub null `HexStrikeColors` (legacy compat)
 
 ---
 
-## 🧪 Tests — 261/261
+## ✅ Skills System
+
+- **14 skill bundles** dans `skills/` : `nmap-recon`, `web-recon`, `web-vuln`, `wifi-pentest`, `active-directory`, `exploitation`, `smb-enum`, `subdomain-enum`, `osint-recon`, `password-cracking`, `binary-analysis`, `cloud-audit`, `hexstrike-workflows`, `testssl`
+- **91 tool→skill mappings** dans `_TOOL_SKILL_MAP`
+- `SkillsDirectoryProvider(roots=skills/, supporting_files="resources", reload=True)` — exposé via `skill://...`
+- `get_tool_skill(tool_name)` — MCP tool retournant le bundle complet
+- `_read_skill_document()` / `_read_skill_bundle()` — extraction via `ResourceResult.contents[0].content`
+- **`hexstrike-workflows`** — index des 5 prompts MCP, orchestre les autres skills
+
+---
+
+## ✅ 16 *_direct.py Modules
+
+```
+wifi_direct.py          recon_direct.py         net_scan_direct.py
+web_scan_direct.py      web_fuzz_direct.py      password_cracking_direct.py
+smb_enum_direct.py      exploit_framework_direct.py  web_recon_direct.py
+security_direct.py      misc_direct.py          osint_direct.py
+active_directory_direct.py  testssl_direct.py   web_probe_direct.py
+vuln_intel_direct.py
+```
+
+**106 direct routes, 105 typed MCP tool wrappers** (auto-générés depuis `tool_registry.py`)
+
+### Sécurité : web_scan_direct.py
+
+`_sanitize()` appliqué sur `custom_payload` dans `_dalfox` — strip des caractères dangereux (`'`, `` ` ``, `;`, `&&`, `||`, `$(`, `${`)
+
+---
+
+## 🧪 Tests
 
 ```bash
 hexstrike-env/bin/pytest tests/ -q
-# 261 passed
+# 1227 passed, 6 xfailed
 ```
 
-| Fichier | Tests |
-|---|---|
-| `test_wifi_mcp_tools.py` | 37 |
-| `test_osint_mcp_tools.py` | 22 |
-| `test_active_directory_mcp_tools.py` | 34 |
-| `test_prompts.py` | 36 |
-| `test_parameter_optimizer.py` | 23 |
-| `test_technology_detector.py` | 23 |
-| `test_server_setup_standalone.py` | 7 (CODEX) |
-| autres | 79 |
+**Pattern de mock critique :**
 
-**Patterns critiques :**
+```python
+# ✅ Patcher là où le nom est utilisé
+with patch("mcp_core.osint_direct.execute_command") as mock: ...
 
-- Patcher `mcp_core.module.fn` pas `server_core.command_executor.fn`
-- `autouse` fixture psutil mock low-load dans `test_parameter_optimizer.py`
+# ❌ Patcher la source — ne fonctionne pas
+with patch("server_core.command_executor.execute_command") as mock: ...
+```
+
+**Tests notables :**
+- `test_server_setup_standalone.py` — elicitation + destructive tool confirmation
+- `test_parameter_optimizer.py` — psutil mock `autouse` fixture requis
 
 ---
 
-## 🧠 Key Patterns
+## 🧠 Patterns Clés
 
-### Tool pattern Phase 3
+### run_security_tool — flux complet
 
 ```python
 @mcp.tool()
-async def tool_name(ctx: Context, target: str) -> Dict[str, Any]:
-    await ctx.info(f"🔍 Starting on {target}")
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, lambda: _module_direct.exec("tool_key", data)
-    )
-    return result
+async def run_security_tool(ctx: Context, tool_name: str, parameters: str):
+    # 1. Skill guidance via ctx.read_resource()
+    # 2. Elicitation si tool destructif
+    # 3. TechProfile : session state → scan cache → None
+    # 4. ParameterOptimizer (WAF stealth, resource tuning)
+    # 5. run_in_executor + asyncio.wait (progress phases)
+    # 6. Cache result + ctx.set_state(tech_profile)
 ```
 
-### *_direct.py pattern
-
-```python
-from server_core.command_executor import execute_command
-
-def _my_tool(data: dict) -> dict:
-    err = _require(data, "target")
-    if err: return err
-    return execute_command(f"tool {data['target']}")
-
-_HANDLERS = {"my_tool": _my_tool}
-
-def module_exec(tool: str, data: dict) -> dict:
-    handler = _HANDLERS.get(tool)
-    if handler is None:
-        return {"success": False, "error": f"Unknown tool: '{tool}'"}
-    return handler(data)
-```
-
-### Import critique pour les tests
+### Import pattern — critique pour les tests
 
 ```python
 # ✅ Module-level — patchable
@@ -169,53 +155,73 @@ import mcp_core.wifi_direct as _wifi_direct
 from mcp_core.wifi_direct import wifi_exec
 ```
 
+### ctx.elicit() — pattern validé
+
+```python
+result = await ctx.elicit(message, response_type=bool)
+# response_type obligatoire en FastMCP 3.2.4 (déprécié sans)
+if hasattr(result, "action"):
+    if result.action == "accept" and result.data is True: ...
+```
+
+### CurrentContext()
+
+Existe dans `fastmcp.server.dependencies` comme **DI helper**. Le framework l'injecte automatiquement via `transform_context_annotations()` pour tout `ctx: Context` sans default. `ctx: Context` seul est suffisant et équivalent.
+
 ---
 
 ## 🔧 Démarrage
 
 ```bash
-cd ~/Labs/hexstrike-ai-community-edition   # desktop
-# ou
-cd ~/hexstrike-ai-community-edition        # laptop WSL
+cd ~/hexstrike-ai-community-edition   # laptop
+# ou ~/Labs/hexstrike-ai-community-edition  # desktop
 
 kill $(lsof -t -i:8888) 2>/dev/null
 hexstrike-env/bin/python3 hexstrike_server.py
-# → HexStrike AI-PULSE sur http://127.0.0.1:8888/mcp
+# → HexStrike AI-PULSE banner + http://127.0.0.1:8888/mcp
 ```
+
+### Startup — ce qui s'affiche
+
+```
+[HexStrike ANSI banner via ModernVisualEngine.create_banner()]
+[INFO] 🚀 Starting HexStrike Pulse Standalone Server
+[INFO] 🤖 Skills initialized
+[INFO] 🚀 Phase 3: 106 direct routes, 105 typed MCP tools
+[INFO] 📦 Resources MCP registered
+[INFO] 🎯 Workflow prompts registered
+```
+
+FastMCP banner supprimée via `show_banner=False` dans `mcp.run()`.
 
 ---
 
-## 🌿 Branches
+## 🌿 Git
 
 ```bash
-master                           ← PULSE live (= refactor HEAD)
-refactor/fastmcp-modernization   ← branche de dev active
-backup/phase2-complete-validated ← restore point stable
-```
+# Branches
+refactor/fastmcp-modernization   ← dev active
+backup/phase2-complete-validated ← restore point
 
-### Git config recommandée
+# Début de session — toujours
+git pull origin refactor/fastmcp-modernization
+hexstrike-env/bin/pytest tests/ -q 2>&1 | tail -3
 
-```bash
+# Config recommandée
 git config --global pull.rebase true
 git config --global rebase.autoStash true
 ```
 
-### Sync desktop ↔ laptop
-
-```bash
-# Toujours au début d'une session
-git pull origin refactor/fastmcp-modernization
-hexstrike-env/bin/pytest tests/ -q 2>&1 | tail -3
-```
-
 ---
 
-## 🌍 Upstream
+## 🌍 Upstream & Outils externes
 
-- **CommonHuman-Lab** sur `beta/nullbytecobra` (tag 1.3.0)
-- Ajout `.opencode/agents/` — orchestration multi-agents OpenCode → **non pertinent pour nous**
-- Nouveaux tools 1.3.0 : `hurl`, `waymore`, `assetfinder`, `shuffledns`, `massdns`, `gospider` → à cherry-pick si besoin
-- **Décision** : fork indépendant, pas de rebase systématique
+- **CommonHuman-Lab** — fork indépendant, pas de rebase systématique
+- `*_direct.py` sont entièrement notre travail — jamais dans upstream
+- **Codex** — bon pour skills/refactoring, vérifier la syntax FastMCP sur source
+- **Perplexity/GPT** — délégué à pytest-cov coverage
+- **Z.AI** — review externe utile, même sans contexte complet
+- Docs AI générées (`*_REPORT.md`, `*_ANALYSIS.md`) → gitignorées, lire avant d'ignorer
 
 ---
 
@@ -223,41 +229,25 @@ hexstrike-env/bin/pytest tests/ -q 2>&1 | tail -3
 
 | Issue | Solution |
 |---|---|
-| `_executor` singleton race condition | ✅ Fixé — instance par appel |
-| timeout retournait `success=True` | ✅ Fixé |
-| `shell=True` injection | ✅ Fixé — argv explicit avec fallback |
-| Thread leak reader threads | ✅ Fixé — join avec timeout=2 |
-| `hexstrikecolors.py` | ✅ Supprimé |
-| `test_endpoints_exist.py` | Obsolète Phase 3 — exclu via `pytest.ini` |
+| Thread safety `_executor` | ✅ instance par appel |
+| Timeout retournait `success=True` | ✅ fixé |
+| `shell=True` injection | ✅ argv explicit |
+| Thread leak reader threads | ✅ join avec timeout=2 |
+| `test_endpoints_exist.py` | Obsolète — exclu via `pytest.ini` |
 | Desktop/laptop divergence | `git config --global rebase.autoStash true` |
-| `mcp_app_direct.py` (Cline) | Invalide — ignorer/supprimer |
-| `currentContext()` | N'existe pas FastMCP 3.x — utiliser `ctx: Context` |
-
----
-
-## 🎯 Next Session Priorities
-
-1. **Registre canonique unique** — gateway + standalone dérivent (5 tools standalone-only)
-2. **Schema résultat normalisé** — `return_code` vs `returncode` inconsistance
-3. **Push master** après chaque session significative
-4. **Upstream cherry-pick** nouveaux tools 1.3.0 si pertinent
+| `ctx.set_state()` indisponible | Graceful degradation — `except Exception: pass` |
+| Dashboard `/web-dashboard` | Routes Flask legacy — long-term item |
 
 ---
 
 ## 📚 FastMCP 3.x Resources
 
+- Context API + State: <https://gofastmcp.com/servers/context>
+- Skills Provider: <https://gofastmcp.com/servers/providers/skills>
 - Tools: <https://gofastmcp.com/servers/tools>
 - Resources: <https://gofastmcp.com/servers/resources>
 - Prompts: <https://gofastmcp.com/servers/prompts>
-- Context API: <https://gofastmcp.com/servers/context>
-            [Background Tasks:<https://gofastmcp.com/servers/tasks>
-
 - Elicitation: <https://gofastmcp.com/servers/context#elicitation>
 - HTTP Transport: <https://gofastmcp.com/deployment/running-server>
-- SKILLS: <https://gofastmcp.com/servers/providers/skills>
-- Filesystem Provider: <https://gofastmcp.com/servers/providers/filesystem>
-- Local Provider : <https://gofastmcp.com/servers/providers/local>
-- Lifespans: <https://gofastmcp.com/servers/lifespan>
-- Progress: <https://gofastmcp.com/servers/progress>
+- Settings: <https://gofastmcp.com/more/settings>
 - Storage Backends: <https://gofastmcp.com/servers/storage-backends>
-- : <>
