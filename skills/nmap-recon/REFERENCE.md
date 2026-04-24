@@ -16,7 +16,7 @@ arp_scan(target="192.168.1.0/24")
 Fallback:
 
 ```python
-run_security_tool(tool_name="nmap", parameters='{"target":"10.10.10.10","ports":"22,80,443","flags":"-sV -sC -O"}')
+run_security_tool(tool_name="nmap", parameters='{"target":"10.10.10.10","scan_type":"-sV -sC","ports":"22,80,443","additional_args":"-O"}')
 ```
 
 ## Tool Guide
@@ -25,6 +25,6 @@ run_security_tool(tool_name="nmap", parameters='{"target":"10.10.10.10","ports":
 |---|---|---|
 | `rustscan` | `target`, `ports` | fast single-target discovery |
 | `masscan` | `target`, `ports`, `rate` | high-speed range scanning |
-| `nmap` | `target`, `ports`, `flags` | version, default script, and OS detection |
+| `nmap` | `target`, `scan_type`, `ports`, `additional_args` | version, default script, and OS detection |
 | `nmap_advanced` | `target`, `ports`, `scripts` | targeted NSE follow-up |
 | `arp_scan` | `target` | local subnet host discovery |

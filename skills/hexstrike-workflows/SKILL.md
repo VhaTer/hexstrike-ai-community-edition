@@ -20,7 +20,7 @@ Use this skill when the request spans multiple phases and tools:
 **Registered MCP prompts automate sequencing and tool selection:**
 
 1. **Invoke Prompt** — Call registered MCP prompt for opinionated multi-tool sequence
-2. **Tool Execution** — HexStrike chains `run_security_tool()` calls with automatic tech detection and parameter optimization
+2. **Tool Execution** — HexStrike chains typed MCP tools with automatic tech detection and parameter optimization
 3. **Per-Tool Detail** — Use `get_tool_skill(tool_name=...)` for deep guidance on specific steps
 4. **Custom Chains** — For non-standard flows, manually sequence skills (e.g., custom pivot path)
 

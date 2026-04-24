@@ -8,13 +8,20 @@ HexStrike AI-PULSE — FastMCP 3.x Standalone Server (Phase 3)
 
 import os
 import logging
+import json
+import time
+import asyncio
 from pathlib import Path
+from datetime import datetime
 
-from starlette.responses import FileResponse, Response
+from starlette.responses import FileResponse, Response, StreamingResponse
 from starlette.staticfiles import StaticFiles
 
 from mcp_core.server_setup import setup_mcp_server_standalone
 from server_core.modern_visual_engine import ModernVisualEngine
+from server_core.singletons import cache, telemetry, enhanced_process_manager
+import server_core.config_core as config_core
+from server_api.ops.system_monitoring import _get_tool_availability, _HEALTH_TOOL_CATEGORIES, _tool_availability_last_refresh
 
 # ============================================================================
 # LOGGING CONFIGURATION (MUST BE FIRST)
@@ -27,6 +34,53 @@ logger = logging.getLogger(__name__)
 # Configuration
 API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
+
+
+def _build_dashboard_response():
+    """Build the web dashboard response data."""
+    try:
+        tools_status = _get_tool_availability()
+        essential_tools = _HEALTH_TOOL_CATEGORIES.get("essential", [])
+        all_essential_available = all(tools_status.get(t, False) for t in essential_tools)
+
+        category_stats = {
+            cat: {
+                "total": len(tools),
+                "available": sum(1 for t in tools if tools_status.get(t, False)),
+            }
+            for cat, tools in _HEALTH_TOOL_CATEGORIES.items()
+        }
+
+        current_usage = enhanced_process_manager.resource_monitor.get_current_usage()
+
+        return {
+            # Server identity
+            "status": "healthy",
+            "version": config_core.get("VERSION", "unknown"),
+            "uptime": time.time() - telemetry.stats.get("start_time", time.time()),
+
+            # Telemetry / commands
+            "telemetry": telemetry.get_stats(),
+
+            # Tool availability
+            "tools_status": tools_status,
+            "all_essential_tools_available": all_essential_available,
+            "total_tools_available": sum(1 for v in tools_status.values() if v),
+            "total_tools_count": len(tools_status),
+            "category_stats": category_stats,
+            "tool_availability_age_seconds": round(time.time() - _tool_availability_last_refresh, 1) if _tool_availability_last_refresh > 0 else None,
+
+            # System resources
+            "resources": current_usage,
+            "resources_timestamp": datetime.now().isoformat(),
+
+            # Cache stats
+            "cache_stats": cache.get_stats(),
+        }
+    except Exception as e:
+        logger.error(f"Error building web dashboard response: {e}")
+        return {"error": f"Server error: {str(e)}", "status": "error"}
+
 
 if __name__ == "__main__":
     print(ModernVisualEngine.create_banner())
@@ -77,6 +131,57 @@ if __name__ == "__main__":
         logger.info(f"📊 Dashboard at http://{API_HOST}:{API_PORT}/dashboard")
     else:
         logger.warning("⚠️ server_static/ not found — dashboard not available")
+
+    # -------------------------------------------------------------------------
+    # Web Dashboard API endpoints
+    # -------------------------------------------------------------------------
+    
+    @mcp.custom_route("/web-dashboard", methods=["GET"])
+    async def web_dashboard(request):
+        """Combined endpoint for the web dashboard UI."""
+        try:
+            data = _build_dashboard_response()
+            return Response(
+                json.dumps(data, separators=(",", ":")),
+                media_type="application/json",
+            )
+        except Exception as e:
+            logger.error(f"Error in /web-dashboard: {e}")
+            return Response(
+                json.dumps({"error": str(e), "status": "error"}),
+                status_code=500,
+                media_type="application/json",
+            )
+
+    @mcp.custom_route("/web-dashboard/stream", methods=["GET"])
+    async def stream_dashboard(request):
+        """SSE endpoint — streams dashboard state."""
+        async def generate():
+            last_json = None
+            while True:
+                try:
+                    dashboard = _build_dashboard_response()
+                    js = json.dumps(dashboard, separators=(",", ":"))
+                    if js != last_json:
+                        yield f"data: {js}\n\n".encode()
+                        last_json = js
+                    else:
+                        # Keepalive if nothing new
+                        yield b": keepalive\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
+                await asyncio.sleep(2)
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
+        )
+
+    logger.info("✅ Web dashboard endpoints registered")
 
     # FastMCP 3.x native HTTP/SSE transport
     mcp.run(

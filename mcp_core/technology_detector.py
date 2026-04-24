@@ -107,12 +107,12 @@ class TechnologyDetector:
     # Signature patterns — mirrors V6 detection_patterns dict
     _PATTERNS: Dict[str, Dict[str, List[str]]] = {
         "web_servers": {
-            "apache":  ["Apache", "apache"],
+            "apache":  ["Apache", "apache", "httpd"],
             "nginx":   ["nginx", "Nginx"],
             "iis":     ["IIS", "Microsoft-IIS"],
             "tomcat":  ["Tomcat", "Apache-Coyote"],
             "lighttpd":["lighttpd"],
-            "caddy":   ["Caddy"],
+            "jetty":   ["jetty"],
         },
         "frameworks": {
             "django":    ["Django", "csrfmiddlewaretoken", "django"],
@@ -128,22 +128,24 @@ class TechnologyDetector:
             "vue":       ["Vue.js", "vue", "__vue__"],
         },
         "cms": {
-            "wordpress": ["WordPress", "wp-content", "wp-json", "wp-admin", "wp-includes"],
-            "drupal":    ["Drupal", "drupal", "X-Generator: Drupal"],
-            "joomla":    ["Joomla", "joomla", "/components/com_"],
+            "wordpress": ["WordPress", "wp-content", "wp-json", "/wp-admin/", "wp-includes"],
+            "drupal":    ["Drupal", "drupal", "X-Generator: Drupal", "/sites/default/" "X-Drupal-Cache"],
+            "joomla":    ["Joomla", "joomla", "/administrator/", "com_content", "/components/com_"],
             "magento":   ["Magento", "Mage.Cookies", "mage-"],
             "prestashop":["PrestaShop", "prestashop"],
             "shopify":   ["Shopify", "shopify", "cdn.shopify.com"],
             "wix":       ["wix.com", "X-Wix-"],
             "ghost":     ["Ghost", "ghost/"],
             "typo3":     ["TYPO3", "typo3"],
+            "opencart": ["OpenCart", "opencart"]
         },
         "databases": {
-            "mysql":      ["mysql", "MySQL"],
+            "mysql":      ["mysql", "MySQL", "phpMyAdmin"],
             "postgresql": ["PostgreSQL", "postgres"],
             "mongodb":    ["MongoDB", "mongo"],
             "redis":      ["Redis", "redis"],
             "elasticsearch": ["Elasticsearch", "elastic"],
+            "oracle": ["Oracle", "oracle"],
         },
         "languages": {
             "php":    ["PHP", "X-Powered-By: PHP", ".php"],
@@ -153,6 +155,7 @@ class TechnologyDetector:
             "dotnet": [".NET", "ASP.NET", "X-AspNet-Version"],
             "nodejs": ["Node.js", "X-Powered-By: node"],
             "golang": ["Go ", "Go-http-client", "gorilla"],
+            "rust": ["Rust", "rust"],
         },
         "security": {
             "cloudflare": ["cloudflare", "CF-RAY", "__cfduid", "cf-cache-status"],

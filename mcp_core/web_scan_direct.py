@@ -25,6 +25,15 @@ from server_core.command_executor import execute_command
 logger = logging.getLogger(__name__)
 
 
+def _sanitize(value: str) -> str:
+    """Strip shell-dangerous characters from user-supplied free-text parameters."""
+    for ch in ("'", "`", ";", "\n", "\r"):
+        value = value.replace(ch, "")
+    for seq in ("&&", "||", "$(", "${"):
+        value = value.replace(seq, "")
+    return value
+
+
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
     for key in keys:
         if not data.get(key, ""):
@@ -87,10 +96,10 @@ def _dalfox(data: dict) -> dict:
     if not url and not pipe_mode:
         return {"success": False, "error": "url or pipe_mode is required"}
 
-    mining_dom     = data.get("mining_dom", True)
-    mining_dict    = data.get("mining_dict", True)
-    blind          = data.get("blind", False)
-    custom_payload = data.get("custom_payload", "")
+    mining_dom      = data.get("mining_dom", True)
+    mining_dict     = data.get("mining_dict", True)
+    blind           = data.get("blind", False)
+    custom_payload  = _sanitize(data.get("custom_payload", ""))
     additional_args = data.get("additional_args", "")
 
     if pipe_mode:

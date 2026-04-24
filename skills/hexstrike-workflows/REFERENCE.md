@@ -25,5 +25,5 @@ cloud_security_audit(provider="aws", profile="default")
 ```python
 get_tool_skill(tool_name="nmap")
 nmap(target="10.10.10.10", ports="22,80,443", scan_type="-sCV")
-run_security_tool(tool_name="nmap", parameters='{"target":"10.10.10.10","ports":"22,80,443","flags":"-sV -sC"}')
+run_security_tool(tool_name="nmap", parameters='{"target":"10.10.10.10","scan_type":"-sV -sC","ports":"22,80,443","additional_args":""}')
 ```
