@@ -730,6 +730,30 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                         except Exception:
                             pass  # session state unavailable — no-op
 
+        # ctx.get_prompt() — suggest workflow prompt based on TechProfile
+        if tech_profile:
+            suggested_prompt = None
+            if tech_profile.cms and any(c in tech_profile.cms for c in ("wordpress", "joomla", "drupal")):
+                suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
+            elif tech_profile.security and any(s in tech_profile.security for s in ("cloudflare", "akamai", "aws_waf")):
+                suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
+            elif "smb" in (tech_profile.services or []) or "ldap" in (tech_profile.services or []):
+                suggested_prompt = ("smb_lateral_movement", {"target": target or "unknown"})
+            elif any(s in (tech_profile.services or []) for s in ("ssh", "rdp")) and not target:
+                pass  # not enough context
+
+            if suggested_prompt:
+                try:
+                    prompt_name, prompt_args = suggested_prompt
+                    prompt_result = await ctx.get_prompt(prompt_name, prompt_args)
+                    if prompt_result and prompt_result.messages:
+                        first_msg = prompt_result.messages[0]
+                        hint = getattr(getattr(first_msg, 'content', None), 'text', '')
+                        if hint:
+                            await ctx.info(f"💡 Workflow suggestion [{prompt_name}]: {hint[:120]}")
+                except Exception:
+                    pass  # prompt unavailable — no-op
+
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
         optimizer_meta = params.pop("_optimizer", {})
         if optimizer_meta.get("forced_stealth"):
