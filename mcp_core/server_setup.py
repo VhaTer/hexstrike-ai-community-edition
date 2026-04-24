@@ -670,6 +670,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         exec_func, tool_key = route
 
+        # Resolve target once — used by tech detect, get_prompt, and cache
+        target = (
+            params.get("target")
+            or params.get("url")
+            or params.get("domain")
+            or params.get("interface", "")
+        )
+
         # ParameterOptimizer — enrich params before execution
         # Caller can pass _profile (stealth/normal/aggressive) and _tech (dict) in params
         opt_profile = params.pop("_profile", "normal")
@@ -692,7 +700,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 pass
         else:
             # Auto-detect: session state first, then scan cache
-            target = params.get("target") or params.get("url") or params.get("domain", "")
             if target:
                 # 1. Try session-persisted TechProfile (fastest — no recompute)
                 try:
@@ -781,13 +788,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
-            # Cache key — use target, url, or domain (fixes url-based tools like whatweb)
-            target = (
-                params.get("target")
-                or params.get("url")
-                or params.get("domain")
-                or params.get("interface", "")
-            )
             if target:
                 cache_key = f"{tool_name}:{target}"
                 _scan_cache[cache_key] = {
