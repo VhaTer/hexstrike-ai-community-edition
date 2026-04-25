@@ -666,17 +666,18 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.error(f"❌ Unknown tool: {tool_name}")
             return {"success": False, "error": f"Unknown tool: {tool_name}"}
 
-        # Skill guidance — inject relevant SKILL.md context before execution
-        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
-        if skill_name:
-            skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
-            if skill_doc:
-                # Extract first meaningful lines (skip frontmatter, get title + when-to-use)
-                lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
-                header = "\n".join(lines[:4])
-                await ctx.info(f"📚 [{skill_name}] {header}")
+        exec_func, tool_key = route
 
-        # Elicitation - destructive tools require explicit user confirmation
+        # 1. Resolve target once — needed by elicitation, tech detect, get_prompt, and cache
+        target = (
+            params.get("target")
+            or params.get("url")
+            or params.get("domain")
+            or params.get("interface", "")
+        )
+
+        # 2. Elicitation — destructive tools require explicit user confirmation
+        #    Must happen before any resource read or execution
         destructive_request = _build_destructive_confirmation(tool_name, params)
         if destructive_request:
             confirmed = await confirm_destructive_action(
@@ -691,15 +692,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
                 }
 
-        exec_func, tool_key = route
-
-        # Resolve target once — used by tech detect, get_prompt, and cache
-        target = (
-            params.get("target")
-            or params.get("url")
-            or params.get("domain")
-            or params.get("interface", "")
-        )
+        # 3. Skill guidance — inject SKILL.md only after confirmation
+        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+        if skill_name:
+            skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
+            if skill_doc:
+                lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
+                header = "\n".join(lines[:4])
+                await ctx.info(f"📚 [{skill_name}] {header}")
 
         # ParameterOptimizer — enrich params before execution
         # Caller can pass _profile (stealth/normal/aggressive) and _tech (dict) in params
