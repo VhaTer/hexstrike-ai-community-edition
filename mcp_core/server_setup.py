@@ -31,8 +31,30 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # In-memory scan result cache — populated by run_security_tool
 # ---------------------------------------------------------------------------
-from mcp_core.advanced_cache import AdvancedCache
-_scan_cache = AdvancedCache(capacity=500)
+from server_core.advanced_cache import AdvancedCache as _AdvancedCache
+
+
+class _ScanCache(_AdvancedCache):
+    """Scan-specific cache: wraps AdvancedCache with adaptive TTL from execution_time."""
+    _TTL_DEFAULT = 1800   # 30 min
+    _TTL_MEDIUM  = 3600   # 60 min (exec > 10s)
+    _TTL_LONG    = 5400   # 90 min (exec > 60s)
+
+    def set(self, key: str, value: Any, execution_time: float = 0.0, ttl: Optional[int] = None) -> None:  # type: ignore[override]
+        if ttl is None:
+            if execution_time > 60:
+                ttl = self._TTL_LONG
+            elif execution_time > 10:
+                ttl = self._TTL_MEDIUM
+            else:
+                ttl = self._TTL_DEFAULT
+        super().set(key, value, ttl=ttl)
+
+    def stats(self) -> Dict[str, Any]:
+        return self.get_stats()
+
+
+_scan_cache = _ScanCache(max_size=500, default_ttl=1800)
 _server_start_time = time.time()
 _optimizer  = ParameterOptimizer()
 _detector   = TechnologyDetector()
