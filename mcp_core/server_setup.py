@@ -855,6 +855,54 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             "available_files": sorted(documents),
         }
 
+    # ========================================================================
+    # plan_attack — IntelligentDecisionEngine MCP tool
+    # ========================================================================
+    from server_core.intelligence.intelligent_decision_engine import IntelligentDecisionEngine as _IDE
+    _ide = _IDE()
+
+    @mcp.tool(
+        description="Analyze a target and generate an intelligent attack chain with ordered steps, tool selection and success probabilities",
+        annotations={"readOnlyHint": False, "openWorldHint": True},
+    )
+    async def plan_attack(
+        ctx: Context,
+        target: str,
+        objective: str = "comprehensive",
+    ) -> Dict[str, Any]:
+        """
+        Generate an intelligent attack chain for a target.
+
+        Args:
+            target:    Target (IP, URL, domain, file path)
+            objective: comprehensive | quick | stealth | ctf | bug_bounty_recon |
+                       bug_bounty_hunting | aws | kubernetes | containers | iac
+
+        Returns:
+            AttackChain dict with ordered steps, tools, probabilities, estimated time
+        """
+        await ctx.info(f"🧠 Analyzing target: {target} (objective={objective})")
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+        profile = await loop.run_in_executor(None, lambda: _ide.analyze_target(target))
+        await ctx.report_progress(50, 100)
+        await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
+
+        chain = await loop.run_in_executor(None, lambda: _ide.create_attack_chain(profile, objective))
+        chain.calculate_success_probability()
+        await ctx.report_progress(100, 100)
+
+        await ctx.info(f"✅ Attack chain ready: {len(chain.steps)} steps | Est. time: {chain.estimated_time}s | P(success): {chain.success_probability:.0%}")
+
+        # Persist TargetProfile to session state
+        try:
+            await ctx.set_state(f"ide_profile:{target}", profile.to_dict())
+        except Exception:
+            pass
+
+        return chain.to_dict()
+
     typed_tools_registered = 0
     for public_name in sorted(DIRECT_TOOLS):
         tool_def = _get_registry_tool_definition(public_name)

@@ -14,7 +14,7 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 
-from starlette.responses import FileResponse, Response, StreamingResponse
+from starlette.responses import FileResponse, Response, StreamingResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from mcp_core.server_setup import setup_mcp_server_standalone
@@ -82,20 +82,17 @@ def _build_dashboard_response():
         return {"error": f"Server error: {str(e)}", "status": "error"}
 
 
-if __name__ == "__main__":
-    print(ModernVisualEngine.create_banner())
-    logger.info("🚀 Starting HexStrike Pulse Standalone Server")
-    logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
+def _json_status_response(data):
+    """Return JSON with HTTP status aligned to the embedded health state."""
+    status = data.get("status")
+    status_code = 200 if status == "healthy" else 500
+    return JSONResponse(data, status_code=status_code)
 
-    # Phase 3: Standalone MCP server with native HTTP transport
-    mcp = setup_mcp_server_standalone(logger)
 
-    # -------------------------------------------------------------------------
-    # Dashboard — serve server_static/ assets + SPA index
-    # index.html uses absolute paths (/assets/...) so we mount assets on /assets
-    # and serve index.html on /dashboard
-    # -------------------------------------------------------------------------
-    static_dir = Path(__file__).parent / "server_static"
+def register_http_routes(mcp, logger, static_dir=None):
+    """Attach dashboard and health HTTP routes to the active FastMCP server."""
+    static_dir = Path(static_dir) if static_dir is not None else Path(__file__).parent / "server_static"
+
     if static_dir.exists():
         assets_dir = static_dir / "assets"
 
@@ -109,7 +106,6 @@ if __name__ == "__main__":
                 )
             )
 
-        # Serve /dashboard — SPA entry point
         @mcp.custom_route("/dashboard", methods=["GET"])
         async def dashboard_index(request):
             """Serve dashboard SPA index."""
@@ -118,40 +114,29 @@ if __name__ == "__main__":
                 return FileResponse(str(index), media_type="text/html")
             return Response("Dashboard not found", status_code=404)
 
-        # Serve static root files (favicon, icons)
-        @mcp.custom_route("/{filename:str}", methods=["GET"])
-        async def root_static(request):
-            """Serve root static files (favicon, icons)."""
-            filename = request.path_params.get("filename", "")
-            file_path = static_dir / filename
-            if file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt"):
-                return FileResponse(str(file_path))
-            return Response("Not found", status_code=404)
-
         logger.info(f"📊 Dashboard at http://{API_HOST}:{API_PORT}/dashboard")
     else:
         logger.warning("⚠️ server_static/ not found — dashboard not available")
 
-    # -------------------------------------------------------------------------
-    # Web Dashboard API endpoints
-    # -------------------------------------------------------------------------
-    
+    @mcp.custom_route("/health", methods=["GET"])
+    async def health(request):
+        """HTTP health endpoint for IDEs, proxies, and external checks."""
+        return _json_status_response(_build_dashboard_response())
+
+    @mcp.custom_route("/ping", methods=["GET"])
+    async def ping(request):
+        """Minimal liveness endpoint."""
+        return JSONResponse({"status": "ok", "server": "hexstrike-ai-pulse"})
+
     @mcp.custom_route("/web-dashboard", methods=["GET"])
     async def web_dashboard(request):
         """Combined endpoint for the web dashboard UI."""
         try:
             data = _build_dashboard_response()
-            return Response(
-                json.dumps(data, separators=(",", ":")),
-                media_type="application/json",
-            )
+            return JSONResponse(data)
         except Exception as e:
             logger.error(f"Error in /web-dashboard: {e}")
-            return Response(
-                json.dumps({"error": str(e), "status": "error"}),
-                status_code=500,
-                media_type="application/json",
-            )
+            return JSONResponse({"error": str(e), "status": "error"}, status_code=500)
 
     @mcp.custom_route("/web-dashboard/stream", methods=["GET"])
     async def stream_dashboard(request):
@@ -181,7 +166,28 @@ if __name__ == "__main__":
             }
         )
 
+    if static_dir.exists():
+        @mcp.custom_route("/{filename:str}", methods=["GET"])
+        async def root_static(request):
+            """Serve root static files (favicon, icons)."""
+            filename = request.path_params.get("filename", "")
+            file_path = static_dir / filename
+            if file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt"):
+                return FileResponse(str(file_path))
+            return Response("Not found", status_code=404)
+
     logger.info("✅ Web dashboard endpoints registered")
+
+
+if __name__ == "__main__":
+    print(ModernVisualEngine.create_banner())
+    logger.info("🚀 Starting HexStrike Pulse Standalone Server")
+    logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
+
+    # Phase 3: Standalone MCP server with native HTTP transport
+    mcp = setup_mcp_server_standalone(logger)
+
+    register_http_routes(mcp, logger)
 
     # FastMCP 3.x native HTTP/SSE transport
     mcp.run(

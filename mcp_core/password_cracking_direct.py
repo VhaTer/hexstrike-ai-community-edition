@@ -159,11 +159,10 @@ def _patator(data: dict) -> dict:
 
 
 def _hashid(data: dict) -> dict:
-    err = _require(data, "hash_value")
-    if err:
-        return err
+    hash_value = (data.get("hash_value") or data.get("hash") or "").strip()
+    if not hash_value:
+        return {"success": False, "error": "'hash_value' is required"}
 
-    hash_value      = data["hash_value"].strip()
     additional_args = data.get("additional_args", "")
 
     command = f"hashid {hash_value} {additional_args}"

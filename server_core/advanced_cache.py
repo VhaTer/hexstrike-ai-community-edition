@@ -76,6 +76,26 @@ class AdvancedCache:
             self.access_times.clear()
             self.ttl_times.clear()
 
+    def __len__(self) -> int:
+        """Return the number of live cache entries."""
+        with self.cache_lock:
+            return len(self.cache)
+
+    def items(self):
+        """Return a snapshot of cache items for safe iteration."""
+        with self.cache_lock:
+            return list(self.cache.items())
+
+    def keys(self):
+        """Return a snapshot of cache keys."""
+        with self.cache_lock:
+            return list(self.cache.keys())
+
+    def values(self):
+        """Return a snapshot of cache values."""
+        with self.cache_lock:
+            return list(self.cache.values())
+
     def _remove_key(self, key: str) -> None:
         """Remove key and associated metadata"""
         self.cache.pop(key, None)
