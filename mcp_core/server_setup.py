@@ -31,7 +31,8 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # In-memory scan result cache — populated by run_security_tool
 # ---------------------------------------------------------------------------
-_scan_cache: Dict[str, Dict] = {}
+from mcp_core.advanced_cache import AdvancedCache
+_scan_cache = AdvancedCache(capacity=500)
 _server_start_time = time.time()
 _optimizer  = ParameterOptimizer()
 _detector   = TechnologyDetector()
@@ -790,10 +791,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.info(f"✅ {tool_name} completed")
             if target:
                 cache_key = f"{tool_name}:{target}"
-                _scan_cache[cache_key] = {
+                exec_time = result.get("execution_time", 0.0)
+                _scan_cache.set(cache_key, {
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
-                }
+                }, execution_time=exec_time)
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
@@ -863,6 +865,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             "uptime_seconds": uptime,
             "tools_count":    len(DIRECT_TOOLS),
             "cached_scans":   len(_scan_cache),
+            "cache_stats":    _scan_cache.stats(),
         }, indent=2)
 
     @mcp.resource("scan://{target}/latest")
