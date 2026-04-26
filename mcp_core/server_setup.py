@@ -653,6 +653,19 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         Returns:
             Tool execution results
         """
+        _t_start = time.time()
+        _telemetry: Dict[str, Any] = {
+            "tool":            tool_name,
+            "success":         False,
+            "duration":        0.0,
+            "timeout":         False,
+            "cache_hit":       False,
+            "session_state":   False,
+            "confirmation":    None,   # None | "accepted" | "denied" | "skipped"
+            "opt_profile":     "normal",
+            "skill_injected":  False,
+            "prompt_suggested": False,
+        }
         await ctx.info(f"🔍 Executing {tool_name}")
 
         try:
@@ -677,7 +690,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         )
 
         # 2. Elicitation — destructive tools require explicit user confirmation
-        #    Must happen before any resource read or execution
         destructive_request = _build_destructive_confirmation(tool_name, params)
         if destructive_request:
             confirmed = await confirm_destructive_action(
@@ -687,12 +699,17 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 warning=destructive_request["warning"],
             )
             if not confirmed:
+                _telemetry["confirmation"] = "denied"
+                _telemetry["duration"] = round(time.time() - _t_start, 3)
+                logger.info("[telemetry] %s", json.dumps(_telemetry))
                 return {
                     "success": False,
                     "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
                 }
-
-        # 3. Skill guidance — inject SKILL.md only after confirmation
+            _telemetry["confirmation"] = "accepted"
+        else:
+            _telemetry["confirmation"] = "skipped" if not destructive_request else None
+        # 3. Skill guidance
         skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
         if skill_name:
             skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
@@ -700,6 +717,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
                 header = "\n".join(lines[:4])
                 await ctx.info(f"📚 [{skill_name}] {header}")
+                _telemetry["skill_injected"] = True
 
         # ParameterOptimizer — enrich params before execution
         # Caller can pass _profile (stealth/normal/aggressive) and _tech (dict) in params
@@ -737,6 +755,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                             security    = cached_dict.get("security", []),
                             services    = cached_dict.get("services", []),
                         )
+                        _telemetry["session_state"] = True
                         await ctx.info(f"🧠 Tech profile restored from session: {tech_profile.summary()}")
                 except Exception:
                     pass
@@ -781,9 +800,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                         hint = getattr(getattr(first_msg, 'content', None), 'text', '')
                         if hint:
                             await ctx.info(f"💡 Workflow suggestion [{prompt_name}]: {hint[:120]}")
+                            _telemetry["prompt_suggested"] = True
                 except Exception:
                     pass  # prompt unavailable — no-op
 
+        _telemetry["opt_profile"] = opt_profile
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
         optimizer_meta = params.pop("_optimizer", {})
         if optimizer_meta.get("forced_stealth"):
@@ -811,6 +832,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
+            _telemetry["success"] = True
             if target:
                 cache_key = f"{tool_name}:{target}"
                 exec_time = result.get("execution_time", 0.0)
@@ -821,6 +843,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
+        _telemetry["duration"] = round(time.time() - _t_start, 3)
+        logger.info("[telemetry] %s", json.dumps(_telemetry))
         return result
 
     @mcp.tool(
