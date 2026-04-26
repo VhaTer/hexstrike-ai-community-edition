@@ -240,6 +240,34 @@ git config --global rebase.autoStash true
 
 ---
 
+## 🧠 IntelligentDecisionEngine — Integration Policy
+
+**Statut :** Advisory uniquement — jamais authoritative
+
+| Question | Réponse |
+|---|---|
+| Advisory ou authoritative ? | **Advisory** — le LLM décide toujours de l'exécution |
+| Planifie tools, params, ou les deux ? | **Tools uniquement** — params restent dans ParameterOptimizer |
+| Où vit le human override ? | `ctx.elicit()` sur chaque step destructif dans `run_security_tool` |
+| Confirmation boundaries sur les chains ? | Chaque step de l'AttackChain passe par `run_security_tool` — les gates existantes s'appliquent |
+| `TargetProfile` / `AttackChain` comme runtime contracts ? | **Non pour l'instant** — ce sont des suggestions JSON retournées au LLM |
+
+**Pattern d'usage :**
+```
+LLM → plan_attack(target, objective)   # IDE analyse + suggère
+    → AttackChain JSON retourné au LLM
+    → LLM décide quels steps exécuter
+    → run_security_tool() pour chaque step
+    → gates elicitation/skill/progress s'appliquent normalement
+```
+
+**Ce qu'on n'implémentera PAS sans validation supplémentaire :**
+- Exécution automatique d'une AttackChain sans confirmation LLM step-by-step
+- Override du ParameterOptimizer par l'IDE
+- AttackChain comme contrat d'exécution mandatory
+
+---
+
 ## 📚 FastMCP 3.x Resources
 
 - Context API + State: <https://gofastmcp.com/servers/context>
