@@ -42,3 +42,6 @@ htmlcov/
 coverage.xml
 junit.xml
 results.xml
+.claude/
+.opencode/
+.vscode/
