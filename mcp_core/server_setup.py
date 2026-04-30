@@ -936,21 +936,30 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         await ctx.report_progress(0, 100)
 
         loop = asyncio.get_running_loop()
-        profile = await loop.run_in_executor(None, lambda: _ide.analyze_target(target))
-        await ctx.report_progress(50, 100)
-        await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
 
-        chain = await loop.run_in_executor(None, lambda: _ide.create_attack_chain(profile, objective))
-        chain.calculate_success_probability()
-        await ctx.report_progress(100, 100)
-
-        await ctx.info(f"✅ Attack chain ready: {len(chain.steps)} steps | Est. time: {chain.estimated_time}s | P(success): {chain.success_probability:.0%}")
-
-        # Persist TargetProfile to session state
+        # Check session state first — avoid re-analyzing if profile already exists
+        profile = None
         try:
-            await ctx.set_state(f"ide_profile:{target}", profile.to_dict())
+            saved_profile = await ctx.get_state(f"ide_profile:{target}")
+            if saved_profile and isinstance(saved_profile, dict):
+                from shared.target_profile import TargetProfile as _TargetProfile
+                profile = _TargetProfile.from_dict(saved_profile)
+                await ctx.info(f"⚡ Target profile restored from session — skipping re-analysis")
+                await ctx.report_progress(50, 100)
         except Exception:
             pass
+
+        if profile is None:
+            profile = await loop.run_in_executor(None, lambda: _ide.analyze_target(target))
+            await ctx.report_progress(50, 100)
+            await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
+            # Persist to session state
+            try:
+                await ctx.set_state(f"ide_profile:{target}", profile.to_dict())
+            except Exception:
+                pass
+        else:
+            await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
 
         return chain.to_dict()
 
