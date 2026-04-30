@@ -10,6 +10,7 @@ from mcp_tools.gateway import register_gateway_tools
 from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
+from server_core.rate_limit_detector import RateLimitDetector
 from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
@@ -56,8 +57,9 @@ class _ScanCache(_AdvancedCache):
 
 _scan_cache = _ScanCache(max_size=500, default_ttl=1800)
 _server_start_time = time.time()
-_optimizer  = ParameterOptimizer()
-_detector   = TechnologyDetector()
+_optimizer    = ParameterOptimizer()
+_detector     = TechnologyDetector()
+_rate_limiter = RateLimitDetector()
 
 # Tools requiring user confirmation before execution
 _DESTRUCTIVE_TOOLS = {
@@ -804,6 +806,17 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 except Exception:
                     pass  # prompt unavailable — no-op
 
+        # Rate limit profile from session state — override normal profile
+        if not opt_profile or opt_profile == "normal":
+            try:
+                saved_rl = await ctx.get_state(f"ratelimit:{target}")
+                if saved_rl:
+                    opt_profile = saved_rl
+                    _telemetry["opt_profile"] = opt_profile
+                    await ctx.info(f"⚡ Rate limit profile restored: {opt_profile}")
+            except Exception:
+                pass
+
         _telemetry["opt_profile"] = opt_profile
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
         optimizer_meta = params.pop("_optimizer", {})
@@ -833,6 +846,20 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
             _telemetry["success"] = True
+
+            # Rate limit detection on successful results
+            output = str(result.get("output", "") or result.get("data", ""))
+            status_code = result.get("returncode", 0) or 0
+            rl = _rate_limiter.detect_rate_limiting(output, status_code)
+            if rl["detected"]:
+                recommended = rl["recommended_profile"]
+                _telemetry["rate_limit"] = recommended
+                await ctx.info(f"⚠️ Rate limit detected (confidence={rl['confidence']:.0%}) → switching to {recommended}")
+                try:
+                    await ctx.set_state(f"ratelimit:{target}", recommended)
+                except Exception:
+                    pass
+
             if target:
                 cache_key = f"{tool_name}:{target}"
                 exec_time = result.get("execution_time", 0.0)
