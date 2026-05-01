@@ -961,6 +961,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         else:
             await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
 
+        chain = await loop.run_in_executor(None, lambda: _ide.create_attack_chain(profile, objective))
+        await ctx.report_progress(100, 100)
+        await ctx.info(f"✅ Attack chain ready: {len(chain.steps)} steps | Risk: {chain.risk_level}")
         return chain.to_dict()
 
     typed_tools_registered = 0

@@ -40,3 +40,33 @@ class TargetProfile:
             "risk_level": self.risk_level,
             "confidence_score": self.confidence_score
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TargetProfile":
+        """Reconstruct a TargetProfile from a serialized dictionary."""
+        from shared.target_types import TargetType, TechnologyStack
+        profile = cls(target=data.get("target", ""))
+        try:
+            profile.target_type = TargetType(data.get("target_type", TargetType.UNKNOWN.value))
+        except ValueError:
+            profile.target_type = TargetType.UNKNOWN
+        profile.ip_addresses = data.get("ip_addresses", [])
+        profile.open_ports = data.get("open_ports", [])
+        profile.services = data.get("services", {})
+        techs = []
+        for t in data.get("technologies", []):
+            try:
+                techs.append(TechnologyStack(t))
+            except ValueError:
+                pass
+        profile.technologies = techs
+        profile.cms_type = data.get("cms_type")
+        profile.cloud_provider = data.get("cloud_provider")
+        profile.security_headers = data.get("security_headers", {})
+        profile.ssl_info = data.get("ssl_info", {})
+        profile.subdomains = data.get("subdomains", [])
+        profile.endpoints = data.get("endpoints", [])
+        profile.attack_surface_score = float(data.get("attack_surface_score", 0.0))
+        profile.risk_level = data.get("risk_level", "unknown")
+        profile.confidence_score = float(data.get("confidence_score", 0.0))
+        return profile
