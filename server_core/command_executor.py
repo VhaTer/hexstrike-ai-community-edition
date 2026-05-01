@@ -6,6 +6,22 @@ from server_core.singletons import cache as _cache
 COMMAND_TIMEOUT = config_core.get("COMMAND_TIMEOUT", 300)  # Default to 5 minutes if not set
 
 
+def _cache_get(active_cache, command: str, params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Read from either AdvancedCache(key) or legacy HexStrikeCache(command, params)."""
+    try:
+        return active_cache.get(command)
+    except TypeError:
+        return active_cache.get(command, params or {})
+
+
+def _cache_set(active_cache, command: str, params: Optional[Dict[str, Any]], result: Dict[str, Any]) -> None:
+    """Write to either AdvancedCache(key, value) or legacy HexStrikeCache(command, params, result)."""
+    try:
+        active_cache.set(command, result)
+    except TypeError:
+        active_cache.set(command, params or {}, result)
+
+
 def _normalize_result(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize EnhancedCommandExecutor output to the canonical HexStrike result shape.
@@ -22,8 +38,8 @@ def _normalize_result(raw: Dict[str, Any]) -> Dict[str, Any]:
     Both key sets are preserved so legacy callers that still read stdout/stderr
     directly do not break.
     """
-    # Already normalized (e.g. _require() early-return or unknown-tool error)
-    if "output" in raw and "stdout" not in raw:
+    # Already normalized/minimal (e.g. _require() early-return or unknown-tool error)
+    if "stdout" not in raw and "return_code" not in raw:
         return raw
 
     stdout = raw.get("stdout", "")
@@ -88,7 +104,7 @@ def execute_command(
   active_cache = cache if cache is not None else (_cache if use_cache else None)
 
   if active_cache is not None:
-    cached_result = active_cache.get(command)  # AdvancedCache.get() takes one arg
+    cached_result = _cache_get(active_cache, command, params)
     if cached_result:
       return cached_result
 
@@ -98,6 +114,6 @@ def execute_command(
   result = _normalize_result(executor.execute())
 
   if active_cache is not None and result.get("success", False):
-    active_cache.set(command, result)  # cache command → result, no custom TTL needed
+    _cache_set(active_cache, command, params, result)
 
   return result

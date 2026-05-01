@@ -230,7 +230,7 @@ _HANDLERS = {
 
 
 def ad_exec(tool: str, data: dict) -> dict:
-    """Execute an Active Directory tool directly — no Flask, no HTTP."""
+    """Execute an Active Directory tool directly """
     handler = _HANDLERS.get(tool)
     if handler is None:
         return {

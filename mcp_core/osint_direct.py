@@ -75,7 +75,7 @@ _HANDLERS = {
 
 
 def osint_exec(tool: str, data: dict) -> dict:
-    """Execute an OSINT tool directly — no Flask, no HTTP."""
+    """Execute an OSINT tool directly"""
     handler = _HANDLERS.get(tool)
     if handler is None:
         return {"success": False, "error": f"Unknown OSINT tool: '{tool}'"}

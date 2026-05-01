@@ -657,7 +657,7 @@ _HANDLERS = {
 
 
 def misc_exec(tool: str, data: dict) -> dict:
-    """Execute a miscellaneous tool directly — no Flask, no HTTP."""
+    """Execute a miscellaneous tool directly"""
     handler = _HANDLERS.get(tool)
     if handler is None:
         return {"success": False, "error": f"Unknown misc tool: '{tool}'"}

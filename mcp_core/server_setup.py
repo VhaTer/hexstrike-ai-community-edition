@@ -334,6 +334,32 @@ def _infer_param_type(default: Any) -> type:
     return str
 
 
+def _normalize_tool_result(result: Any) -> Dict[str, Any]:
+    """Return a canonical HexStrike tool result while preserving existing keys."""
+    if not isinstance(result, dict):
+        result = {"success": False, "error": f"Invalid tool result type: {type(result).__name__}"}
+
+    normalized = dict(result)
+    success = bool(normalized.get("success", False))
+    output = normalized.get("output")
+    error = normalized.get("error")
+
+    if output is None:
+        output = normalized.get("stdout", "")
+    if error is None:
+        error = normalized.get("stderr", "") if not success else ""
+
+    normalized["success"] = success
+    normalized["output"] = "" if output is None else output
+    normalized["error"] = "" if error is None else error
+    normalized["returncode"] = normalized.get("returncode", normalized.get("return_code", -1))
+    normalized["timed_out"] = bool(normalized.get("timed_out", False))
+    normalized["partial_results"] = bool(normalized.get("partial_results", False))
+    normalized["execution_time"] = normalized.get("execution_time", 0.0)
+    normalized["timestamp"] = normalized.get("timestamp", "")
+    return normalized
+
+
 def _resolve_required_param_type(spec: Dict[str, Any]) -> type:
     """Resolve a required parameter type from optional registry metadata."""
     declared_type = spec.get("type")
@@ -644,14 +670,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     async def run_security_tool(
         ctx: Context,
         tool_name: str,
-        parameters: str,
+        parameters: str | Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Execute any security tool from the HexStrike arsenal.
 
         Args:
             tool_name:  Tool name (e.g. 'nmap', 'sqlmap', 'sherlock')
-            parameters: JSON string of parameters (e.g. '{"target": "example.com"}')
+            parameters: JSON string or dict of parameters (e.g. '{"target": "example.com"}')
 
         Returns:
             Tool execution results
@@ -672,16 +698,29 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         }
         await ctx.info(f"🔍 Executing {tool_name}")
 
+        def finalize(result: Any) -> Dict[str, Any]:
+            normalized = _normalize_tool_result(result)
+            _telemetry["success"] = bool(normalized.get("success", False))
+            _telemetry["timed_out"] = bool(normalized.get("timed_out", False))
+            _telemetry["duration"] = round(time.time() - _t_start, 3)
+            logger.info("[telemetry] %s", json.dumps(_telemetry))
+            _op_metrics.record(_telemetry)
+            return normalized
+
         try:
             params = json.loads(parameters) if isinstance(parameters, str) else parameters
         except json.JSONDecodeError as e:
             await ctx.error(f"❌ Invalid JSON parameters: {e}")
-            return {"success": False, "error": f"Invalid JSON: {e}"}
+            return finalize({"success": False, "error": f"Invalid JSON: {e}"})
+
+        if not isinstance(params, dict):
+            await ctx.error("❌ Invalid parameters: expected JSON object")
+            return finalize({"success": False, "error": "Invalid parameters: expected JSON object"})
 
         route = DIRECT_TOOLS.get(tool_name.lower())
         if not route:
             await ctx.error(f"❌ Unknown tool: {tool_name}")
-            return {"success": False, "error": f"Unknown tool: {tool_name}"}
+            return finalize({"success": False, "error": f"Unknown tool: {tool_name}"})
 
         exec_func, tool_key = route
 
@@ -705,12 +744,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             )
             if not confirmed:
                 _telemetry["confirmation"] = "denied"
-                _telemetry["duration"] = round(time.time() - _t_start, 3)
-                logger.info("[telemetry] %s", json.dumps(_telemetry))
-                return {
+                return finalize({
                     "success": False,
                     "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
-                }
+                })
             _telemetry["confirmation"] = "accepted"
         else:
             _telemetry["confirmation"] = "skipped" if not destructive_request else None
@@ -834,10 +871,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             if prior and prior.get("result", {}).get("success"):
                 _telemetry["cache_hit"] = True
                 _telemetry["success"] = True
-                _telemetry["duration"] = round(time.time() - _t_start, 3)
                 await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
-                logger.info("[telemetry] %s", json.dumps(_telemetry))
-                return prior["result"]
+                return finalize(prior["result"])
 
         loop = asyncio.get_running_loop()
         future = asyncio.ensure_future(
@@ -854,7 +889,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.report_progress(progress, 100)
             await ctx.info(message)
 
-        result = await future
+        result = _normalize_tool_result(await future)
         await ctx.report_progress(100, 100)
 
         # Copy result-level flags into telemetry
@@ -888,10 +923,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
-        _telemetry["duration"] = round(time.time() - _t_start, 3)
-        logger.info("[telemetry] %s", json.dumps(_telemetry))
-        _op_metrics.record(_telemetry)
-        return result
+        return finalize(result)
 
     @mcp.tool(
         description="Return the local skill bundle associated with a HexStrike tool",

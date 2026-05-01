@@ -275,6 +275,31 @@ class TestExecuteCommandNormalization:
         assert stored.get("output") == "output\n"  # not empty dict
         assert "success" in stored
 
+    def test_execute_command_supports_legacy_hexstrike_cache_signature(self):
+        """The shared HexStrikeCache uses get/set(command, params), unlike AdvancedCache."""
+        from server_core.cache import HexStrikeCache
+
+        fake_raw = {
+            "stdout": "legacy cache output\n", "stderr": "", "return_code": 0,
+            "success": True, "timed_out": False, "partial_results": False,
+            "execution_time": 1.0, "timestamp": "",
+        }
+        mock_executor = MagicMock()
+        mock_executor.execute.return_value = fake_raw
+        legacy_cache = HexStrikeCache()
+
+        with patch(
+            "server_core.command_executor.EnhancedCommandExecutor",
+            return_value=mock_executor,
+        ):
+            from server_core.command_executor import execute_command
+            result = execute_command("nmap 5.6.7.8", use_cache=True, cache=legacy_cache)
+            cached = execute_command("nmap 5.6.7.8", use_cache=True, cache=legacy_cache)
+
+        assert result["success"] is True
+        assert cached["output"] == "legacy cache output\n"
+        assert mock_executor.execute.call_count == 1
+
     def test_execute_command_timeout_normalized(self):
         fake_timeout = {
             "stdout": "partial\n",
