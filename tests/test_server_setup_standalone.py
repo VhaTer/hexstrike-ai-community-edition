@@ -339,7 +339,10 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
-        return await tool.fn(target=target)
+        # get_context() requires an active FastMCP request context — patch it
+        # to return our mock ctx so typed wrappers can call run_security_tool
+        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+            return await tool.fn(target=target)
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         mcp_typed = make_mcp()
