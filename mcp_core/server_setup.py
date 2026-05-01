@@ -657,16 +657,17 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         """
         _t_start = time.time()
         _telemetry: Dict[str, Any] = {
-            "tool":            tool_name,
-            "success":         False,
-            "duration":        0.0,
-            "timeout":         False,
-            "cache_hit":       False,
-            "session_state":   False,
-            "confirmation":    None,   # None | "accepted" | "denied" | "skipped"
-            "opt_profile":     "normal",
-            "skill_injected":  False,
+            "tool":             tool_name,
+            "success":          False,
+            "duration":         0.0,
+            "timed_out":        False,
+            "cache_hit":        False,   # True when _scan_cache returns a prior result
+            "session_state":    False,   # True when tech profile restored from ctx.get_state
+            "confirmation":     None,    # None | "accepted" | "denied" | "skipped"
+            "opt_profile":      "normal",
+            "skill_injected":   False,
             "prompt_suggested": False,
+            "target":           "",      # normalized target identity (populated after parse)
         }
         await ctx.info(f"🔍 Executing {tool_name}")
 
@@ -690,6 +691,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             or params.get("domain")
             or params.get("interface", "")
         )
+        _telemetry["target"] = target or ""
 
         # 2. Elicitation — destructive tools require explicit user confirmation
         destructive_request = _build_destructive_confirmation(tool_name, params)
@@ -825,6 +827,17 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         elif opt_profile != "normal":
             await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
+        # 4b. Scan cache — serve prior result if available (avoids redundant execution)
+        if target:
+            prior = _scan_cache.get(f"{tool_name}:{target}")
+            if prior and prior.get("result", {}).get("success"):
+                _telemetry["cache_hit"] = True
+                _telemetry["success"] = True
+                _telemetry["duration"] = round(time.time() - _t_start, 3)
+                await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
+                logger.info("[telemetry] %s", json.dumps(_telemetry))
+                return prior["result"]
+
         loop = asyncio.get_running_loop()
         future = asyncio.ensure_future(
             loop.run_in_executor(None, lambda: exec_func(tool_key, params))
@@ -842,6 +855,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         result = await future
         await ctx.report_progress(100, 100)
+
+        # Copy result-level flags into telemetry
+        _telemetry["timed_out"] = result.get("timed_out", False)
 
         if result.get("success"):
             await ctx.info(f"✅ {tool_name} completed")
@@ -867,6 +883,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
                 }, execution_time=exec_time)
+                _telemetry["cache_hit"] = False  # we just wrote it; hit = prior result served
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
