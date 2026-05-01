@@ -11,6 +11,7 @@ from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
+from server_core.operational_metrics import _op_metrics
 from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
@@ -889,6 +890,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         _telemetry["duration"] = round(time.time() - _t_start, 3)
         logger.info("[telemetry] %s", json.dumps(_telemetry))
+        _op_metrics.record(_telemetry)
         return result
 
     @mcp.tool(
@@ -1076,7 +1078,12 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         entries.sort(key=lambda x: x["timestamp"], reverse=True)
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)
 
-    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}")
+    @mcp.resource("metrics://tools")
+    async def tool_metrics() -> str:
+        """Operational metrics: success rates, errors, timeouts, cache, confirmations by tool."""
+        return json.dumps(_op_metrics.summary(), indent=2)
+
+    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}, metrics://tools")
 
     # ========================================================================
     # Workflow Prompts — native MCP prompts for multi-tool attack chains
