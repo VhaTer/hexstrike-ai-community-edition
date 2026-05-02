@@ -11,6 +11,7 @@ def make_mock_context():
     ctx.debug = AsyncMock()
     ctx.report_progress = AsyncMock()
     ctx.read_resource = AsyncMock(return_value=MagicMock(contents=[]))
+    ctx.session_id = "test-session-fixed"
     return ctx
 
 
@@ -191,7 +192,8 @@ def test_destructive_denial_records_metrics():
 def test_cache_hit_records_metrics_and_normalizes_cached_result():
     from mcp_core.server_setup import _scan_cache
 
-    cache_key = "nmap:cached-phase2.example"
+    # Session-scoped key — must match ctx.session_id = "test-session-fixed"
+    cache_key = "test-session-fixed:nmap:cached-phase2.example"
     _scan_cache.set(cache_key, {
         "tool": "nmap",
         "target": "cached-phase2.example",
@@ -320,7 +322,7 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
 
     # Ensure cache is clear for this target so both calls execute
     from mcp_core.server_setup import _scan_cache
-    _scan_cache.cache.pop(f"nmap:{target}", None)
+    _scan_cache.cache.pop(f"test-session-fixed:nmap:{target}", None)
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         # --- generic call ---
@@ -330,7 +332,7 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
         ))
 
     # Clear cache between the two calls so the typed wrapper also executes
-    _scan_cache.cache.pop(f"nmap:{target}", None)
+    _scan_cache.cache.pop(f"test-session-fixed:nmap:{target}", None)
 
     async def call_typed_wrapper(mcp):
         tool = await mcp.get_tool("nmap")

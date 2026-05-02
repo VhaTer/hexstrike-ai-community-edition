@@ -866,8 +866,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         # 4b. Scan cache — serve prior result if available (avoids redundant execution)
-        if target:
-            prior = _scan_cache.get(f"{tool_name}:{target}")
+        # Cache key is session-scoped to avoid cross-client stale results
+        _session_id = ctx.session_id
+        _cache_key = f"{_session_id}:{tool_name}:{target}" if target else None
+        if _cache_key:
+            prior = _scan_cache.get(_cache_key)
             if prior and prior.get("result", {}).get("success"):
                 _telemetry["cache_hit"] = True
                 _telemetry["success"] = True
@@ -913,9 +916,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     pass
 
             if target:
-                cache_key = f"{tool_name}:{target}"
                 exec_time = result.get("execution_time", 0.0)
-                _scan_cache.set(cache_key, {
+                _scan_cache.set(_cache_key or f"{_session_id}:{tool_name}:{target}", {
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
                 }, execution_time=exec_time)
@@ -1054,16 +1056,18 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://{target}/latest")
     async def scan_latest(target: str) -> str:
-        """Most recent scan result for a given target across all tools."""
+        """Most recent scan result for a given target across all tools (current session)."""
+        ctx = get_context()
+        session_id = ctx.session_id
         matches = [
             v for k, v in _scan_cache.items()
-            if v.get("target") == target
+            if v.get("target") == target and k.startswith(session_id)
         ]
         if not matches:
             return json.dumps({
                 "target":  target,
                 "status":  "no_results",
-                "message": f"No scan results cached for {target}",
+                "message": f"No scan results cached for {target} in current session",
             }, indent=2)
 
         latest = max(matches, key=lambda x: x["timestamp"])
@@ -1076,15 +1080,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://{target}/{tool_name}")
     async def scan_result(target: str, tool_name: str) -> str:
-        """Cached result for a specific tool + target combination."""
-        cache_key = f"{tool_name}:{target}"
+        """Cached result for a specific tool + target combination (current session)."""
+        ctx = get_context()
+        cache_key = f"{ctx.session_id}:{tool_name}:{target}"
         entry = _scan_cache.get(cache_key)
         if not entry:
             return json.dumps({
                 "target":  target,
                 "tool":    tool_name,
                 "status":  "no_results",
-                "message": f"No cached result for {tool_name} on {target}",
+                "message": f"No cached result for {tool_name} on {target} in current session",
             }, indent=2)
 
         return json.dumps({
@@ -1096,7 +1101,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://cache/list")
     async def scan_cache_list() -> str:
-        """List all cached scan results with timestamps."""
+        """List cached scan results for the current session."""
+        ctx = get_context()
+        session_id = ctx.session_id
         entries = [
             {
                 "key":       k,
@@ -1106,6 +1113,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 "success":   v["result"].get("success", False),
             }
             for k, v in _scan_cache.items()
+            if k.startswith(session_id)
         ]
         entries.sort(key=lambda x: x["timestamp"], reverse=True)
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)
