@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "hexstrike-ai": {
+    "hexstrike-ai-pulse": {
       "command": "/path/to/hexstrike/hexstrike-env/bin/python",
       "args": [
         "/path/to/hexstrike/hexstrike_mcp.py",
@@ -9,7 +9,7 @@
         "--profile", 
         "full"
       ],
-      "description": "HexStrike AI Community Edition - Advanced Cybersecurity Automation Platform. Turn off alwaysAllow if you dont want autonomous execution!",
+      "description": "HexStrike AI-PULSE — FastMCP 3.x native cybersecurity platform. Turn off alwaysAllow if you dont want autonomous execution!",
       "timeout": 300,
       "alwaysAllow": []
     }
