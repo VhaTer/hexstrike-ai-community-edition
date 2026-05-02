@@ -12,6 +12,7 @@ from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
 from server_core.operational_metrics import _op_metrics
+from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
@@ -538,6 +539,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
     mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
+
+    # Middleware — framework-level logging and session tracking
+    mcp.add_middleware(HexStrikeSessionMiddleware())
+    mcp.add_middleware(HexStrikeLoggingMiddleware(
+        log_resources=False,   # enable when debugging resource access
+        log_prompts=True,
+    ))
 
     _register_skills(mcp, logger)
 
