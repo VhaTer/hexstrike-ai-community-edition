@@ -1,6 +1,6 @@
 # HexStrike AI-PULSE
 
-> AI-powered penetration testing platform — 150+ security tools, real-time LLM feedback, MCP native.
+ AI-powered penetration testing platform — 150+ security tools, real-time LLM feedback, MCP native.
 
 ![HexStrike AI-PULSE](assets/hexstrike-pulse-logo.png)
 
@@ -20,7 +20,7 @@ Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive securi
 - **MCP native** — built on FastMCP 3.x with Resources, Prompts, Elicitation, and Context streaming
 
 ---
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VhaTer/hexstrike-ai-community-edition)
 ## Quick Start
 
 ```bash
