@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
 from fastmcp.server.dependencies import get_context
-from mcp_tools.gateway import register_gateway_tools
 from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
@@ -475,50 +474,6 @@ def _register_skills(mcp: FastMCP, logger) -> None:
         )
     )
     logger.info("🤖 Skills initialized (supporting files exposed as resources, reload enabled)")
-
-def setup_mcp_server(hexstrike_client, logger, compact: bool = False, profiles: Optional[list] = None) -> FastMCP:
-    """
-    Set up the MCP server with all enhanced tool functions (Phase 2 — Flask still present).
-
-    Args:
-        hexstrike_client: Initialized HexStrikeClient
-        logger: Logger instance
-        compact: If True, register only classify_task and run_tool gateway tools
-        profiles: Optional list of tool profiles to load
-
-    Returns:
-        Configured FastMCP instance
-    """
-    transforms = [BM25SearchTransform()] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai-pulse", transforms=transforms)
-
-    _register_skills(mcp, logger)
-
-    if compact:
-        register_gateway_tools(mcp, hexstrike_client)
-        logger.info("Compact mode: only gateway tools registered (classify_task, run_tool)")
-        return mcp
-
-    if profiles:
-        if "default" in profiles:
-            selected_profiles = DEFAULT_PROFILE
-        elif "full" in profiles:
-            selected_profiles = FULL_PROFILE
-        else:
-            selected_profiles = profiles
-    else:
-        selected_profiles = DEFAULT_PROFILE
-
-    selected_profiles = resolve_profile_dependencies(selected_profiles)
-
-    registered = set()
-    for profile in selected_profiles:
-        for reg_func in TOOL_PROFILES.get(profile, []):
-            if reg_func not in registered:
-                reg_func(mcp, hexstrike_client, logger)
-                registered.add(reg_func)
-
-    return mcp
 
 def setup_mcp_server_standalone(logger=None) -> FastMCP:
     """
