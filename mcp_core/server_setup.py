@@ -950,6 +950,31 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
 
+        # ctx.sample() — AI-powered next-step suggestion (opt-in via _ai_suggest=True)
+        # Advisory only: never blocks execution, silently skips if client lacks sampling support
+        if params.get("_ai_suggest") and result.get("success"):
+            output_text = str(result.get("output", ""))[:2000]  # cap to avoid large prompts
+            if output_text.strip():
+                try:
+                    sample_result = await ctx.sample(
+                        messages=(
+                            f"You are a penetration testing assistant analyzing tool output.\n"
+                            f"Tool: {tool_name}\nTarget: {target or 'unknown'}\n"
+                            f"Output (truncated to 2000 chars):\n{output_text}\n\n"
+                            f"Based on this output, suggest the single most valuable next "
+                            f"HexStrike tool to run and why. Be concise (2-3 sentences max). "
+                            f"Format: 'Next tool: <tool_name> — <reason>'"
+                        ),
+                        max_tokens=120,
+                    )
+                    suggestion = sample_result.text.strip() if sample_result else ""
+                    if suggestion:
+                        await ctx.info(f"🤖 AI suggestion: {suggestion}")
+                        result["ai_suggestion"] = suggestion
+                        _telemetry["ai_suggested"] = True
+                except Exception:
+                    pass  # sampling not supported by client or failed — no-op
+
         return finalize(result)
 
     @mcp.tool(
