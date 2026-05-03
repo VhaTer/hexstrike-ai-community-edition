@@ -21,7 +21,35 @@ from mcp_core.server_setup import setup_mcp_server_standalone
 from server_core.modern_visual_engine import ModernVisualEngine
 from server_core.singletons import cache, telemetry, enhanced_process_manager
 import server_core.config_core as config_core
-from server_api.ops.system_monitoring import _get_tool_availability, _HEALTH_TOOL_CATEGORIES, _tool_availability_last_refresh
+
+# ---------------------------------------------------------------------------
+# Tool availability (formerly server_api/ops/system_monitoring.py)
+# Lightweight replacement — no Flask dependency
+# ---------------------------------------------------------------------------
+import shutil
+
+_HEALTH_TOOL_CATEGORIES = {
+    "essential": ["nmap", "curl", "python3"],
+    "recon":     ["subfinder", "amass", "httpx", "katana"],
+    "web":       ["nikto", "sqlmap", "gobuster", "ffuf", "nuclei"],
+    "wifi":      ["airmon-ng", "airodump-ng", "aircrack-ng"],
+    "exploit":   ["msfconsole", "searchsploit"],
+}
+_tool_availability_last_refresh: float = 0.0
+_tool_availability_cache: dict = {}
+
+
+def _get_tool_availability() -> dict:
+    """Check which pentest tools are available on PATH."""
+    global _tool_availability_last_refresh, _tool_availability_cache
+    import time
+    if time.time() - _tool_availability_last_refresh < 60 and _tool_availability_cache:
+        return _tool_availability_cache
+    all_tools = {t for tools in _HEALTH_TOOL_CATEGORIES.values() for t in tools}
+    result = {tool: shutil.which(tool) is not None for tool in all_tools}
+    _tool_availability_cache = result
+    _tool_availability_last_refresh = time.time()
+    return result
 
 # ============================================================================
 # LOGGING CONFIGURATION (MUST BE FIRST)
