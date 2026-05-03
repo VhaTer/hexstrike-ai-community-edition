@@ -12,6 +12,7 @@ from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
 from server_core.operational_metrics import _op_metrics
+from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
@@ -204,8 +205,25 @@ def _detect_from_cache(target: str) -> Optional[TechProfile]:
     )
 
 # ---------------------------------------------------------------------------
-# Tool → Skill mapping for ctx.read_resource()
+# Per-category default timeouts for typed tool wrappers (seconds)
+# These are passed to mcp.tool(timeout=) — FastMCP enforces via anyio.fail_after()
+# run_security_tool itself has no native timeout (handles cancellation internally)
 # ---------------------------------------------------------------------------
+_CATEGORY_TIMEOUTS: Dict[str, float] = {
+    "wifi-pentest":     600.0,   # aircrack, wifite — can run long
+    "nmap-recon":       300.0,   # nmap, masscan, rustscan
+    "subdomain-enum":   600.0,   # amass, subfinder — network-heavy
+    "osint-recon":      300.0,
+    "web-recon":        300.0,   # httpx, katana, gobuster
+    "web-vuln":         600.0,   # nuclei, sqlmap, nikto
+    "password-cracking": 1800.0, # hashcat, john — intentionally long
+    "smb-enum":         300.0,
+    "exploitation":     600.0,   # metasploit
+    "binary-analysis":  300.0,
+    "cloud-audit":      600.0,   # prowler, trivy
+    "active-directory": 300.0,
+}
+_DEFAULT_TOOL_TIMEOUT: float = 300.0  # fallback for unmapped categories
 _TOOL_SKILL_MAP = {
     # wifi-pentest
     "airmon_ng": "wifi-pentest", "airodump_ng": "wifi-pentest",
@@ -521,6 +539,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     transforms = [BM25SearchTransform()] if BM25SearchTransform else []
     mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
+
+    # Middleware — framework-level logging and session tracking
+    mcp.add_middleware(HexStrikeSessionMiddleware())
+    mcp.add_middleware(HexStrikeLoggingMiddleware(
+        log_resources=False,   # enable when debugging resource access
+        log_prompts=True,
+    ))
 
     _register_skills(mcp, logger)
 
@@ -866,8 +891,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         # 4b. Scan cache — serve prior result if available (avoids redundant execution)
-        if target:
-            prior = _scan_cache.get(f"{tool_name}:{target}")
+        # Cache key is session-scoped to avoid cross-client stale results
+        _session_id = ctx.session_id
+        _cache_key = f"{_session_id}:{tool_name}:{target}" if target else None
+        if _cache_key:
+            prior = _scan_cache.get(_cache_key)
             if prior and prior.get("result", {}).get("success"):
                 _telemetry["cache_hit"] = True
                 _telemetry["success"] = True
@@ -913,15 +941,39 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     pass
 
             if target:
-                cache_key = f"{tool_name}:{target}"
                 exec_time = result.get("execution_time", 0.0)
-                _scan_cache.set(cache_key, {
+                _scan_cache.set(_cache_key or f"{_session_id}:{tool_name}:{target}", {
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
                 }, execution_time=exec_time)
                 _telemetry["cache_hit"] = False  # we just wrote it; hit = prior result served
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
+
+        # ctx.sample() — AI-powered next-step suggestion (opt-in via _ai_suggest=True)
+        # Advisory only: never blocks execution, silently skips if client lacks sampling support
+        if params.get("_ai_suggest") and result.get("success"):
+            output_text = str(result.get("output", ""))[:2000]  # cap to avoid large prompts
+            if output_text.strip():
+                try:
+                    sample_result = await ctx.sample(
+                        messages=(
+                            f"You are a penetration testing assistant analyzing tool output.\n"
+                            f"Tool: {tool_name}\nTarget: {target or 'unknown'}\n"
+                            f"Output (truncated to 2000 chars):\n{output_text}\n\n"
+                            f"Based on this output, suggest the single most valuable next "
+                            f"HexStrike tool to run and why. Be concise (2-3 sentences max). "
+                            f"Format: 'Next tool: <tool_name> — <reason>'"
+                        ),
+                        max_tokens=120,
+                    )
+                    suggestion = sample_result.text.strip() if sample_result else ""
+                    if suggestion:
+                        await ctx.info(f"🤖 AI suggestion: {suggestion}")
+                        result["ai_suggestion"] = suggestion
+                        _telemetry["ai_suggested"] = True
+                except Exception:
+                    pass  # sampling not supported by client or failed — no-op
 
         return finalize(result)
 
@@ -1022,11 +1074,15 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         tool_def = _get_registry_tool_definition(public_name)
         if not tool_def:
             continue
+        # Resolve per-category timeout for this tool
+        skill_cat = _TOOL_SKILL_MAP.get(public_name.lower())
+        tool_timeout = _CATEGORY_TIMEOUTS.get(skill_cat, _DEFAULT_TOOL_TIMEOUT) if skill_cat else _DEFAULT_TOOL_TIMEOUT
         wrapper = _create_typed_tool_wrapper(public_name, tool_def, run_security_tool)
         mcp.tool(
             name=public_name,
             description=tool_def["desc"],
             annotations={"readOnlyHint": False, "openWorldHint": True},
+            timeout=tool_timeout,
         )(wrapper)
         typed_tools_registered += 1
 
@@ -1054,16 +1110,18 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://{target}/latest")
     async def scan_latest(target: str) -> str:
-        """Most recent scan result for a given target across all tools."""
+        """Most recent scan result for a given target across all tools (current session)."""
+        ctx = get_context()
+        session_id = ctx.session_id
         matches = [
             v for k, v in _scan_cache.items()
-            if v.get("target") == target
+            if v.get("target") == target and k.startswith(session_id)
         ]
         if not matches:
             return json.dumps({
                 "target":  target,
                 "status":  "no_results",
-                "message": f"No scan results cached for {target}",
+                "message": f"No scan results cached for {target} in current session",
             }, indent=2)
 
         latest = max(matches, key=lambda x: x["timestamp"])
@@ -1076,15 +1134,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://{target}/{tool_name}")
     async def scan_result(target: str, tool_name: str) -> str:
-        """Cached result for a specific tool + target combination."""
-        cache_key = f"{tool_name}:{target}"
+        """Cached result for a specific tool + target combination (current session)."""
+        ctx = get_context()
+        cache_key = f"{ctx.session_id}:{tool_name}:{target}"
         entry = _scan_cache.get(cache_key)
         if not entry:
             return json.dumps({
                 "target":  target,
                 "tool":    tool_name,
                 "status":  "no_results",
-                "message": f"No cached result for {tool_name} on {target}",
+                "message": f"No cached result for {tool_name} on {target} in current session",
             }, indent=2)
 
         return json.dumps({
@@ -1096,7 +1155,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     @mcp.resource("scan://cache/list")
     async def scan_cache_list() -> str:
-        """List all cached scan results with timestamps."""
+        """List cached scan results for the current session."""
+        ctx = get_context()
+        session_id = ctx.session_id
         entries = [
             {
                 "key":       k,
@@ -1106,6 +1167,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 "success":   v["result"].get("success", False),
             }
             for k, v in _scan_cache.items()
+            if k.startswith(session_id)
         ]
         entries.sort(key=lambda x: x["timestamp"], reverse=True)
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)

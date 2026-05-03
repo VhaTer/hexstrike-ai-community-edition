@@ -1,25 +1,30 @@
+
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 
+
+# ---------------------------------------------------------------------------
+# Test helpers (duplicated from conftest.py for correct patch() target resolution)
+# patch() requires the module to be imported under the same sys.modules key
+# that production code uses. Importing via 'from tests.conftest import ...' or
+# importlib creates a second module entry and breaks patch() path resolution.
+# ---------------------------------------------------------------------------
 
 def make_mock_context():
-    ctx = MagicMock()
+    ctx = SimpleNamespace()
     ctx.info = AsyncMock()
     ctx.error = AsyncMock()
     ctx.warning = AsyncMock()
     ctx.debug = AsyncMock()
     ctx.report_progress = AsyncMock()
-    ctx.read_resource = AsyncMock(return_value=MagicMock(contents=[]))
+    ctx.read_resource = AsyncMock(return_value=SimpleNamespace(contents=[]))
+    ctx.get_state = AsyncMock(return_value=None)
+    ctx.set_state = AsyncMock()
+    ctx.get_prompt = AsyncMock(return_value=SimpleNamespace(messages=[]))
+    ctx.session_id = "test-session-fixed"
     return ctx
-
-
-async def call_run_security_tool(mcp, tool_name, parameters):
-    tool = await mcp.get_tool("run_security_tool")
-    assert tool is not None
-    ctx = make_mock_context()
-    payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
-    return await tool.fn(ctx, tool_name=tool_name, parameters=payload)
 
 
 def run(coro):
@@ -32,7 +37,15 @@ def run(coro):
 
 def make_mcp():
     from mcp_core.server_setup import setup_mcp_server_standalone
-    return setup_mcp_server_standalone(MagicMock())
+    return setup_mcp_server_standalone()
+
+
+async def call_run_security_tool(mcp, tool_name, parameters):
+    tool = await mcp.get_tool("run_security_tool")
+    assert tool is not None
+    ctx = make_mock_context()
+    payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
+    return await tool.fn(ctx, tool_name=tool_name, parameters=payload)
 
 
 def test_run_security_tool_registered():
@@ -191,7 +204,8 @@ def test_destructive_denial_records_metrics():
 def test_cache_hit_records_metrics_and_normalizes_cached_result():
     from mcp_core.server_setup import _scan_cache
 
-    cache_key = "nmap:cached-phase2.example"
+    # Session-scoped key — must match ctx.session_id = "test-session-fixed"
+    cache_key = "test-session-fixed:nmap:cached-phase2.example"
     _scan_cache.set(cache_key, {
         "tool": "nmap",
         "target": "cached-phase2.example",
@@ -320,7 +334,7 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
 
     # Ensure cache is clear for this target so both calls execute
     from mcp_core.server_setup import _scan_cache
-    _scan_cache.cache.pop(f"nmap:{target}", None)
+    _scan_cache.cache.pop(f"test-session-fixed:nmap:{target}", None)
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         # --- generic call ---
@@ -330,7 +344,7 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
         ))
 
     # Clear cache between the two calls so the typed wrapper also executes
-    _scan_cache.cache.pop(f"nmap:{target}", None)
+    _scan_cache.cache.pop(f"test-session-fixed:nmap:{target}", None)
 
     async def call_typed_wrapper(mcp):
         tool = await mcp.get_tool("nmap")
@@ -363,3 +377,81 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
     assert generic_result["output"]   == typed_result["output"]
     assert generic_result["returncode"] == typed_result["returncode"]
     assert generic_result["timed_out"] == typed_result["timed_out"]
+
+
+# ---------------------------------------------------------------------------
+# Track 1 item 4 — ctx.sample() AI suggestion (opt-in)
+# ---------------------------------------------------------------------------
+
+def test_ai_suggest_calls_ctx_sample_on_success():
+    """_ai_suggest=True triggers ctx.sample() on successful tool execution."""
+    fake_output = {
+        "success": True, "stdout": "nmap scan results\n22/tcp open ssh\n80/tcp open http",
+        "stderr": "", "return_code": 0, "timed_out": False,
+        "partial_results": False, "execution_time": 2.0, "timestamp": "",
+    }
+
+    async def run_with_sample():
+        tool = await make_mcp().get_tool("run_security_tool")
+        ctx = make_mock_context()
+        ctx.get_state = AsyncMock(return_value=None)
+        ctx.set_state = AsyncMock()
+        sample_result = MagicMock()
+        sample_result.text = "Next tool: nikto — HTTP port 80 found, web vuln scan recommended."
+        ctx.sample = AsyncMock(return_value=sample_result)
+        payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
+        return await tool.fn(ctx, tool_name="nmap", parameters=payload), ctx
+
+    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+        result, ctx = run(run_with_sample())
+
+    ctx.sample.assert_awaited_once()
+    assert result["success"] is True
+    assert "ai_suggestion" in result
+    assert "nikto" in result["ai_suggestion"]
+
+
+def test_ai_suggest_silent_when_sampling_unsupported():
+    """ctx.sample() exception must be swallowed — result still returned normally."""
+    fake_output = {
+        "success": True, "stdout": "scan done", "stderr": "", "return_code": 0,
+        "timed_out": False, "partial_results": False, "execution_time": 1.0, "timestamp": "",
+    }
+
+    async def run_with_failing_sample():
+        tool = await make_mcp().get_tool("run_security_tool")
+        ctx = make_mock_context()
+        ctx.get_state = AsyncMock(return_value=None)
+        ctx.set_state = AsyncMock()
+        ctx.sample = AsyncMock(side_effect=RuntimeError("Client does not support sampling"))
+        payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
+        return await tool.fn(ctx, tool_name="nmap", parameters=payload)
+
+    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+        result = run(run_with_failing_sample())
+
+    assert result["success"] is True
+    assert "ai_suggestion" not in result
+
+
+def test_ai_suggest_skipped_when_not_requested():
+    """Without _ai_suggest=True, ctx.sample() must never be called."""
+    fake_output = {
+        "success": True, "stdout": "scan done", "stderr": "", "return_code": 0,
+        "timed_out": False, "partial_results": False, "execution_time": 1.0, "timestamp": "",
+    }
+
+    async def run_without_suggest():
+        tool = await make_mcp().get_tool("run_security_tool")
+        ctx = make_mock_context()
+        ctx.get_state = AsyncMock(return_value=None)
+        ctx.set_state = AsyncMock()
+        ctx.sample = AsyncMock()
+        payload = json.dumps({"target": "10.0.0.1"})
+        return await tool.fn(ctx, tool_name="nmap", parameters=payload), ctx
+
+    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+        result, ctx = run(run_without_suggest())
+
+    ctx.sample.assert_not_awaited()
+    assert "ai_suggestion" not in result
