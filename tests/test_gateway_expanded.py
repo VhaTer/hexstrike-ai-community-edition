@@ -56,14 +56,11 @@ class TestClassifyTaskAsync:
         return mcp
 
     def test_classify_task_registers_async_tool(self, mock_mcp, mock_hexstrike_client):
-        """Test that classify_task is registered as async tool."""
+        """Track 2: register_gateway_tools is a no-op — Flask gateway removed."""
         from mcp_tools.gateway import register_gateway_tools
-        
-        # This will call mcp.tool() to register both classify_task and run_tool
         register_gateway_tools(mock_mcp, mock_hexstrike_client)
-        
-        # Verify tool() was called at least twice (for classify_task and run_tool)
-        assert mock_mcp.tool.call_count >= 2
+        # No tools registered — gateway removed in Track 2
+        assert mock_mcp.tool.call_count == 0
 
     @pytest.mark.asyncio
     async def test_classify_task_success_async(self, mock_hexstrike_client):
