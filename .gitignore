@@ -43,3 +43,5 @@ coverage.xml
 junit.xml
 results.xml
 .vscode/
+.coverage
+LOW_COVERAGE_ANALYSIS_REPORT.md
