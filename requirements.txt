@@ -11,7 +11,7 @@
 # ============================================================================
 requests>=2.31.0,<3.0.0         # HTTP library (requests import)
 psutil>=5.9.0,<6.0.0            # System utilities (psutil import)
-fastmcp>=3.2.4                  # MCP framework 
+fastmcp>=3.1.1                  # MCP framework (3.1.1 installed, 3.2.x available) 
 # ============================================================================
 # WEB SCRAPING & AUTOMATION (ACTUALLY USED)
 # ============================================================================

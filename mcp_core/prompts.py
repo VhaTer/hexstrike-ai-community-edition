@@ -9,6 +9,10 @@ and ask for action; assistant messages show the exact run_security_tool() calls.
 
 Registered in setup_mcp_server_standalone() via register_prompts().
 
+CTF prompts powered by CTFWorkflowManager (V6 intelligence layer):
+  ctf_web_challenge  — web-specific, URL-based entry point
+  ctf_challenge      — universal, all 7 categories (web/crypto/pwn/forensics/rev/misc/osint)
+
 Skills reference:
   nmap-recon, subdomain-enum, web-recon, web-vuln,
   password-cracking, smb-enum, exploitation, cloud-audit
@@ -133,43 +137,247 @@ def register_prompts(mcp: FastMCP) -> None:
     @mcp.prompt()
     async def ctf_web_challenge(url: str) -> list[Message]:
         """
-        CTF web challenge enumeration and exploitation workflow.
+        CTF web challenge — enumeration and exploitation workflow.
+        Powered by CTFWorkflowManager (V6 intelligence layer).
         Skills: web-recon + web-vuln
 
         Args:
             url: Challenge URL (e.g. 'http://challenge.ctf.local:8080')
         """
+        from server_core.singletons import get_ctf_manager
+        from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+
+        challenge = CTFChallenge(
+            name="ctf_web",
+            category="web",
+            description=f"CTF web challenge at {url}",
+            difficulty="unknown",
+            url=url,
+            target=url,
+        )
+
+        ctf = get_ctf_manager()
+        workflow = ctf.create_ctf_challenge_workflow(challenge)
+
+        steps = workflow.get("workflow_steps", [])
+        strategies = workflow.get("strategies", [])
+        fallback = workflow.get("fallback_strategies", [])
+        suggested_tools = workflow.get("tools", [])
+        est_time_min = workflow.get("estimated_time", 3600) // 60
+        success_prob = workflow.get("success_probability", 0.65)
+        validation = workflow.get("validation_steps", [])
+
+        strategy_summary = ""
+        if strategies:
+            strategy_summary = "\nStrategies: " + ", ".join(s["strategy"] for s in strategies[:4])
+
+        fallback_summary = ""
+        if fallback:
+            fallback_summary = "\nFallback: " + ", ".join(f["strategy"] for f in fallback[:3])
+
+        def step_label(n):
+            if len(steps) > n:
+                return f"{steps[n]['action']} — {steps[n]['description']}"
+            return ""
+
         return [
             Message(
-                f"You are solving a CTF web challenge at: {url}. "
-                "Execute each step in order using run_security_tool()."
+                f"CTF Web Challenge at: {url}\n"
+                f"Estimated: ~{est_time_min} min | Success probability: {success_prob:.0%}\n"
+                f"CTFWorkflowManager tools: {', '.join(suggested_tools[:8])}"
+                f"{strategy_summary}"
+                f"{fallback_summary}\n"
+                "Execute each step using run_security_tool()."
             ),
             Message(
-                f"STEP 1 — Fingerprint tech stack and check for WAF:\n"
+                f"STEP 1 — {step_label(0) or 'Reconnaissance: tech detection and WAF check'}\n"
                 f'run_security_tool(tool_name="wafw00f", parameters=\'{{"url": "{url}"}}\')\n'
                 f'run_security_tool(tool_name="httpx", parameters=\'{{"target": "{url}", "probe": true, "tech_detect": true, "title": true}}\')\n'
                 f'run_security_tool(tool_name="nikto", parameters=\'{{"target": "{url}"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 2 — Directory and file discovery:\n"
+                f"STEP 2 — {step_label(2) or 'Directory enumeration: multi-tool discovery'}\n"
                 f'run_security_tool(tool_name="gobuster", parameters=\'{{"url": "{url}", "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt", "additional_args": "-x php,html,txt,bak,old,zip"}}\')\n'
                 f'run_security_tool(tool_name="ffuf", parameters=\'{{"url": "{url}/FUZZ", "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt", "match_codes": "200,204,301,302,307,401,403"}}\')\n'
                 f'run_security_tool(tool_name="katana", parameters=\'{{"url": "{url}"}}\')',
                 role="assistant",
             ),
             Message(
-                f"STEP 3 — Vulnerability scan and injection testing:\n"
+                f"STEP 3 — {step_label(4) or 'Vulnerability scanning: automated scan + injection testing'}\n"
                 f'run_security_tool(tool_name="nuclei", parameters=\'{{"target": "{url}"}}\')\n'
                 f'run_security_tool(tool_name="sqlmap", parameters=\'{{"url": "{url}", "additional_args": "--batch --level=3 --risk=2 --dbs"}}\')\n'
                 f'run_security_tool(tool_name="dalfox", parameters=\'{{"url": "{url}"}}\')',
                 role="assistant",
             ),
             Message(
-                f"FINAL — Compile CTF findings for {url}: flags found, vulnerabilities confirmed, "
-                "exploitation path. Check /etc/passwd, /flag, /flag.txt."
+                f"STEP 4 — {step_label(5) or 'Manual exploitation'}\n"
+                "If automation found nothing: apply fallback strategies above.\n"
+                "Parameter tampering, cookie/session manipulation, business logic flaws."
+            ),
+            Message(
+                f"FINAL — Collect CTF findings for {url}:\n"
+                "- Flags: check /flag, /flag.txt, /etc/passwd, response bodies, cookies, source comments\n"
+                "- Validation: " + ", ".join(v["step"] for v in validation[:4])
             ),
         ]
+
+    @mcp.prompt()
+    async def ctf_challenge(
+        name: str,
+        category: str,
+        description: str,
+        difficulty: str = "unknown",
+        target: str = "",
+        points: int = 0,
+    ) -> list[Message]:
+        """
+        Universal CTF challenge workflow — all categories.
+        Powered by CTFWorkflowManager + CTFToolManager (V6 intelligence layer).
+
+        The workflow is generated dynamically from the challenge description and category.
+        Tool selection, strategy, time estimation, and resource requirements are all
+        computed by CTFWorkflowManager based on the V6 intelligence layer.
+
+        Categories: web, crypto, pwn, forensics, rev, misc, osint
+
+        Args:
+            name:        Challenge name
+            category:    Challenge category (web/crypto/pwn/forensics/rev/misc/osint)
+            description: Challenge description — drives intelligent tool selection
+            difficulty:  easy/medium/hard/insane/unknown (default 'unknown')
+            target:      Target URL, IP, or binary path (optional)
+            points:      Challenge point value (optional)
+        """
+        from server_core.singletons import get_ctf_manager
+        from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+        from server_core.workflows.ctf.toolManager import CTFToolManager
+
+        challenge = CTFChallenge(
+            name=name,
+            category=category,
+            description=description,
+            difficulty=difficulty,
+            target=target,
+            points=points,
+        )
+
+        ctf = get_ctf_manager()
+        tool_mgr = CTFToolManager()
+        workflow = ctf.create_ctf_challenge_workflow(challenge)
+
+        steps = workflow.get("workflow_steps", [])
+        strategies = workflow.get("strategies", [])
+        fallback = workflow.get("fallback_strategies", [])
+        parallel_tasks = workflow.get("parallel_tasks", [])
+        suggested_tools = workflow.get("tools", [])
+        est_time_min = workflow.get("estimated_time", 3600) // 60
+        success_prob = workflow.get("success_probability", 0.55)
+        validation = workflow.get("validation_steps", [])
+        expected_artifacts = workflow.get("expected_artifacts", [])
+        resources = workflow.get("resource_requirements", {})
+
+        # Build tool commands for the top suggested tools
+        tool_commands = []
+        for tool in suggested_tools[:4]:
+            try:
+                cmd = tool_mgr.get_tool_command(tool, target or name)
+                tool_commands.append(f"  {tool}: {cmd[:100]}")
+            except Exception:
+                tool_commands.append(f"  {tool}: (see tool docs)")
+
+        # Parallel execution summary
+        parallel_info = ""
+        if parallel_tasks:
+            groups = [
+                f"[{g['task_group']}] {', '.join(g['tasks'][:3])} (max {g['max_concurrent']} concurrent)"
+                for g in parallel_tasks[:3]
+            ]
+            parallel_info = "\n\nParallel execution:\n" + "\n".join(groups)
+
+        # Resource summary
+        resource_info = ""
+        if resources:
+            resource_info = (
+                f"\nRequired: {resources.get('cpu_cores', 2)} CPU cores, "
+                f"{resources.get('memory_mb', 2048)}MB RAM"
+                + (", GPU" if resources.get("gpu_required") else "")
+            )
+
+        messages = [
+            Message(
+                f"CTF Challenge: [{category.upper()}] {name} | {difficulty} | {points} pts\n"
+                f"Description: {description[:200]}{'...' if len(description) > 200 else ''}\n"
+                f"Target: {target or 'see challenge files'}\n"
+                f"Estimated: ~{est_time_min} min | Success probability: {success_prob:.0%}"
+                f"{resource_info}\n\n"
+                f"CTFWorkflowManager selected {len(suggested_tools)} tools: {', '.join(suggested_tools[:8])}\n"
+                + ("\nOptimized commands:\n" + "\n".join(tool_commands) if tool_commands else "")
+                + parallel_info
+            ),
+        ]
+
+        # Add workflow steps as assistant messages
+        for step in steps[:6]:
+            step_tools = step.get("tools", [])
+            is_parallel = step.get("parallel", False)
+            est_step_min = step.get("estimated_time", 600) // 60
+
+            step_calls = []
+            for tool in step_tools[:3]:
+                if tool not in ("manual", "custom", "python", "sage"):
+                    step_calls.append(
+                        f'run_security_tool(tool_name="{tool}", '
+                        f'parameters=\'{{"target": "{target or name}"}}\')'
+                    )
+                else:
+                    step_calls.append(f"# {step['description']}")
+
+            parallel_note = " [PARALLEL — run concurrently]" if is_parallel else ""
+            step_content = (
+                f"STEP {step['step']} — {step['action'].upper()}{parallel_note} (~{est_step_min} min):\n"
+                f"{step['description']}\n"
+                + ("\n".join(step_calls) if step_calls else f"# {step['description']}")
+            )
+            messages.append(Message(step_content, role="assistant"))
+
+        # Strategies + fallback
+        if strategies:
+            strategy_content = (
+                f"KEY STRATEGIES for {category} challenges:\n"
+                + "\n".join(
+                    f"  • {s['strategy']}: {s['description']}"
+                    for s in strategies[:5]
+                )
+            )
+            if fallback:
+                strategy_content += (
+                    "\n\nFALLBACK if primary fails:\n"
+                    + "\n".join(
+                        f"  • {f['strategy']}: {f['description']}"
+                        for f in fallback[:3]
+                    )
+                )
+            messages.append(Message(strategy_content))
+
+        # Final validation
+        artifact_list = (
+            ", ".join(a["type"] for a in expected_artifacts[:4])
+            if expected_artifacts else "flag, solution artifacts"
+        )
+        validation_list = (
+            ", ".join(v["step"] for v in validation[:4])
+            if validation else "flag_format_check, solution_verification"
+        )
+
+        messages.append(Message(
+            f"FINAL — Collect results for [{category.upper()}] {name}:\n"
+            f"Expected artifacts: {artifact_list}\n"
+            f"Validation: {validation_list}\n"
+            "Flag format: flag{...} or CTF{...} — validate before submitting."
+        ))
+
+        return messages
 
     @mcp.prompt()
     async def smb_lateral_movement(target: str) -> list[Message]:

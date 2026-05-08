@@ -1139,7 +1139,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     # ========================================================================
 
     from mcp_core.prompts import register_prompts
+    from mcp_core.ctf_engine import register_ctf_tools
+    from mcp_core.cve_engine import register_cve_tools
+    from mcp_core.bugbounty_engine import register_bugbounty_tools
     register_prompts(mcp)
+    register_ctf_tools(mcp)
+    register_cve_tools(mcp)
+    register_bugbounty_tools(mcp)
     logger.info("🎯 Workflow prompts registered: bug_bounty_recon, wifi_attack_chain, ctf_web_challenge, smb_lateral_movement, cloud_security_audit")
+    logger.info("🏴 CTF Engine registered: ctf_analyze, ctf_tools, ctf_solve, ctf_team")
+    logger.info("🔍 CVE Engine registered: cve_fetch, cve_analyze, cve_exploits, cve_intel")
+    logger.info("🎯 Bug Bounty Engine registered: bb_recon, bb_hunt, bb_business, bb_osint, bb_full")
 
     return mcp

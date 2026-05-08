@@ -1,9 +1,14 @@
 {
   "mcpServers": {
+<<<<<<< HEAD
     "hexstrike-ai-pulse": {
       "command": "/path/to/hexstrike/hexstrike-env/bin/python",
+=======
+    "hexstrike-ai": {
+      "command": "python",
+>>>>>>> feature/attack-intelligence
       "args": [
-        "/path/to/hexstrike/hexstrike_mcp.py",
+        "hexstrike_mcp.py",
         "--server",
         "http://127.0.0.1:8888",
         "--profile", 

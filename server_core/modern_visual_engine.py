@@ -76,10 +76,11 @@ class ModernVisualEngine:
 
     @staticmethod
     def create_banner() -> str:
-        """Create the enhanced HexStrike banner"""
+        """Create the enhanced HexStrike AI-PULSE banner"""
         accent = ModernVisualEngine.COLORS['ACCENT_LINE']
         RESET = ModernVisualEngine.COLORS['RESET']
         MATRIX_GREEN = ModernVisualEngine.COLORS['MATRIX_GREEN']
+        CRIMSON = ModernVisualEngine.COLORS['CRIMSON']
         title_block = f"{accent}{MATRIX_GREEN}"
         banner = f"""{title_block}
 ██╗  ██╗███████╗██╗  ██╗███████╗████████╗██████╗ ██╗██╗  ██╗███████╗
@@ -87,7 +88,13 @@ class ModernVisualEngine:
 ███████║█████╗   ╚███╔╝ ███████╗   ██║   ██████╔╝██║█████╔╝ █████╗
 ██╔══██║██╔══╝   ██╔██╗ ╚════██║   ██║   ██╔══██╗██║██╔═██╗ ██╔══╝
 ██║  ██║███████╗██╔╝ ██╗███████║   ██║   ██║  ██║██║██║  ██╗███████╗
-╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚══════╝{RESET}"""
+╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚══════╝
+{RESET}{CRIMSON}                    ░█████╗░██╗    ██████╗░██╗   ██╗██╗     ███████╗███████╗
+                    ██╔══██╗██║    ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝
+                    ███████║██║    ██████╔╝██║   ██║██║     ███████╗█████╗
+                    ██╔══██║██║    ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝
+                    ██║  ██║██║    ██║     ╚██████╔╝███████╗███████║███████╗
+                    ╚═╝  ╚═╝╚═╝    ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝{RESET}"""
         return banner
 
     @staticmethod
