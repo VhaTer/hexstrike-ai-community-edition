@@ -26,9 +26,10 @@ except ImportError:
     SkillsDirectoryProvider = None
 
 try:
-    from fastmcp.server.transforms.search import BM25SearchTransform
+    from fastmcp.server.transforms.search import BM25SearchTransform, serialize_tools_for_output_markdown
 except ImportError:
     BM25SearchTransform = None
+    serialize_tools_for_output_markdown = None
 
 # ---------------------------------------------------------------------------
 # In-memory scan result cache — populated by run_security_tool
@@ -492,7 +493,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         import logging
         logger = logging.getLogger(__name__)
 
-    transforms = [BM25SearchTransform()] if BM25SearchTransform else []
+    # BM25SearchTransform: collapse 106 tools into search_tools + call_tool to save context.
+    # markdown serializer uses ~40% fewer tokens than JSON; always_visible pins common tools.
+    transforms = [BM25SearchTransform(
+        max_results=15,
+        search_result_serializer=serialize_tools_for_output_markdown,
+        always_visible=["nmap", "whatweb", "sqlmap"],
+    )] if BM25SearchTransform else []
     mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
 
     # Middleware — framework-level logging and session tracking
@@ -1050,7 +1057,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     # ========================================================================
 
     @mcp.resource("health://server")
-    async def server_health() -> str:
+    async def server_health_resource() -> str:
         """Server health and runtime statistics."""
         uptime = int(time.time() - _server_start_time)
         return json.dumps({
@@ -1059,8 +1066,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             "fastmcp":        "3.2.4",
             "uptime_seconds": uptime,
             "tools_count":    len(DIRECT_TOOLS),
+            "type_count":     len(DIRECT_TOOLS),
             "cached_scans":   len(_scan_cache),
             "cache_stats":    _scan_cache.stats(),
+            "op_metrics":     _op_metrics.summary(),
         }, indent=2)
 
     @mcp.resource("scan://{target}/latest")
@@ -1133,6 +1142,27 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         return json.dumps(_op_metrics.summary(), indent=2)
 
     logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}, metrics://tools")
+
+    # ========================================================================
+    # server_health MCP tool — wraps the health resource for tool-based access
+    # ========================================================================
+    @mcp.tool(
+        description="Check HexStrike server health, runtime statistics and operational metrics",
+        annotations={"readOnlyHint": True},
+    )
+    async def server_health() -> Dict[str, Any]:
+        """Get server health status, runtime statistics and operational metrics."""
+        uptime = int(time.time() - _server_start_time)
+        return {
+            "status":         "healthy",
+            "server":         "hexstrike-ai-pulse",
+            "fastmcp":        "3.2.4",
+            "uptime_seconds": uptime,
+            "tools_count":    len(DIRECT_TOOLS),
+            "cached_scans":   len(_scan_cache),
+            "cache_stats":    _scan_cache.stats(),
+            "op_metrics":     _op_metrics.summary(),
+        }
 
     # ========================================================================
     # Workflow Prompts — native MCP prompts for multi-tool attack chains

@@ -83,7 +83,7 @@ def _build_dashboard_response():
 
         return {
             # Server identity
-            "status": "healthy",
+            "status": "healthy" if all_essential_available else "degraded",
             "version": config_core.get("VERSION", "unknown"),
             "uptime": time.time() - telemetry.stats.get("start_time", time.time()),
 

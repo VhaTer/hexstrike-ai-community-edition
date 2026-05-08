@@ -79,7 +79,7 @@ python3 hexstrike_server.py
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "hexstrike-pulse": {
-      "type": "http",
+      "type": "remote",
       "url": "http://127.0.0.1:8888/mcp",
       "enabled": true
     }
