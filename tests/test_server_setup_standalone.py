@@ -455,3 +455,38 @@ def test_ai_suggest_skipped_when_not_requested():
 
     ctx.sample.assert_not_awaited()
     assert "ai_suggestion" not in result
+
+
+def test_health_resource_has_tool_and_metrics_data():
+    mcp = make_mcp()
+    resource = run(mcp.get_resource("health://server"))
+    assert resource is not None
+    text = run(resource.fn())
+    parsed = json.loads(text)
+    assert parsed["status"] == "healthy"
+    assert parsed["server"] == "hexstrike-ai-pulse"
+    assert "fastmcp" in parsed
+    assert parsed["tools_count"] > 0
+    assert "cached_scans" in parsed
+    assert "cache_stats" in parsed
+    assert "op_metrics" in parsed
+    assert "uptime_seconds" in parsed
+
+
+def test_server_health_tool_is_registered():
+    mcp = make_mcp()
+    tool = run(mcp.get_tool("server_health"))
+    assert tool is not None
+    assert tool.name == "server_health"
+
+
+def test_server_health_tool_returns_health_data():
+    mcp = make_mcp()
+    tool = run(mcp.get_tool("server_health"))
+    assert tool is not None
+    result = run(tool.fn())
+    assert result["status"] == "healthy"
+    assert result["server"] == "hexstrike-ai-pulse"
+    assert result["tools_count"] > 0
+    assert "op_metrics" in result
+    assert "uptime_seconds" in result
