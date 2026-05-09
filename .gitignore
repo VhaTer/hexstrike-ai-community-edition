@@ -50,3 +50,4 @@ LOW_COVERAGE_ANALYSIS_REPORT.md
 opencode.json
 *.ovpn
 hexstrike.log.*
+*.bak
