@@ -76,11 +76,11 @@ _config = {
             "format": "txt"
         },
         "common_dirsearch": {
-            "path": "/usr/share/wordlists/dirsearch/common.txt",
+            "path": "/usr/share/wordlists/dirb/common.txt",
             "type": "directory",
             "description": "Common directory names for Dirsearch",
             "recommended_for": ["dirsearch", "web_content_discovery"],
-            "size": 2205,
+            "size": 4614,
             "tool": ["dirsearch"],
             "speed": "medium",
             "language": "en",

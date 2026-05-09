@@ -762,7 +762,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "autopsy":           (misc_exec, "autopsy"),
     }
 
-    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
+    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True)
     async def run_security_tool(
         ctx: Context,
         tool_name: str,
@@ -992,6 +992,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             await ctx.report_progress(progress, 100)
             await ctx.info(message)
 
+        # Keep polling with progress reports until done
+        pct = 80
+        while not future.done():
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(pct, 100)
+            await ctx.info(f"⏳ Still running ({pct}%)")
+            pct = min(pct + 5, 98)
+
         result = _normalize_tool_result(await future)
         await ctx.report_progress(100, 100)
 
@@ -1185,6 +1195,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             description=tool_def["desc"],
             annotations={"readOnlyHint": False, "openWorldHint": True},
             timeout=tool_timeout,
+            task=True,
         )(wrapper)
         typed_tools_registered += 1
 

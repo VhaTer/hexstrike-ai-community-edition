@@ -13,8 +13,10 @@ Usage:
 
 import logging
 from typing import Any, Dict
-from server_core.command_executor import execute_command
+from pathlib import Path
+import shutil
 
+from server_core.command_executor import execute_command
 logger = logging.getLogger(__name__)
 
 
@@ -111,9 +113,38 @@ def _waybackurls(data: dict) -> dict:
 # web_probe/ handler
 # ---------------------------------------------------------------------------
 
+def _resolve_httpx() -> str:
+    """Return projectdiscovery/httpx path, or empty string if unavailable."""
+    # Try PATH first
+    p = shutil.which("httpx")
+    if p:
+        try:
+            import subprocess
+            r = subprocess.run([p, "-version"], capture_output=True, text=True, timeout=5)
+            if "projectdiscovery" in r.stdout.lower():
+                return p
+        except Exception:
+            pass
+    # Fall back to Go install path
+    go_path = Path.home() / "go" / "bin" / "httpx"
+    if go_path.exists():
+        return str(go_path)
+    return ""
+
+
 def _httpx(data: dict) -> dict:
     err = _require(data, "target")
     if err: return err
+
+    httpx_bin = _resolve_httpx()
+    if not httpx_bin:
+        return {
+            "success": False,
+            "error": "projectdiscovery/httpx not installed — install with: go install github.com/projectdiscovery/httpx/cmd/httpx@latest",
+            "output": "",
+            "returncode": -1,
+        }
+
     target          = data["target"].strip()
     probe           = data.get("probe", True)
     tech_detect     = data.get("tech_detect", False)
@@ -124,13 +155,13 @@ def _httpx(data: dict) -> dict:
     threads         = data.get("threads", 50)
     additional_args = data.get("additional_args", "")
 
-    command = f"httpx -u {target} -t {threads}"
+    command = f"{httpx_bin} -u {target} -t {threads}"
     if probe:          command += " -probe"
     if tech_detect:    command += " -tech-detect"
     if status_code:    command += " -sc"
     if content_length: command += " -cl"
     if title:          command += " -title"
-    if web_server:     command += " -server"
+    if web_server:     command += " -web-server"
     if additional_args: command += f" {additional_args}"
 
     return execute_command(command)

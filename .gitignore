@@ -49,3 +49,4 @@ LOW_COVERAGE_ANALYSIS_REPORT.md
 # Agent configs & VPN creds — never commit
 opencode.json
 *.ovpn
+hexstrike.log.*
