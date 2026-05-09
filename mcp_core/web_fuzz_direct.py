@@ -65,7 +65,8 @@ def _ffuf(data: dict) -> dict:
 
     command = "ffuf"
     if mode == "directory":
-        command += f" -u {url}/FUZZ -w {wordlist}"
+        fuzz_url = url if "/FUZZ" in url else f"{url}/FUZZ"
+        command += f" -u {fuzz_url} -w {wordlist}"
     elif mode == "vhost":
         command += f" -u {url} -H 'Host: FUZZ' -w {wordlist}"
     elif mode == "parameter":

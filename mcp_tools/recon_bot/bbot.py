@@ -1,5 +1,6 @@
 import asyncio
 from fastmcp import Context
+import mcp_core.misc_direct as _misc_direct
 # mcp_tools/recon_bot/bbot.py
 
 def register_bbot_tools(mcp, hexstrike_client):

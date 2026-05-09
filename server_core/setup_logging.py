@@ -1,6 +1,8 @@
 import logging
+import os
 import re
 import sys
+from logging.handlers import RotatingFileHandler
 from shared.colored_formatter import ColoredFormatter
 
 _ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -49,10 +51,30 @@ class _SuppressMCPProbeAccess(logging.Filter):
         msg = record.getMessage()
         return '"GET /mcp HTTP/' not in msg
 
+_LOG_LEVEL_MAP = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+
+
+def _resolve_log_level() -> int:
+    """Read HEXSTRIKE_LOG_LEVEL env var; fall back to INFO."""
+    env = os.environ.get("HEXSTRIKE_LOG_LEVEL", "").strip().lower()
+    if env in _LOG_LEVEL_MAP:
+        return _LOG_LEVEL_MAP[env]
+    if env:
+        logger = logging.getLogger(__name__)
+        logger.warning("Unknown HEXSTRIKE_LOG_LEVEL='%s', falling back to INFO", env)
+    return logging.INFO
+
+
 def setup_logging(log_file: str = 'hexstrike.log') -> logging.Logger:
     """Setup enhanced logging: colored console output + ANSI-stripped file output."""
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    root.setLevel(_resolve_log_level())
 
     # Clear existing handlers to avoid duplicate entries on re-call
     for handler in root.handlers[:]:
@@ -69,14 +91,25 @@ def setup_logging(log_file: str = 'hexstrike.log') -> logging.Logger:
     console_handler.addFilter(_SuppressStartupNoise())
     root.addHandler(console_handler)
 
-    # File handler — plain text, no ANSI codes
+    # File handler — plain text, no ANSI codes, rotated at 10 MB
     try:
-        file_handler = logging.FileHandler(log_file)
+        file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
         file_handler.setFormatter(_PlainFormatter(
             '%(asctime)s - %(levelname)s - %(message)s'
         ))
         file_handler.addFilter(_SuppressStartupNoise())
         root.addHandler(file_handler)
+
+        # Optional JSON log file (set HEXSTRIKE_JSON_LOG=path/to/log.json)
+        json_log_path = os.environ.get("HEXSTRIKE_JSON_LOG", "").strip()
+        if json_log_path:
+            json_handler = RotatingFileHandler(json_log_path, maxBytes=10 * 1024 * 1024, backupCount=3)
+            json_handler.setFormatter(logging.Formatter(
+                '%(message)s'  # JSON is already serialized by the caller
+            ))
+            json_handler.addFilter(_SuppressStartupNoise())
+            root.addHandler(json_handler)
+            root.info(f"📄 JSON logging to {json_log_path}")
     except PermissionError:
         root.warning("Could not open log file %s — logging to console only.", log_file)
 

@@ -295,7 +295,7 @@ TOOLS: Dict[str, dict] = {
         "method": "POST",
         "category": "web_vuln",
         "params": {"target": {"required": True}},
-        "optional": {"severity": "", "tags": "", "template": "", "additional_args": ""},
+        "optional": {"severity": "", "tags": "", "template": "", "ports": "", "additional_args": ""},
         "effectiveness": 0.95,
     },
     "nikto": {

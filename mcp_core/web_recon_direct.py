@@ -141,6 +141,9 @@ def _httpx(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _wafw00f(data: dict) -> dict:
+    # Normalize: registry declares "url" but handler uses "target"
+    if "target" not in data and "url" in data:
+        data["target"] = data["url"]
     err = _require(data, "target")
     if err: return err
     target          = data["target"].strip()

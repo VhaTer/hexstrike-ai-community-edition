@@ -56,8 +56,6 @@ async def _execute_ctf_step_real(
 
     For manual/custom steps: returns structured guidance without execution.
     """
-    from mcp_core.server_setup import run_security_tool
-
     step_result = {
         "step":           step.get("step", 0),
         "action":         step.get("action", "unknown"),
@@ -96,6 +94,7 @@ async def _execute_ctf_step_real(
     # Coroutine factory for a single tool call
     async def _run_tool(tool_name: str) -> Dict[str, Any]:
         try:
+            from mcp_core.server_setup import run_security_tool
             import json
             params = json.dumps({"target": target})
             result = await run_security_tool(

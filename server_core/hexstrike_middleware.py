@@ -45,6 +45,7 @@ import time
 from typing import Any
 
 from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
+from server_core.request_context import generate_request_id, set_request_id, get_request_id
 
 _mw_logger = logging.getLogger("hexstrike.middleware")
 
@@ -60,6 +61,7 @@ class HexStrikeLoggingMiddleware(Middleware):
           "event":       "tool_call",
           "tool":        "nmap",
           "session_id":  "abc123",
+          "request_id":  "a1b2c3d4e5f6",
           "duration_ms": 1234.56,
           "status":      "success" | "error",
           "error":       "..." (only on error)
@@ -90,6 +92,8 @@ class HexStrikeLoggingMiddleware(Middleware):
     ) -> Any:
         tool_name = getattr(context.message, "name", "unknown")
         session_id = _get_session_id(context)
+        request_id = generate_request_id()
+        set_request_id(request_id)
         t0 = time.perf_counter()
 
         try:
@@ -101,6 +105,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "tool_call",
                     "tool":        tool_name,
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "success",
                 }),
@@ -114,6 +119,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "tool_call",
                     "tool":        tool_name,
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "error",
                     "error":       str(exc)[:200],
@@ -133,6 +139,7 @@ class HexStrikeLoggingMiddleware(Middleware):
 
         uri = getattr(context.message, "uri", "unknown")
         session_id = _get_session_id(context)
+        request_id = get_request_id()
         t0 = time.perf_counter()
 
         try:
@@ -144,6 +151,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "resource_read",
                     "uri":         str(uri),
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "success",
                 }),
@@ -156,6 +164,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "resource_read",
                     "uri":         str(uri),
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "error",
                     "error":       str(exc)[:200],
@@ -175,6 +184,7 @@ class HexStrikeLoggingMiddleware(Middleware):
 
         prompt_name = getattr(context.message, "name", "unknown")
         session_id = _get_session_id(context)
+        request_id = get_request_id()
         t0 = time.perf_counter()
 
         try:
@@ -186,6 +196,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "prompt_get",
                     "prompt":      prompt_name,
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "success",
                 }),
@@ -198,6 +209,7 @@ class HexStrikeLoggingMiddleware(Middleware):
                     "event":       "prompt_get",
                     "prompt":      prompt_name,
                     "session_id":  session_id,
+                    "request_id":  request_id,
                     "duration_ms": duration_ms,
                     "status":      "error",
                     "error":       str(exc)[:200],

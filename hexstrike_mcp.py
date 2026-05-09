@@ -9,15 +9,22 @@ Architecture: MCP Client for AI agent communication with HexStrike server
 Framework: FastMCP integration for tool orchestration
 """
 
+import os
 import sys
 import logging
 from shared.colored_formatter import ColoredFormatter
 from mcp_core.mcp_entry import run_mcp
 from mcp_core.args import parse_args
 
-# Setup logging
+# Setup logging (respects HEXSTRIKE_LOG_LEVEL env var)
+_LOG_LEVEL = {
+    "debug": logging.DEBUG, "info": logging.INFO,
+    "warning": logging.WARNING, "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}.get(os.environ.get("HEXSTRIKE_LOG_LEVEL", "").strip().lower(), logging.DEBUG)
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=_LOG_LEVEL,
     format="[%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stderr)

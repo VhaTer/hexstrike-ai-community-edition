@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import inspect
 import json
 import time
@@ -12,6 +13,7 @@ from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
 from server_core.operational_metrics import _op_metrics
 from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
+from server_core.request_context import get_request_id
 from tool_registry import get_tool
 from mcp_core.tool_profiles import (
     TOOL_PROFILES,
@@ -62,6 +64,99 @@ _server_start_time = time.time()
 _optimizer    = ParameterOptimizer()
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
+
+
+def _cache_key_for(session_id: str, tool_name: str, target: str, params: Dict[str, Any]) -> str:
+    relevant = {
+        k: v for k, v in sorted(params.items())
+        if not k.startswith("_") and k not in ("target",)
+    }
+    if not relevant:
+        return f"{session_id}:{tool_name}:{target}"
+    param_str = json.dumps(relevant, sort_keys=True, ensure_ascii=False)
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()[:12]
+    return f"{session_id}:{tool_name}:{target}:{param_hash}"
+
+
+def _collect_cached_scans(session_id: str, target: str) -> Dict[str, Any]:
+    """Collect all cached scan results for a given target in the current session."""
+    scans: Dict[str, Any] = {}
+    for k, v in _scan_cache.items():
+        if k.startswith(session_id) and v.get("target") == target:
+            tool = v.get("tool")
+            if tool:
+                scans[tool] = v.get("result", {})
+    return scans
+
+
+def _enrich_profile_from_cache(profile: Any, cached_scans: Dict[str, Any]) -> Any:
+    """Inject cached scan results into a TargetProfile for better attack planning."""
+    from shared.target_types import TechnologyStack
+
+    # nmap — ports and services
+    nmap_result = cached_scans.get("nmap") or cached_scans.get("nmap_advanced")
+    if nmap_result:
+        output = str(nmap_result.get("output", "") or nmap_result.get("stdout", ""))
+        for line in output.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2 and "/" in parts[0]:
+                try:
+                    port = int(parts[0].split("/")[0])
+                    if port not in profile.open_ports:
+                        profile.open_ports.append(port)
+                    if len(parts) >= 3 and port not in profile.services:
+                        profile.services[port] = parts[2]
+                except ValueError:
+                    pass
+        if profile.open_ports:
+            profile.confidence_score = min(1.0, profile.confidence_score + 0.2)
+
+    # whatweb — technology detection
+    whatweb_result = cached_scans.get("whatweb")
+    if whatweb_result:
+        output = str(whatweb_result.get("output", "") or whatweb_result.get("stdout", ""))
+        tech_keywords = {
+            "wordpress": TechnologyStack.WORDPRESS,
+            "joomla":    TechnologyStack.JOOMLA,
+            "drupal":    TechnologyStack.DRUPAL,
+            "nginx":     TechnologyStack.NGINX,
+            "apache":    TechnologyStack.APACHE,
+            "php":       TechnologyStack.PHP,
+            "python":    TechnologyStack.PYTHON,
+            "node.js":   TechnologyStack.NODEJS,
+            "java":      TechnologyStack.JAVA,
+            "react":     TechnologyStack.REACT,
+            "angular":   TechnologyStack.ANGULAR,
+            "vue":       TechnologyStack.VUE,
+        }
+        output_lower = output.lower()
+        for keyword, tech in tech_keywords.items():
+            if keyword in output_lower and tech not in profile.technologies:
+                profile.technologies.append(tech)
+        profile.confidence_score = min(1.0, profile.confidence_score + 0.1)
+
+    # wafw00f — WAF detection boosts confidence
+    if cached_scans.get("wafw00f"):
+        profile.confidence_score = min(1.0, profile.confidence_score + 0.05)
+
+    # testssl — SSL/TLS info
+    testssl_result = cached_scans.get("testssl")
+    if testssl_result:
+        output = str(testssl_result.get("output", "") or testssl_result.get("stdout", ""))
+        if output and not profile.ssl_info:
+            profile.ssl_info = {"source": "testssl", "summary": output[:200]}
+        profile.confidence_score = min(1.0, profile.confidence_score + 0.05)
+
+    # Adjust attack surface and risk based on real port data
+    if profile.open_ports:
+        profile.attack_surface_score = min(10.0, profile.attack_surface_score + len(profile.open_ports) * 0.5)
+        if len(profile.open_ports) > 5:
+            profile.risk_level = "high"
+        elif len(profile.open_ports) > 2:
+            profile.risk_level = "medium"
+
+    return profile
+
 
 # Tools requiring user confirmation before execution
 _DESTRUCTIVE_TOOLS = {
@@ -179,7 +274,11 @@ def _detect_from_cache(target: str) -> Optional[TechProfile]:
     headers: Dict[str, str] = {}
 
     for tool in PROBE_TOOLS:
-        entry = _scan_cache.get(f"{tool}:{target}")
+        entry = next(
+            (v for k, v in _scan_cache.items()
+             if v.get("tool") == tool and v.get("target") == target),
+            None,
+        )
         if not entry:
             continue
         result = entry.get("result", {})
@@ -538,6 +637,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "hcxdumptool":       (wifi_exec, "hcxdumptool"),
         "wifite":            (wifi_exec, "wifite2"),
         "wifite2":           (wifi_exec, "wifite2"),
+        # wifi — orphelins wirés (+4)
+        "hcxpcapngtool":     (wifi_exec, "hcxpcapngtool"),
+        "eaphammer":         (wifi_exec, "eaphammer"),
+        "bettercap_wifi":    (wifi_exec, "bettercap_wifi"),
+        "mdk4":              (wifi_exec, "mdk4"),
         # recon
         "amass":             (recon_exec, "amass"),
         "subfinder":         (recon_exec, "subfinder"),
@@ -651,6 +755,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "pywerview":         (ad_exec, "pywerview"),
         "bloodhound":        (ad_exec, "bloodhound"),
         "bloodhound_python": (ad_exec, "bloodhound"),
+        # orphelins wirés (+4)
+        "enum4linux-ng":     (smb_enum_exec, "enum4linux-ng"),
+        "pwntools":          (exploit_exec, "pwntools"),
+        "jwt_analyzer":      (misc_exec, "jwt_analyzer"),
+        "autopsy":           (misc_exec, "autopsy"),
     }
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
@@ -670,6 +779,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             Tool execution results
         """
         _t_start = time.time()
+        _request_id = get_request_id()
         _telemetry: Dict[str, Any] = {
             "tool":             tool_name,
             "success":          False,
@@ -682,6 +792,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             "skill_injected":   False,
             "prompt_suggested": False,
             "target":           "",      # normalized target identity (populated after parse)
+            "session_id":       str(ctx.session_id) if hasattr(ctx, 'session_id') else "",
+            "request_id":       _request_id or "",
         }
         await ctx.info(f"🔍 Executing {tool_name}")
 
@@ -845,17 +957,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 pass
 
         _telemetry["opt_profile"] = opt_profile
-        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
-        optimizer_meta = params.pop("_optimizer", {})
-        if optimizer_meta.get("forced_stealth"):
-            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
-        elif opt_profile != "normal":
-            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
-        # 4b. Scan cache — serve prior result if available (avoids redundant execution)
-        # Cache key is session-scoped to avoid cross-client stale results
+        # 4b. Scan cache — compute key from ORIGINAL params (before optimizer enriches with defaults)
         _session_id = ctx.session_id
-        _cache_key = f"{_session_id}:{tool_name}:{target}" if target else None
+        _cache_key = _cache_key_for(_session_id, tool_name, target, params) if target else None
         if _cache_key:
             prior = _scan_cache.get(_cache_key)
             if prior and prior.get("result", {}).get("success"):
@@ -863,6 +968,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 _telemetry["success"] = True
                 await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
                 return finalize(prior["result"])
+
+        # Enrich params with optimizer defaults AFTER cache key computation
+        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
+        optimizer_meta = params.pop("_optimizer", {})
+        if optimizer_meta.get("forced_stealth"):
+            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
+        elif opt_profile != "normal":
+            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         loop = asyncio.get_running_loop()
         future = asyncio.ensure_future(
@@ -904,13 +1017,30 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
             if target:
                 exec_time = result.get("execution_time", 0.0)
-                _scan_cache.set(_cache_key or f"{_session_id}:{tool_name}:{target}", {
+                _scan_cache.set(_cache_key or _cache_key_for(_session_id, tool_name, target or "unknown", params), {
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
                 }, execution_time=exec_time)
                 _telemetry["cache_hit"] = False  # we just wrote it; hit = prior result served
         else:
             await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
+            # IntelligentErrorHandler — classify error, record history, suggest alternative
+            error_msg = str(result.get("error", "") or result.get("stderr", "") or "")
+            if error_msg:
+                from server_core.singletons import error_handler as _eh
+                error_type = _eh.classify_error(error_msg)
+                result["error_type"] = error_type.value
+                _telemetry["error_type"] = error_type.value
+                # Record to error history for statistics + monitoring
+                _eh.handle_tool_failure(
+                    tool_name,
+                    Exception(error_msg[:500]),
+                    {"target": target or "unknown", "parameters": params},
+                )
+                alternative = _eh.get_alternative_tool(tool_name, {})
+                if alternative:
+                    result["suggested_alternative"] = alternative
+                    await ctx.info(f"💡 Try: {alternative} (error: {error_type.value})")
 
         # ctx.sample() — AI-powered next-step suggestion (opt-in via _ai_suggest=True)
         # Advisory only: never blocks execution, silently skips if client lacks sampling support
@@ -1017,6 +1147,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         if profile is None:
             profile = await loop.run_in_executor(None, lambda: _ide.analyze_target(target))
             await ctx.report_progress(50, 100)
+            # Enrich profile with cached scan results before creating the attack chain
+            cached_scans = _collect_cached_scans(ctx.session_id, target)
+            if cached_scans:
+                profile = _enrich_profile_from_cache(profile, cached_scans)
+                await ctx.info(f"📦 Injected {len(cached_scans)} cached scan(s) into profile")
             await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
             # Persist to session state
             try:
@@ -1024,6 +1159,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             except Exception:
                 pass
         else:
+            # Even when restoring from session state, check for newer cached scans
+            cached_scans = _collect_cached_scans(ctx.session_id, target)
+            if cached_scans:
+                profile = _enrich_profile_from_cache(profile, cached_scans)
+                await ctx.info(f"📦 Injected {len(cached_scans)} cached scan(s) into restored profile")
             await ctx.info(f"🎯 Target type: {profile.target_type.value} | Risk: {profile.risk_level} | Confidence: {profile.confidence_score:.0%}")
 
         chain = await loop.run_in_executor(None, lambda: _ide.create_attack_chain(profile, objective))
@@ -1100,8 +1240,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     async def scan_result(target: str, tool_name: str) -> str:
         """Cached result for a specific tool + target combination (current session)."""
         ctx = get_context()
-        cache_key = f"{ctx.session_id}:{tool_name}:{target}"
-        entry = _scan_cache.get(cache_key)
+        session_id = ctx.session_id
+        entry = next(
+            (v for k, v in sorted(_scan_cache.items(), reverse=True)
+             if v.get("tool") == tool_name
+             and v.get("target") == target
+             and k.startswith(session_id)),
+            None,
+        )
         if not entry:
             return json.dumps({
                 "target":  target,
@@ -1141,7 +1287,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         """Operational metrics: success rates, errors, timeouts, cache, confirmations by tool."""
         return json.dumps(_op_metrics.summary(), indent=2)
 
-    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}, metrics://tools")
+    @mcp.resource("errors://statistics")
+    async def error_statistics() -> str:
+        """Error classification statistics from the IntelligentErrorHandler."""
+        from server_core.singletons import error_handler as _eh
+        return json.dumps(_eh.get_error_statistics(), indent=2)
+
+    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics")
 
     # ========================================================================
     # server_health MCP tool — wraps the health resource for tool-based access
