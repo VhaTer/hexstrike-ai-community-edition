@@ -274,6 +274,18 @@ One-call multi-tool attack sequences — invoke directly from your AI client:
 
 ---
 
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `HEXSTRIKE_HOST` | `127.0.0.1` | HTTP server bind address |
+| `HEXSTRIKE_PORT` | `8888` | HTTP server port |
+| `HEXSTRIKE_DATA_DIR` | `data/` | Data directory for scans and results |
+| `HEXSTRIKE_LOG_LEVEL` | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `HEXSTRIKE_JSON_LOG` | *(none)* | Path for structured JSON log output (e.g. `hexstrike.json`) |
+
+---
+
 ## Legal
 
 This software is intended solely for **authorized security testing, research, and educational purposes**.
