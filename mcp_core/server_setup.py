@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import inspect
 import json
 import time
@@ -62,6 +63,19 @@ _server_start_time = time.time()
 _optimizer    = ParameterOptimizer()
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
+
+
+def _cache_key_for(session_id: str, tool_name: str, target: str, params: Dict[str, Any]) -> str:
+    relevant = {
+        k: v for k, v in sorted(params.items())
+        if not k.startswith("_") and k not in ("target",)
+    }
+    if not relevant:
+        return f"{session_id}:{tool_name}:{target}"
+    param_str = json.dumps(relevant, sort_keys=True, ensure_ascii=False)
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()[:12]
+    return f"{session_id}:{tool_name}:{target}:{param_hash}"
+
 
 # Tools requiring user confirmation before execution
 _DESTRUCTIVE_TOOLS = {
@@ -179,7 +193,11 @@ def _detect_from_cache(target: str) -> Optional[TechProfile]:
     headers: Dict[str, str] = {}
 
     for tool in PROBE_TOOLS:
-        entry = _scan_cache.get(f"{tool}:{target}")
+        entry = next(
+            (v for k, v in _scan_cache.items()
+             if v.get("tool") == tool and v.get("target") == target),
+            None,
+        )
         if not entry:
             continue
         result = entry.get("result", {})
@@ -538,6 +556,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "hcxdumptool":       (wifi_exec, "hcxdumptool"),
         "wifite":            (wifi_exec, "wifite2"),
         "wifite2":           (wifi_exec, "wifite2"),
+        # wifi — orphelins wirés (+4)
+        "hcxpcapngtool":     (wifi_exec, "hcxpcapngtool"),
+        "eaphammer":         (wifi_exec, "eaphammer"),
+        "bettercap_wifi":    (wifi_exec, "bettercap_wifi"),
+        "mdk4":              (wifi_exec, "mdk4"),
         # recon
         "amass":             (recon_exec, "amass"),
         "subfinder":         (recon_exec, "subfinder"),
@@ -651,6 +674,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "pywerview":         (ad_exec, "pywerview"),
         "bloodhound":        (ad_exec, "bloodhound"),
         "bloodhound_python": (ad_exec, "bloodhound"),
+        # orphelins wirés (+4)
+        "enum4linux-ng":     (smb_enum_exec, "enum4linux-ng"),
+        "pwntools":          (exploit_exec, "pwntools"),
+        "jwt_analyzer":      (misc_exec, "jwt_analyzer"),
+        "autopsy":           (misc_exec, "autopsy"),
     }
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
@@ -845,17 +873,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 pass
 
         _telemetry["opt_profile"] = opt_profile
-        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
-        optimizer_meta = params.pop("_optimizer", {})
-        if optimizer_meta.get("forced_stealth"):
-            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
-        elif opt_profile != "normal":
-            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
-        # 4b. Scan cache — serve prior result if available (avoids redundant execution)
-        # Cache key is session-scoped to avoid cross-client stale results
+        # 4b. Scan cache — compute key from ORIGINAL params (before optimizer enriches with defaults)
         _session_id = ctx.session_id
-        _cache_key = f"{_session_id}:{tool_name}:{target}" if target else None
+        _cache_key = _cache_key_for(_session_id, tool_name, target, params) if target else None
         if _cache_key:
             prior = _scan_cache.get(_cache_key)
             if prior and prior.get("result", {}).get("success"):
@@ -863,6 +884,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 _telemetry["success"] = True
                 await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
                 return finalize(prior["result"])
+
+        # Enrich params with optimizer defaults AFTER cache key computation
+        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
+        optimizer_meta = params.pop("_optimizer", {})
+        if optimizer_meta.get("forced_stealth"):
+            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
+        elif opt_profile != "normal":
+            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
 
         loop = asyncio.get_running_loop()
         future = asyncio.ensure_future(
@@ -904,7 +933,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
             if target:
                 exec_time = result.get("execution_time", 0.0)
-                _scan_cache.set(_cache_key or f"{_session_id}:{tool_name}:{target}", {
+                _scan_cache.set(_cache_key or _cache_key_for(_session_id, tool_name, target or "unknown", params), {
                     "tool": tool_name, "target": target,
                     "result": result, "timestamp": time.time(),
                 }, execution_time=exec_time)
@@ -1100,8 +1129,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     async def scan_result(target: str, tool_name: str) -> str:
         """Cached result for a specific tool + target combination (current session)."""
         ctx = get_context()
-        cache_key = f"{ctx.session_id}:{tool_name}:{target}"
-        entry = _scan_cache.get(cache_key)
+        session_id = ctx.session_id
+        entry = next(
+            (v for k, v in sorted(_scan_cache.items(), reverse=True)
+             if v.get("tool") == tool_name
+             and v.get("target") == target
+             and k.startswith(session_id)),
+            None,
+        )
         if not entry:
             return json.dumps({
                 "target":  target,

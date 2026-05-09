@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 import asyncio
+import mcp_core.misc_direct as _misc_direct
 
 def register_jwt_analyzer_tool(mcp, hexstrike_client, logger):
 

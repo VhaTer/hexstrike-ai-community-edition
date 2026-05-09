@@ -38,6 +38,9 @@ def _require(data: dict, *keys: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _ropgadget(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
     err = _require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
@@ -64,6 +67,9 @@ def _ropper(data: dict) -> dict:
 
 
 def _one_gadget(data: dict) -> dict:
+    # Normalize: registry declares "libc_path" but handler uses "libc"
+    if "libc" not in data and "libc_path" in data:
+        data["libc"] = data["libc_path"]
     err = _require(data, "libc")
     if err: return err
     libc            = data["libc"].strip()
@@ -132,6 +138,9 @@ def _gdb(data: dict) -> dict:
 
 
 def _radare2(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
     err = _require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
@@ -155,6 +164,9 @@ def _radare2(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _strings(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "file_path"
+    if "file_path" not in data and "file" in data:
+        data["file_path"] = data["file"]
     err = _require(data, "file_path")
     if err: return err
     file_path       = data["file_path"].strip()
@@ -215,6 +227,9 @@ def _xxd(data: dict) -> dict:
 
 
 def _checksec(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
     err = _require(data, "binary")
     if err: return err
     binary = data["binary"].strip()
@@ -222,8 +237,16 @@ def _checksec(data: dict) -> dict:
 
 
 def _autopsy(data: dict) -> dict:
-    # Autopsy launches a web server — no parameters needed
-    return execute_command("autopsyingest --nogui 2>/dev/null || autopsy --nogui 2>/dev/null || echo 'Autopsy launched'")
+    # Normalize: registry declares "image_path" mandatory
+    err = _require(data, "image_path")
+    if err: return err
+    image_path      = data["image_path"].strip()
+    case_name       = data.get("case_name", "hexstrike_case")
+    additional_args = data.get("additional_args", "")
+    command = f"autopsyingest --case {case_name} {image_path}"
+    if additional_args: command += f" {additional_args}"
+    command += " 2>/dev/null || autopsy --nogui 2>/dev/null || echo 'Autopsy launched'"
+    return execute_command(command)
 
 
 def _angr(data: dict) -> dict:
@@ -262,6 +285,9 @@ def _ghidra(data: dict) -> dict:
 
 
 def _binwalk(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
     err = _require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
@@ -599,11 +625,13 @@ def _nuclei(data: dict) -> dict:
     severity        = data.get("severity", "")
     tags            = data.get("tags", "")
     template        = data.get("template", "")
+    ports           = data.get("ports", "")
     additional_args = data.get("additional_args", "")
     command = f"nuclei -u {target}"
     if severity:        command += f" -severity {severity}"
     if tags:            command += f" -tags {tags}"
     if template:        command += f" -t {template}"
+    if ports:           command += f" -p {ports}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
