@@ -25,6 +25,12 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
+
 
 class OperationalMetricsStore:
     """
@@ -190,6 +196,25 @@ class OperationalMetricsStore:
         with self._lock:
             return dict(self._confirmations)
 
+    @staticmethod
+    def system_metrics() -> Dict[str, Any]:
+        """Snapshot of system resources (CPU, memory, disk)."""
+        if not HAS_PSUTIL:
+            return {"status": "unavailable", "reason": "psutil not installed"}
+        try:
+            cpu = psutil.cpu_percent(interval=0.1)
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_usage("/")
+            return {
+                "cpu_percent": cpu,
+                "memory_percent": mem.percent,
+                "memory_available_gb": round(mem.available / (1024**3), 1),
+                "disk_usage_percent": round(disk.used / disk.total * 100, 1),
+                "disk_free_gb": round(disk.free / (1024**3), 1),
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)[:100]}
+
     def summary(self) -> Dict[str, Any]:
         """Full operational summary for the metrics:// resource."""
         with self._lock:
@@ -206,6 +231,7 @@ class OperationalMetricsStore:
                 "confirmations":       self.confirmation_summary(),
                 "prompt_suggestions":  self._prompt_suggestions,
                 "tools_seen":          sorted(self._tools.keys()),
+                "system":              self.system_metrics(),
                 "success_rate_by_tool": self.success_rate_by_tool(),
                 "error_count_by_tool":  self.error_count_by_tool(),
                 "timeout_count_by_tool": self.timeout_count_by_tool(),

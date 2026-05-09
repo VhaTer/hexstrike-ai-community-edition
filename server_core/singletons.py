@@ -22,15 +22,11 @@ import server_core.config_core as config_core
 # ── GROUP A: Active path — always instantiated ────────────────────────────────
 
 from .cache import HexStrikeCache
-from .run_history_store import RunHistoryStore
-from .tool_stats_store import ToolStatsStore
 from .enhanced_process_manager import EnhancedProcessManager
 from .error_handling import IntelligentErrorHandler, GracefulDegradation
 from .enhanced_command_executor import telemetry  # noqa: F401 — re-export
 
 cache                = HexStrikeCache()
-run_history          = RunHistoryStore()
-tool_stats           = ToolStatsStore()
 enhanced_process_manager = EnhancedProcessManager()
 error_handler        = IntelligentErrorHandler()
 degradation_manager  = GracefulDegradation()

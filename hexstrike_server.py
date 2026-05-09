@@ -146,15 +146,57 @@ def register_http_routes(mcp, logger, static_dir=None):
     else:
         logger.warning("⚠️ server_static/ not found — dashboard not available")
 
-    @mcp.custom_route("/health", methods=["GET"])
-    async def health(request):
-        """HTTP health endpoint for IDEs, proxies, and external checks."""
-        return _json_status_response(_build_dashboard_response())
-
     @mcp.custom_route("/ping", methods=["GET"])
     async def ping(request):
-        """Minimal liveness endpoint."""
+        """Minimal liveness probe — is the process alive?"""
         return JSONResponse({"status": "ok", "server": "hexstrike-ai-pulse"})
+
+    @mcp.custom_route("/health", methods=["GET"])
+    async def health(request):
+        """Readiness probe — server healthy and able to serve requests?
+        
+        Returns 200 when ready, 503 when degraded, 500 on error.
+        """
+        try:
+            tools_status = _get_tool_availability()
+            essential_tools = _HEALTH_TOOL_CATEGORIES.get("essential", [])
+            all_essential_available = all(tools_status.get(t, False) for t in essential_tools)
+
+            disk = shutil.disk_usage("/")
+            disk_ok = disk.free / disk.total > 0.1
+
+            ready = all_essential_available and disk_ok
+
+            uptime = time.time() - telemetry.stats.get("start_time", time.time())
+
+            return JSONResponse({
+                "status": "ready" if ready else "degraded",
+                "server": "hexstrike-ai-pulse",
+                "version": config_core.get("VERSION", "unknown"),
+                "uptime_seconds": int(uptime),
+                "checks": {
+                    "essential_tools": {
+                        "status": "ok" if all_essential_available else "degraded",
+                        "available": sum(1 for t in essential_tools if tools_status.get(t, False)),
+                        "total": len(essential_tools),
+                    },
+                    "disk": {
+                        "status": "ok" if disk_ok else "degraded",
+                        "free_gb": round(disk.free / (1024**3), 1),
+                        "total_gb": round(disk.total / (1024**3), 1),
+                        "usage_pct": round((1 - disk.free / disk.total) * 100, 1),
+                    },
+                    "tools_available": sum(1 for v in tools_status.values() if v),
+                    "tools_total": len(tools_status),
+                },
+            }, status_code=200 if ready else 503)
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return JSONResponse({
+                "status": "error",
+                "server": "hexstrike-ai-pulse",
+                "error": str(e)[:200],
+            }, status_code=500)
 
     @mcp.custom_route("/web-dashboard", methods=["GET"])
     async def web_dashboard(request):

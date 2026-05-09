@@ -39,6 +39,7 @@ def make_mock_context():
     ctx.get_state = AsyncMock(return_value=None)
     ctx.set_state = AsyncMock()
     ctx.read_resource = AsyncMock(return_value=MagicMock(contents=[]))
+    ctx.session_id = "test-session-fixed"
     return ctx
 
 
@@ -205,7 +206,7 @@ class TestCtxStateMethods:
 
     def test_get_state_called_when_target_provided(self):
         """When a target is provided, ctx.get_state should be called to check for cached tech profile."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "scanme.nmap.org"}))
 
@@ -244,7 +245,7 @@ class TestCtxStateMethods:
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
 
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "10.0.0.1"}, ctx=ctx))
 
@@ -275,7 +276,7 @@ class TestCtxStateMethods:
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=cached_profile)
 
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "cached-target.com"}, ctx=ctx))
 

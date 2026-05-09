@@ -241,16 +241,13 @@ class TestRecoveryExecutor:
         assert result["success"] is True
         assert result["recovery_info"]["attempts_made"] == 2
 
-    @pytest.mark.xfail(reason="Mock action comparison requires RecoveryStrategy wrapper")
     def test_escalate_to_human(self, mock_error_handler, 
                              mock_degradation_manager, mock_rebuild_command, 
                              mock_determine_operation_type, mock_logger):
         """Test escalation to human when recovery fails."""
         execute_command_mock = Mock(return_value={"success": False, "stderr": "Critical error"})
 
-        strategy = Mock()
-        strategy.action = Mock()
-        strategy.action.value = RecoveryAction.ESCALATE_TO_HUMAN
+        strategy = RecoveryStrategy(RecoveryAction.ESCALATE_TO_HUMAN)
 
         mock_error_handler.handle_tool_failure.return_value = strategy
 
@@ -271,16 +268,13 @@ class TestRecoveryExecutor:
         assert "Escalated to human" in result["error"]
         assert result["recovery_info"]["final_action"] == "escalate_to_human"
 
-    @pytest.mark.xfail(reason="Mock action comparison requires RecoveryStrategy wrapper")
     def test_graceful_degradation(self, mock_error_handler, 
                                  mock_degradation_manager, mock_rebuild_command, 
                                  mock_determine_operation_type, mock_logger):
         """Test graceful degradation when recovery fails."""
         execute_command_mock = Mock(return_value={"success": False, "stderr": "Service unavailable"})
 
-        strategy = Mock()
-        strategy.action = Mock()
-        strategy.action.value = RecoveryAction.GRACEFUL_DEGRADATION
+        strategy = RecoveryStrategy(RecoveryAction.GRACEFUL_DEGRADATION)
 
         mock_error_handler.handle_tool_failure.return_value = strategy
 
@@ -301,16 +295,13 @@ class TestRecoveryExecutor:
         assert "Graceful degradation applied" in result["error"]
         assert result["recovery_info"]["final_action"] == "graceful_degradation"
 
-    @pytest.mark.xfail(reason="Mock action comparison requires RecoveryStrategy wrapper")
     def test_abort_operation(self, mock_error_handler, 
                            mock_degradation_manager, mock_rebuild_command, 
                            mock_determine_operation_type, mock_logger):
         """Test operation abort when recovery fails."""
         execute_command_mock = Mock(return_value={"success": False, "stderr": "Security violation"})
 
-        strategy = Mock()
-        strategy.action = Mock()
-        strategy.action.value = RecoveryAction.ABORT_OPERATION
+        strategy = RecoveryStrategy(RecoveryAction.ABORT_OPERATION)
 
         mock_error_handler.handle_tool_failure.return_value = strategy
 

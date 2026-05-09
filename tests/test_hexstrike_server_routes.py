@@ -46,7 +46,7 @@ def test_register_http_routes_adds_health_and_ping(tmp_path):
     assert mcp.route_order.index(("/ping", ("GET",))) < mcp.route_order.index(("/{filename:str}", ("GET",)))
 
 
-def test_health_route_returns_healthy_json(tmp_path):
+def test_health_route_returns_ready_when_all_ok(tmp_path):
     from hexstrike_server import register_http_routes
 
     mcp = FakeMCP()
@@ -57,14 +57,28 @@ def test_health_route_returns_healthy_json(tmp_path):
     register_http_routes(mcp, MagicMock(), static_dir=static_dir)
     health_route = mcp.routes[("/health", ("GET",))]
 
-    with patch("hexstrike_server._build_dashboard_response", return_value={"status": "healthy", "version": "test"}):
+    all_tools_ok = {
+        "nmap": True, "curl": True, "python3": True,
+        "subfinder": True, "amass": True, "httpx": True, "katana": True,
+        "nikto": True, "sqlmap": True, "gobuster": True, "ffuf": True, "nuclei": True,
+        "airmon-ng": True, "airodump-ng": True, "aircrack-ng": True,
+        "msfconsole": True, "searchsploit": True,
+    }
+
+    with (
+        patch("hexstrike_server._get_tool_availability", return_value=all_tools_ok),
+        patch("hexstrike_server.shutil.disk_usage", return_value=MagicMock(free=50 * 1024**3, total=100 * 1024**3)),
+    ):
         response = run(health_route(MagicMock()))
 
     assert response.status_code == 200
-    assert json.loads(response.body) == {"status": "healthy", "version": "test"}
+    data = json.loads(response.body)
+    assert data["status"] == "ready"
+    assert data["checks"]["essential_tools"]["status"] == "ok"
+    assert data["checks"]["disk"]["status"] == "ok"
 
 
-def test_health_route_returns_500_when_dashboard_state_is_error(tmp_path):
+def test_health_route_returns_503_when_degraded(tmp_path):
     from hexstrike_server import register_http_routes
 
     mcp = FakeMCP()
@@ -75,11 +89,40 @@ def test_health_route_returns_500_when_dashboard_state_is_error(tmp_path):
     register_http_routes(mcp, MagicMock(), static_dir=static_dir)
     health_route = mcp.routes[("/health", ("GET",))]
 
-    with patch("hexstrike_server._build_dashboard_response", return_value={"status": "error", "error": "boom"}):
+    no_tools = {
+        "nmap": False, "curl": False, "python3": False,
+        "subfinder": False, "amass": False, "httpx": False, "katana": False,
+        "nikto": False, "sqlmap": False, "gobuster": False, "ffuf": False, "nuclei": False,
+        "airmon-ng": False, "airodump-ng": False, "aircrack-ng": False,
+        "msfconsole": False, "searchsploit": False,
+    }
+
+    with patch("hexstrike_server._get_tool_availability", return_value=no_tools):
+        response = run(health_route(MagicMock()))
+
+    assert response.status_code == 503
+    data = json.loads(response.body)
+    assert data["status"] == "degraded"
+    assert data["checks"]["essential_tools"]["status"] == "degraded"
+
+
+def test_health_route_returns_500_on_exception(tmp_path):
+    from hexstrike_server import register_http_routes
+
+    mcp = FakeMCP()
+    static_dir = tmp_path / "server_static"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+
+    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    health_route = mcp.routes[("/health", ("GET",))]
+
+    with patch("hexstrike_server._get_tool_availability", side_effect=RuntimeError("boom")):
         response = run(health_route(MagicMock()))
 
     assert response.status_code == 500
-    assert json.loads(response.body) == {"status": "error", "error": "boom"}
+    data = json.loads(response.body)
+    assert data["status"] == "error"
 
 
 def test_ping_route_returns_ok(tmp_path):
@@ -141,19 +184,4 @@ def test_build_dashboard_status_healthy_when_all_tools_present():
     assert result["all_essential_tools_available"] is True
 
 
-def test_health_route_returns_500_when_degraded(tmp_path):
-    from hexstrike_server import register_http_routes
 
-    mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
-    health_route = mcp.routes[("/health", ("GET",))]
-
-    with patch("hexstrike_server._build_dashboard_response", return_value={"status": "degraded", "all_essential_tools_available": False}):
-        response = run(health_route(MagicMock()))
-
-    assert response.status_code == 500
-    assert json.loads(response.body)["status"] == "degraded"

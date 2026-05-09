@@ -53,10 +53,6 @@ async def _execute_bb_phase(
     For each tool in the phase: calls run_security_tool() if available in
     DIRECT_TOOLS, otherwise returns structured guidance.
     """
-    from mcp_core.server_setup import run_security_tool
-    import json
-    import time
-
     phase_result = {
         "name":           phase.get("name", "unknown"),
         "description":    phase.get("description", ""),
@@ -74,6 +70,7 @@ async def _execute_bb_phase(
         ]
         return phase_result
 
+    import time
     t0 = time.perf_counter()
     tools = phase.get("tools", [])
 
@@ -91,6 +88,8 @@ async def _execute_bb_phase(
             return {"tool": tool_name, "success": False, "manual": True,
                     "message": f"[MANUAL] {tool_name} — requires manual execution"}
         try:
+            from mcp_core.server_setup import run_security_tool
+            import json
             # Merge target into params
             exec_params = {"target": target_domain, **params}
             result = await run_security_tool(
