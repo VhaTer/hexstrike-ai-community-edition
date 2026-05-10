@@ -627,13 +627,14 @@ def _nuclei(data: dict) -> dict:
     template        = data.get("template", "")
     ports           = data.get("ports", "")
     additional_args = data.get("additional_args", "")
+    timeout         = int(data.get("timeout", 180))  # default 3min for nuclei
     command = f"nuclei -u {target}"
     if severity:        command += f" -severity {severity}"
     if tags:            command += f" -tags {tags}"
     if template:        command += f" -t {template}"
     if ports:           command += f" -p {ports}"
     if additional_args: command += f" {additional_args}"
-    return execute_command(command)
+    return execute_command(command, timeout=timeout)
 
 # ---------------------------------------------------------------------------
 # Dispatch table

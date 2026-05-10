@@ -51,3 +51,4 @@ opencode.json
 *.ovpn
 hexstrike.log.*
 *.bak
+output/

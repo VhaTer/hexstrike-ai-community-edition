@@ -145,7 +145,9 @@ def _xsser(data: dict) -> dict:
     params_str      = data.get("params", "")
     additional_args = data.get("additional_args", "")
 
-    command = f"xsser --url '{url}'"
+    # Python 3.13 removed cgi (PEP 594) — inject a compatibility shim
+    cgi_shim_dir = "/tmp/xsser-cgi-shim"
+    command = f"env PYTHONPATH={cgi_shim_dir} xsser --url '{url}'"
     if params_str:      command += f" --param='{params_str}'"
     if additional_args: command += f" {additional_args}"
 

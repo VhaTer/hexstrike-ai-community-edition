@@ -51,6 +51,32 @@ In-memory scan cache (`_ScanCache`, max_size=500, default_ttl=1800s) prevents re
 - Do not expose the server to untrusted networks. It has no authentication layer.
 - The stdio MCP interface (`hexstrike_mcp.py`) is designed for local use only.
 
+## Python 3.13 Compatibility
+
+Python 3.13 removed several legacy stdlib modules per PEP 594, including `cgi`. This affects:
+
+### xsser (XSS scanner)
+
+The system-installed `xsser` tool (`apt install xsser`) imports `cgi.escape()` for HTML entity encoding. Python 3.13 raises `ModuleNotFoundError: No module named 'cgi'`.
+
+**Fix applied in Pulse:** A compatibility shim at `/tmp/xsser-cgi-shim/cgi.py` provides `cgi.escape()` via `html.escape()`. The `_xsser()` handler in `mcp_core/web_scan_direct.py` prepends this shim directory to `PYTHONPATH` when launching xsser.
+
+**If xsser still fails**, install `dalfox` as an alternative XSS scanner:
+
+```bash
+go install github.com/hahwul/dalfox/v2@latest
+```
+
+The dispatch table in `web_scan_direct.py` supports both `xsser` and `dalfox` as tool names.
+
+### Other Affected Modules
+
+| Removed | Replacement | Impact |
+|---------|-------------|--------|
+| `cgi` | `html.escape()` | xsser only |
+| `cgitb` | `traceback` | Not used in Pulse |
+| `imp` | `importlib` | Not used in Pulse |
+
 ## Responsible Use
 
 HexStrike Pulse is intended for authorized security testing only. Users are responsible for:
