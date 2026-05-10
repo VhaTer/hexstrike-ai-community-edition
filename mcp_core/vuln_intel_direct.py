@@ -75,7 +75,7 @@ def _vulnx(data: dict) -> dict:
     if additional_args:
         command += f" {additional_args}"
 
-    logger.info(f"🔎 vulnx → cve={cve_id or 'N/A'} search={search or 'N/A'}")
+    logger.debug(f"🔎 vulnx → cve={cve_id or 'N/A'} search={search or 'N/A'}")
     return execute_command(command)
 
 

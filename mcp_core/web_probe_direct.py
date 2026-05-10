@@ -66,7 +66,7 @@ def _whatweb(data: dict) -> dict:
 
     command += f" {url}"
 
-    logger.info(f"🔍 whatweb → {url}")
+    logger.debug(f"🔍 whatweb → {url}")
     return execute_command(command)
 
 
@@ -136,7 +136,7 @@ def _commix(data: dict) -> dict:
 
     command += f" --url={url}"
 
-    logger.info(f"💉 commix → {url}")
+    logger.debug(f"💉 commix → {url}")
     return execute_command(command)
 
 
@@ -177,7 +177,7 @@ def _joomscan(data: dict) -> dict:
     if additional_args:
         command += f" {additional_args}"
 
-    logger.info(f"🔍 joomscan → {url}")
+    logger.debug(f"🔍 joomscan → {url}")
     return execute_command(command)
 
 
