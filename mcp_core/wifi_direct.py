@@ -323,6 +323,34 @@ def _mdk4(data: dict) -> dict:
     return execute_command(command, use_cache=False)
 
 
+def _tcpdump(data: dict) -> dict:
+    err = _require(data, "interface")
+    if err: return err
+    interface   = data["interface"].strip()
+    count       = data.get("count", 10)
+    filter_expr = data.get("filter", "")
+    output_file = data.get("output_file", "")
+    command = f"tcpdump -i {interface} -c {count} -nn"
+    if output_file: command += f" -w {output_file}"
+    if filter_expr: command += f" \"{filter_expr}\""
+    return execute_command(command)
+
+
+def _tshark(data: dict) -> dict:
+    interface = data.get("interface", "").strip()
+    file_path = data.get("file", "").strip()
+    if not interface and not file_path:
+        return {"success": False, "error": "'interface' or 'file' is required"}
+    filter_expr = data.get("filter", "")
+    count       = data.get("count", 50)
+    command = "tshark"
+    if interface: command += f" -i {interface}"
+    if file_path: command += f" -r {file_path}"
+    command += f" -c {count}"
+    if filter_expr: command += f" -Y \"{filter_expr}\""
+    return execute_command(command)
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table — maps tool name → handler function
 # ---------------------------------------------------------------------------
@@ -339,6 +367,9 @@ _HANDLERS = {
     "wifite2":        _wifite2,
     "eaphammer":      _eaphammer,
     "bettercap_wifi": _bettercap_wifi,
+    "bettercap":      _bettercap_wifi,
+    "tcpdump":        _tcpdump,
+    "tshark":         _tshark,
     "mdk4":           _mdk4,
 }
 

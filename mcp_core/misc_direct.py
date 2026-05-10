@@ -644,6 +644,29 @@ def _nuclei(data: dict) -> dict:
     if additional_args: command += f" {additional_args}"
     return execute_command(command, timeout=timeout)
 
+def _bulk_extractor(data: dict) -> dict:
+    err = _require(data, "input_file")
+    if err: return err
+    input_file  = data["input_file"].strip()
+    output_dir  = data.get("output_dir", "/tmp/bulk_extractor_output")
+    additional  = data.get("additional_args", "")
+    command = f"bulk_extractor -o {output_dir} {input_file}"
+    if additional: command += f" {additional}"
+    return execute_command(command)
+
+
+def _scalpel(data: dict) -> dict:
+    err = _require(data, "input_file")
+    if err: return err
+    input_file  = data["input_file"].strip()
+    output_dir  = data.get("output_dir", "/tmp/scalpel_output")
+    config_file = data.get("config", "")
+    command = f"scalpel -o {output_dir}"
+    if config_file: command += f" -c {config_file}"
+    command += f" {input_file}"
+    return execute_command(command)
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -679,6 +702,8 @@ _HANDLERS = {
     "jwt_analyzer":        _jwt_analyzer,
     # file_carving / runtime / stego / data / metadata / crypto / param / url
     "foremost":            _foremost,
+    "bulk_extractor":      _bulk_extractor,
+    "scalpel":             _scalpel,
     "falco":               _falco,
     "steghide":            _steghide,
     "anew":                _anew,
