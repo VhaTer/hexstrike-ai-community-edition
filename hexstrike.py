@@ -29,7 +29,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("hexstrike")
 
-VERSION = "0.7.3"
+VERSION = "0.7.5"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8888
 
@@ -46,6 +46,11 @@ DIRECT_ROUTES = {
     "hcxpcapngtool":     ("mcp_core.wifi_direct", "wifi_exec", "hcxpcapngtool"),
     "eaphammer":         ("mcp_core.wifi_direct", "wifi_exec", "eaphammer"),
     "wifite":            ("mcp_core.wifi_direct", "wifi_exec", "wifite2"),
+    "airbase_ng":        ("mcp_core.wifi_direct", "wifi_exec", "airbase_ng"),
+    "airdecap_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airdecap_ng"),
+    "bettercap":         ("mcp_core.wifi_direct", "wifi_exec", "bettercap_wifi"),
+    "tcpdump":           ("mcp_core.wifi_direct", "wifi_exec", "tcpdump"),
+    "tshark":            ("mcp_core.wifi_direct", "wifi_exec", "tshark"),
     "mdk4":              ("mcp_core.wifi_direct", "wifi_exec", "mdk4"),
     # recon
     "amass":             ("mcp_core.recon_direct", "recon_exec", "amass"),
@@ -92,6 +97,8 @@ DIRECT_ROUTES = {
     "rpcclient":         ("mcp_core.smb_enum_direct", "smb_enum_exec", "rpcclient"),
     "smbmap":            ("mcp_core.smb_enum_direct", "smb_enum_exec", "smbmap"),
     "nbtscan":           ("mcp_core.smb_enum_direct", "smb_enum_exec", "nbtscan"),
+    "nxc":               ("mcp_core.smb_enum_direct", "smb_enum_exec", "nxc"),
+    "evil_winrm":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "evil_winrm"),
     # exploit
     "metasploit":        ("mcp_core.exploit_framework_direct", "exploit_exec", "metasploit"),
     "msfvenom":          ("mcp_core.exploit_framework_direct", "exploit_exec", "msfvenom"),
@@ -142,6 +149,16 @@ DIRECT_ROUTES = {
     "responder":         ("mcp_core.misc_direct", "misc_exec", "responder"),
     "jwt_analyzer":      ("mcp_core.misc_direct", "misc_exec", "jwt_analyzer"),
     "autopsy":           ("mcp_core.misc_direct", "misc_exec", "autopsy"),
+    "libc":              ("mcp_core.misc_direct", "misc_exec", "libc"),
+    "postgresql":        ("mcp_core.misc_direct", "misc_exec", "postgresql"),
+    "api_schema_analyzer": ("mcp_core.misc_direct", "misc_exec", "api_schema_analyzer"),
+    "graphql_scanner":   ("mcp_core.misc_direct", "misc_exec", "graphql_scanner"),
+    "api_fuzzer":        ("mcp_core.misc_direct", "misc_exec", "api_fuzzer"),
+    "bbot":              ("mcp_core.misc_direct", "misc_exec", "bbot"),
+    "bulk_extractor":    ("mcp_core.misc_direct", "misc_exec", "bulk_extractor"),
+    "scalpel":           ("mcp_core.misc_direct", "misc_exec", "scalpel"),
+    "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
+    "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
     # web_probe
     "whatweb":           ("mcp_core.web_probe_direct", "web_probe_exec", "whatweb"),
     "commix":            ("mcp_core.web_probe_direct", "web_probe_exec", "commix"),

@@ -627,6 +627,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "hcxpcapngtool":     (wifi_exec, "hcxpcapngtool"),
         "eaphammer":         (wifi_exec, "eaphammer"),
         "bettercap_wifi":    (wifi_exec, "bettercap_wifi"),
+        "airbase_ng":        (wifi_exec, "airbase_ng"),
+        "airdecap_ng":       (wifi_exec, "airdecap_ng"),
+        "bettercap":         (wifi_exec, "bettercap_wifi"),
+        "tcpdump":           (wifi_exec, "tcpdump"),
+        "tshark":            (wifi_exec, "tshark"),
         "mdk4":              (wifi_exec, "mdk4"),
         # recon
         "amass":             (recon_exec, "amass"),
@@ -672,6 +677,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "rpcclient":         (smb_enum_exec, "rpcclient"),
         "smbmap":            (smb_enum_exec, "smbmap"),
         "nbtscan":           (smb_enum_exec, "nbtscan"),
+        "nxc":               (smb_enum_exec, "nxc"),
+        "evil_winrm":        (smb_enum_exec, "evil_winrm"),
         # exploit
         "metasploit":        (exploit_exec, "metasploit"),
         "msfvenom":          (exploit_exec, "msfvenom"),
@@ -746,6 +753,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "pwntools":          (exploit_exec, "pwntools"),
         "jwt_analyzer":      (misc_exec, "jwt_analyzer"),
         "autopsy":           (misc_exec, "autopsy"),
+        "libc":              (misc_exec, "libc"),
+        "postgresql":        (misc_exec, "postgresql"),
+        "api_schema_analyzer": (misc_exec, "api_schema_analyzer"),
+        "graphql_scanner":   (misc_exec, "graphql_scanner"),
+        "api_fuzzer":        (misc_exec, "api_fuzzer"),
+        "bbot":              (misc_exec, "bbot"),
+        "bulk_extractor":    (misc_exec, "bulk_extractor"),
+        "scalpel":           (misc_exec, "scalpel"),
+        "falco":             (misc_exec, "falco"),
+        "qsreplace":         (misc_exec, "qsreplace"),
     }
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True)

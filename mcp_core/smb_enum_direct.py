@@ -135,11 +135,33 @@ def _smbmap(data: dict) -> dict:
     return execute_command(command)
 
 
+def _nxc(data: dict) -> dict:
+    """nxc is an alias for netexec — same binary, same args."""
+    return _netexec(data)
+
+
+def _evil_winrm(data: dict) -> dict:
+    err = _require(data, "target", "username")
+    if err: return err
+    target   = data["target"].strip()
+    username = data["username"].strip()
+    password = data.get("password", "")
+    hash_v   = data.get("hash", "")
+    script   = data.get("script", "")
+    command  = f"evil-winrm -i {target} -u {username}"
+    if password: command += f" -p {password}"
+    if hash_v:   command += f" -H {hash_v}"
+    if script:   command += f" -s {script}"
+    return execute_command(command)
+
+
 _HANDLERS = {
     "enum4linux":    _enum4linux,
     "enum4linux-ng": _enum4linux_ng,
     "nbtscan":       _nbtscan,
     "netexec":       _netexec,
+    "nxc":           _nxc,
+    "evil_winrm":    _evil_winrm,
     "rpcclient":     _rpcclient,
     "smbmap":        _smbmap,
 }
