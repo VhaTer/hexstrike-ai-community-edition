@@ -134,7 +134,7 @@ def _testssl(data: dict) -> dict:
     # Target is always last
     command += f" {target}"
 
-    logger.info(f"🔐 testssl.sh → {target}")
+    logger.debug(f"🔐 testssl.sh → {target}")
     return execute_command(command)
 
 

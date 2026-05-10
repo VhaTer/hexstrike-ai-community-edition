@@ -304,25 +304,11 @@ def _detect_from_cache(target: str) -> Optional[TechProfile]:
     )
 
 # ---------------------------------------------------------------------------
-# Per-category default timeouts for typed tool wrappers (seconds)
-# These are passed to mcp.tool(timeout=) — FastMCP enforces via anyio.fail_after()
-# run_security_tool itself has no native timeout (handles cancellation internally)
+# Per-category timeout references (for documentation only)
+# Actual execution timeout is handled by EnhancedCommandExecutor internally.
+# FastMCP mcp.tool(timeout=None) disables the framework-level timeout so
+# that CancelledError never fires — the subprocess owns its own lifecycle.
 # ---------------------------------------------------------------------------
-_CATEGORY_TIMEOUTS: Dict[str, float] = {
-    "wifi-pentest":     600.0,   # aircrack, wifite — can run long
-    "nmap-recon":       300.0,   # nmap, masscan, rustscan
-    "subdomain-enum":   600.0,   # amass, subfinder — network-heavy
-    "osint-recon":      300.0,
-    "web-recon":        300.0,   # httpx, katana, gobuster
-    "web-vuln":         600.0,   # nuclei, sqlmap, nikto
-    "password-cracking": 1800.0, # hashcat, john — intentionally long
-    "smb-enum":         300.0,
-    "exploitation":     600.0,   # metasploit
-    "binary-analysis":  300.0,
-    "cloud-audit":      600.0,   # prowler, trivy
-    "active-directory": 300.0,
-}
-_DEFAULT_TOOL_TIMEOUT: float = 300.0  # fallback for unmapped categories
 _TOOL_SKILL_MAP = {
     # wifi-pentest
     "airmon_ng": "wifi-pentest", "airodump_ng": "wifi-pentest",
@@ -1441,15 +1427,12 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         tool_def = _get_registry_tool_definition(public_name)
         if not tool_def:
             continue
-        # Resolve per-category timeout for this tool
-        skill_cat = _TOOL_SKILL_MAP.get(public_name.lower())
-        tool_timeout = _CATEGORY_TIMEOUTS.get(skill_cat, _DEFAULT_TOOL_TIMEOUT) if skill_cat else _DEFAULT_TOOL_TIMEOUT
         wrapper = _create_typed_tool_wrapper(public_name, tool_def, run_security_tool)
         mcp.tool(
             name=public_name,
             description=tool_def["desc"],
             annotations={"readOnlyHint": False, "openWorldHint": True},
-            timeout=tool_timeout,
+            timeout=None,
             task=True,
         )(wrapper)
         typed_tools_registered += 1

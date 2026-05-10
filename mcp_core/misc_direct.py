@@ -627,8 +627,16 @@ def _nuclei(data: dict) -> dict:
     template        = data.get("template", "")
     ports           = data.get("ports", "")
     additional_args = data.get("additional_args", "")
-    timeout         = int(data.get("timeout", 180))  # default 3min for nuclei
-    command = f"nuclei -u {target}"
+    timeout         = int(data.get("timeout", 300))  # default 5min
+
+    # When no filters are specified, default to critical CVE templates to
+    # avoid loading all ~12k templates (~2-3 min scan).  Users can override
+    # with severity='' and tags='' for a full scan.
+    if not severity and not tags and not template:
+        severity = "critical"
+        tags     = "cve"
+
+    command = f"nuclei -u {target} -duc"
     if severity:        command += f" -severity {severity}"
     if tags:            command += f" -tags {tags}"
     if template:        command += f" -t {template}"

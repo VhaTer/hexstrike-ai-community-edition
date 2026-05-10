@@ -37,6 +37,344 @@ python3 hexstrike_server.py
 
 ---
 
+## CLI Usage (`hexstrike.py`)
+
+The unified CLI gateway with 7 subcommands — no need to remember separate entrypoints.
+
+```bash
+python3 hexstrike.py --help          # Overview
+python3 hexstrike.py --version       # Show version
+python3 hexstrike.py <command> --help  # Per-command help
+```
+
+### 1. `serve` — Start the Pulse HTTP/SSE Server
+
+```bash
+python3 hexstrike.py serve                          # Default :8888
+python3 hexstrike.py serve --host 0.0.0.0 --port 8080
+python3 hexstrike.py serve --debug                  # Verbose logging
+```
+
+Dashboard at `http://<host>:<port>/dashboard`, health at `/health`, MCP endpoint at `/mcp`.
+
+### 2. `scan` — Run Tools Directly (No Server Required)
+
+Execute any of 83+ security tools in a single command:
+
+```bash
+python3 hexstrike.py scan <tool> <target> [-p key=val ...]
+```
+
+The target is automatically mapped to both `target` and `url` params. Use `-p` to override or set additional parameters:
+
+```bash
+# Basic port scan
+python3 hexstrike.py scan nmap scanme.nmap.org
+
+# Custom scan type and ports
+python3 hexstrike.py scan nmap scanme.nmap.org -p scan_type=-sV -p ports=80,443
+
+# Directory fuzzing with custom wordlist
+python3 hexstrike.py scan gobuster http://example.com -p mode=dir -p wordlist=/usr/share/wordlists/directory-list-2.3-medium.txt
+
+# Nuclei with severity filter and timeout
+python3 hexstrike.py scan nuclei http://scanme.nmap.org -p severity=high -p tags=tech -p timeout=120
+
+# SQL injection test with POST data
+python3 hexstrike.py scan sqlmap http://example.com/login -p "data=user=admin&pass=test"
+
+# Quick service scan with masscan
+python3 hexstrike.py scan masscan 10.10.10.0/24 -p ports=22,80,443,3306 -p rate=5000
+
+# Hash cracking
+python3 hexstrike.py scan hashcat hashes.txt -p hash_type=0 -p wordlist=/usr/share/wordlists/rockyou.txt
+
+# Passive recon (domain-based tools use domain param)
+python3 hexstrike.py scan amass example.com -p mode=passive
+python3 hexstrike.py scan subfinder example.com -p all_sources=true
+python3 hexstrike.py scan theharvester example.com
+```
+
+**Tool auto-suggest**: mistype a tool name? The CLI suggests similar tools:
+```
+❌ Unknown tool: nmsp
+   Did you mean: nmap, nmap_advanced?
+```
+
+### 3. `tools` — List Available Tools
+
+```bash
+python3 hexstrike.py tools                          # All tools by category
+python3 hexstrike.py tools --filter nmap            # Search by name
+python3 hexstrike.py tools --filter sql             # Case-insensitive partial match
+```
+
+Output shows tool name, description, and effectiveness score (where available).
+
+### 4. `status` — Check Server Health
+
+```bash
+python3 hexstrike.py status                         # Localhost :8888
+python3 hexstrike.py status --host 192.168.1.10 --port 8888
+```
+
+```text
+🟢 Pulse server: ready
+   Uptime: 1h23m
+   Tools: 3/3 essential
+   Disk: 874.6 GB free (13.1% used)
+```
+
+### 5. `validate` — Check Tool Binary Availability
+
+Scans `PATH` for all 83 tool binaries without running them:
+
+```bash
+python3 hexstrike.py validate                       # Summary (present/missing)
+python3 hexstrike.py validate --verbose             # Full paths of present tools
+python3 hexstrike.py validate --filter nmap         # Check specific tools
+```
+
+```text
+✅ 60 present   ❌ 23 missing   Total: 83
+
+Missing (23):
+  metasploit: metasploit
+  searchsploit: exploit_db
+  ...
+```
+
+### 6. `mcp` — MCP stdio Bridge (Claude Desktop)
+
+Run the stdio MCP bridge for Claude Desktop integration:
+
+```bash
+python3 hexstrike.py mcp                            # Connect to local server
+python3 hexstrike.py mcp --server http://192.168.1.10:8888
+python3 hexstrike.py mcp --debug                    # Verbose MCP logging
+python3 hexstrike.py mcp --compact                  # Compact mode for small LLMs
+python3 hexstrike.py mcp --auth-token "bearer-token-here"
+```
+
+### 7. `ctf` — CTF Workflow Analysis
+
+Generate a step-by-step CTF exploitation workflow:
+
+```bash
+python3 hexstrike.py ctf --category web --difficulty medium
+python3 hexstrike.py ctf --category pwn --difficulty hard
+python3 hexstrike.py ctf --category crypto --name "RSA Oracle" --points 500 --target 10.10.10.10
+```
+
+```text
+🏴 CTF: RSA Oracle [crypto, medium]
+   Points: 500 | Target: 10.10.10.10
+
+Workflow (8 steps):
+   1. automated_reconnaissance Automated crypto recon and tool setup
+   2. source_code_analysis     Source code analysis for vulnerability identification
+   3. cipher_identification    Identify cipher and encryption methods
+   4. key_analysis             Analyze key generation and randomness
+   5. vulnerability_scanning   Scan for implementation vulnerabilities
+   6. manual_testing           Manual testing of discovered attack vectors
+   7. exploitation             Exploit discovered vulnerabilities
+   8. flag_extraction          Extract and validate flag
+```
+
+Categories: `web`, `pwn`, `crypto`, `forensics`, `re`, `misc`, `osint`, `cloud`, `mobile`, `hardware`.
+
+---
+
+## Scan Command Best Practices
+
+### Parameter Passing
+
+The `scan` subcommand uses this parameter resolution order:
+
+1. The positional `target` argument sets both `target` and `url` params
+2. `-p key=val` overrides or adds any param from the tool's schema
+
+```bash
+# Equivalent commands:
+python3 hexstrike.py scan nmap scanme.nmap.org
+python3 hexstrike.py scan nmap "" -p target=scanme.nmap.org
+```
+
+### Tool-Specific Parameter Reference
+
+<details>
+<summary><b>🔍 Reconnaissance</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `nmap` | `target` | `scan_type` (default `-sCV`), `ports`, `additional_args` (default `-T4 -Pn`) |
+| `nmap_advanced` | `target` | `scan_type` (`-sS`), `ports`, `timing` (`T4`), `nse_scripts`, `os_detection`, `version_detection`, `aggressive`, `stealth` |
+| `masscan` | `target` | `ports` (`1-65535`), `rate` (`1000`) |
+| `rustscan` | `target` | `ports`, `ulimit` (`5000`), `batch_size` (`4500`), `timeout` (`1500`) |
+| `autorecon` | `target` | `output_dir`, `port_scans` (`top-100-ports`), `service_scans` (`default`), `timeout` (`300`) |
+| `amass` | `domain` | `mode` (`enum`) |
+| `subfinder` | `domain` | `silent=true`, `all_sources` |
+| `theharvester` | `domain` | — |
+| `enum4linux` | `target` | `additional_args` (`-a`) |
+| `netexec` | `target` | `protocol` (`smb`), `username`, `password`, `hash`, `module` |
+| `smbmap` | `target` | — |
+| `rpcclient` | `target` | `username`, `password`, `domain`, `commands` |
+| `arp_scan` | `target` | `local_network`, `interface`, `timeout` (`500`) |
+| `nbtscan` | `target` | — |
+
+</details>
+
+<details>
+<summary><b>🌐 Web Application</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `gobuster` | `url` | `mode` (`dir`), `wordlist` (`dirb/common.txt`) |
+| `ffuf` | `url` | `wordlist` (`dirb/common.txt`), `mode` (`directory`), `match_codes` (`200,204,301,302,307,401,403`) |
+| `feroxbuster` | `url` | `wordlist` (`dirb/common.txt`), `threads` (`10`) |
+| `dirsearch` | `url` | — |
+| `dirb` | `url` | `wordlist` (`dirb/common.txt`) |
+| `wfuzz` | `url` | `wordlist` (`dirb/common.txt`) |
+| `whatweb` | `url` | — |
+| `wpscan` | `url` | — |
+| `joomscan` | `url` | — |
+| `dalfox` | `url` | `blind` |
+| `xsser` | `url` | `params` |
+| `commix` | `url` | `level` |
+| `httpx` | `target` | `probe=true`, `tech_detect`, `status_code`, `title` |
+| `katana` | `url` | — |
+| `hakrawler` | `url` | — |
+| `gau` | `url` | — |
+| `waybackurls` | `url` | — |
+| `arjun` | `url` | `method` (`GET`), `wordlist`, `threads` (`25`) |
+| `paramspider` | `url` | — |
+| `wafw00f` | `url` | — |
+| `dotdotpwn` | `target` | — |
+
+</details>
+
+<details>
+<summary><b>⚔️ Vulnerability & Exploitation</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `nuclei` | `target` | `severity`, `tags`, `template`, `ports`, `timeout` (`300`) |
+| `nikto` | `target` | — |
+| `sqlmap` | `url` | `data` (POST body) |
+| `metasploit` | `module` | `options` (dict), `additional_args` |
+| `msfvenom` | `payload` | `format` (`elf`), `lhost`, `lport` (`4444`) |
+| `searchsploit` | `query` | — |
+| `vulnx` | `cve_id` or `search` | `auth_key` |
+
+**Nuclei best practice**: When no `severity`/`tags`/`template` is specified, defaults to `severity=critical,tags=cve` to avoid loading all ~12k templates. Explicitly set `-p severity=` to override.
+
+</details>
+
+<details>
+<summary><b>🔐 Authentication & Password</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `hydra` | `target`, `service` | `username`, `username_file`, `password`, `password_file` |
+| `medusa` | `target`, `module` | `username`, `username_file`, `password`, `password_file` |
+| `patator` | `target`, `module` | `username`, `username_file`, `password`, `password_file` |
+| `hashcat` | `hash_file`, `hash_type` | `attack_mode` (`0`), `wordlist` (`rockyou.txt`), `mask` |
+| `john` | `hash_file` | `wordlist` |
+| `hashid` | `hash` | — |
+
+</details>
+
+<details>
+<summary><b>📡 WiFi</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `airmon_ng` | `interface`, `action` (`start`/`stop`/`check kill`) | `channel` |
+| `airodump_ng` | `interface` | `bssid`, `channel`, `essid`, `output_prefix` (`capture`) |
+| `aireplay_ng` | `interface`, `attack_mode` (0-7,9) | `bssid`, `client_mac`, `count` |
+| `aircrack_ng` | `capture_files`, `wordlist` | `bssid` |
+| `hcxdumptool` | `interface` | `target_bssid`, `duration` (`1`), `output_file` |
+| `wifite` | `interface` | `target_essid`, `target_bssid`, `attack_pmkid=true`, `attack_handshake=true`, `wordlist`, `timeout` (`300`) |
+| `mdk4` | `interface`, `attack_mode`, `target_bssid` | `ssid_wordlist`, `burst_rate` (`50`) |
+
+⚠️ `aireplay-ng` and `mdk4` require user confirmation before execution.
+
+</details>
+
+<details>
+<summary><b>🔬 Binary & Forensics</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `checksec` | `file` | — |
+| `ropgadget` | `file` | — |
+| `ropper` | `binary` | `gadget_type` (`rop`), `quality` (`1`), `arch`, `search_string` |
+| `one_gadget` | `libc_path` | `level` (`1`) |
+| `gdb` | `binary` | `commands`, `script_file` |
+| `radare2` | `file` | `commands` |
+| `binwalk` | `file` | — |
+| `strings` | `file` | — |
+| `objdump` | `file` | — |
+| `volatility` | `memory_file`, `plugin` | `profile` |
+| `volatility3` | `memory_file`, `plugin` | `output_file` |
+| `foremost` | `input_file` | `output_dir` (`/tmp/foremost_output`), `file_types` |
+| `steghide` | `cover_file` | `action` (`extract`), `embed_file`, `passphrase`, `output_file` |
+| `exiftool` | `file_path` | `output_format`, `tags` |
+
+</details>
+
+<details>
+<summary><b>☁️ Cloud & Container</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `trivy` | `target` | `scan_type` (`image`), `severity` |
+| `prowler` | — | `provider` (`aws`), `profile` (`default`), `region`, `checks` |
+| `kube_hunter` | — | — |
+| `kube_bench` | — | `targets`, `version`, `output_format` (`json`) |
+| `checkov` | — | `directory` (`.`), `framework`, `check`, `skip_check` |
+| `terrascan` | — | `scan_type` (`all`), `iac_dir` (`.`), `severity` |
+
+</details>
+
+<details>
+<summary><b>🔌 SSL/TLS</b></summary>
+
+| Tool | Required | Key Optional Params |
+|------|----------|-------------------|
+| `testssl` | `target` | `protocols=true`, `server_defaults=true`, `server_preference`, `forward_secrecy`, `headers`, `vulnerable`, `full`, `client_simulation`, `severity`, `starttls`, `json_output`, `proxy`, `quiet=true` |
+
+`testssl` has 18+ check flags — use `full=true` to run everything, or enable specific checks individually.
+
+</details>
+
+### Chaining Tools (Shell Pipeline)
+
+Combine `scan` with shell tools for workflows:
+
+```bash
+# Discover subdomains → probe for HTTP → scan with nuclei
+python3 hexstrike.py scan amass example.com -p mode=passive | grep example.com > subs.txt
+cat subs.txt | while read d; do
+  python3 hexstrike.py scan httpx "https://$d" -p tech_detect=true
+done
+
+# Port scan → extract open ports → service scan
+python3 hexstrike.py scan nmap 10.10.10.10 -p scan_type=-sS -p ports=1-1000
+python3 hexstrike.py scan nmap 10.10.10.10 -p scan_type=-sV -p ports=80,443,3306
+```
+
+### Environment Variables
+
+| Variable | Default | Used By |
+|----------|---------|---------|
+| `HEXSTRIKE_HOST` | `127.0.0.1` | `serve`, `status` |
+| `HEXSTRIKE_PORT` | `8888` | `serve`, `status` |
+| `HEXSTRIKE_DATA_DIR` | `data/` | Server data directory |
+| `HEXSTRIKE_LOG_LEVEL` | `INFO` | All components |
+
+---
+
 ## Connect Your AI Client
 
 <details>
