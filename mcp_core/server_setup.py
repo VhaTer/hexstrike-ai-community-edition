@@ -1366,18 +1366,35 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         await ctx.info(f"📋 Validating {len(tools_to_check)} tools...")
 
         def _check_binary(binary: str) -> Dict[str, Any]:
-            import shutil, subprocess
+            import re, shutil, subprocess
+            _VERSION_OVERRIDES = {
+                "dalfox": "version",
+                "httpx": "-version",
+            }
             path = shutil.which(binary)
             if not path:
                 return {"present": False, "path": None, "version": None}
             version = None
-            for flag in ("--version", "-v"):
+            flags = (_VERSION_OVERRIDES.get(binary, "--version"), "-v", "version")
+            for flag in flags:
                 try:
                     r = subprocess.run([path, flag], capture_output=True, text=True, timeout=3)
-                    output = (r.stdout or "")[:200] + (r.stderr or "")[:200]
-                    line = (output.strip() or "").split("\n")[0][:150]
-                    if line and len(line) > 3 and path not in line:
-                        version = line
+                    output = ((r.stderr or "") + (r.stdout or ""))[:800]
+                    best_line = None
+                    for ln in output.split("\n"):
+                        stripped = ln.strip()
+                        if not stripped or len(stripped) <= 3 or path in stripped:
+                            continue
+                        m = re.search(r'v?\d+\.\d+\.\d+', stripped)
+                        if m:
+                            version = m.group(0)
+                            break
+                        if best_line is None:
+                            best_line = stripped[:150]
+                    if version:
+                        break
+                    if best_line:
+                        version = best_line
                         break
                 except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError):
                     continue
