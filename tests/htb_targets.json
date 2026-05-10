@@ -1,0 +1,58 @@
+{
+  "description": "HTB target definitions for Pulse integration tests.",
+  "instructions": "Spawn an HTB machine, set its IP below, and run integration tests with --target <name>.",
+  "machines": [
+    {
+      "name": "oopsie",
+      "ip": "",
+      "web_url": "",
+      "services": ["http", "smb"],
+      "notes": "HTB retired free. Port 80 (Apache 2.4.29), SMB on 445."
+    },
+    {
+      "name": "bashed",
+      "ip": "",
+      "web_url": "",
+      "services": ["http"],
+      "notes": "HTB retired free. Port 80 (Apache), phpbash shell upload."
+    },
+    {
+      "name": "Vaccine",
+      "ip": "10.129.123.2",
+      "web_url": "http://10.129.123.2",
+      "services": ["FTP (21), SSH (22), and HTTP (80)"],
+      "notes": "HTB retired free. Port 80 (Apache), phpbash shell upload."
+    },
+    {
+      "name": "lame",
+      "ip": "",
+      "web_url": "",
+      "services": ["smb", "ftp"],
+      "notes": "HTB retired free. SMB usermap script, vsftpd 2.3.4."
+    },
+    {
+      "name": "scanme",
+      "ip": "scanme.nmap.org",
+      "web_url": "http://scanme.nmap.org",
+      "services": ["http"],
+      "notes": "Nmap's public test target. Always available, port 80 (Apache), port 22 (SSH)."
+    }
+  ],
+  "test_profiles": {
+    "quick": {
+      "description": "Fast smoke tests — lightweight tools only",
+      "timeout": 60,
+      "tools": ["whatweb", "httpx", "nmap"]
+    },
+    "standard": {
+      "description": "Balanced coverage — recon + common scanners",
+      "timeout": 180,
+      "tools": ["whatweb", "httpx", "nmap", "gobuster", "nikto", "nuclei", "searchsploit"]
+    },
+    "full": {
+      "description": "Maximum coverage — all applicable tools",
+      "timeout": 300,
+      "tools": ["whatweb", "httpx", "nmap", "masscan", "gobuster", "feroxbuster", "nikto", "nuclei", "dirsearch", "searchsploit", "nbtscan", "enum4linux", "smbmap"]
+    }
+  }
+}

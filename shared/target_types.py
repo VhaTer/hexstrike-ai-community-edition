@@ -8,6 +8,7 @@ class TargetType(Enum):
     CLOUD_SERVICE = "cloud_service"
     MOBILE_APP = "mobile_app"
     BINARY_FILE = "binary_file"
+    CTF_CHALLENGE = "ctf_challenge"
     UNKNOWN = "unknown"
 
 class TechnologyStack(Enum):

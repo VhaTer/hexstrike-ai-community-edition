@@ -762,7 +762,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "autopsy":           (misc_exec, "autopsy"),
     }
 
-    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
+    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True)
     async def run_security_tool(
         ctx: Context,
         tool_name: str,
@@ -982,18 +982,36 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             loop.run_in_executor(None, lambda: exec_func(tool_key, params))
         )
 
-        await ctx.report_progress(0, 100)
-        phases = [(25, "🔧 Preparing..."), (50, "⚙️  Running..."), (75, "📊 Processing results...")]
-        tick = 12
-        for progress, message in phases:
-            done, _ = await asyncio.wait([future], timeout=tick)
-            if done:
-                break
-            await ctx.report_progress(progress, 100)
-            await ctx.info(message)
+        try:
+            await ctx.report_progress(0, 100)
+            phases = [(25, "🔧 Preparing..."), (50, "⚙️  Running..."), (75, "📊 Processing results...")]
+            tick = 12
+            for progress, message in phases:
+                done, _ = await asyncio.wait([future], timeout=tick)
+                if done:
+                    break
+                await ctx.report_progress(progress, 100)
+                await ctx.info(message)
 
-        result = _normalize_tool_result(await future)
-        await ctx.report_progress(100, 100)
+            # Keep polling with progress reports until done
+            pct = 80
+            while not future.done():
+                done, _ = await asyncio.wait([future], timeout=15)
+                if done:
+                    break
+                await ctx.report_progress(pct, 100)
+                await ctx.info(f"⏳ Still running ({pct}%)")
+                pct = min(pct + 5, 98)
+
+            result = _normalize_tool_result(await future)
+            await ctx.report_progress(100, 100)
+        except asyncio.CancelledError:
+            # FastMCP timeout reached — subprocess may still be running in the
+            # thread pool; we exit cleanly to avoid ClosedResourceError crashes.
+            result = {"success": False, "error": "Tool execution timed out", "timed_out": True}
+            await ctx.report_progress(100, 100)
+        except Exception as exc:
+            result = {"success": False, "error": str(exc)[:500], "timed_out": False}
 
         # Copy result-level flags into telemetry
         _telemetry["timed_out"] = result.get("timed_out", False)
@@ -1115,6 +1133,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         ctx: Context,
         target: str,
         objective: str = "comprehensive",
+        ctf_category: str = "",
+        ctf_difficulty: str = "unknown",
+        ctf_points: int = 0,
+        ctf_description: str = "",
     ) -> Dict[str, Any]:
         """
         Generate an intelligent attack chain for a target.
@@ -1123,6 +1145,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             target:    Target (IP, URL, domain, file path)
             objective: comprehensive | quick | stealth | ctf | bug_bounty_recon |
                        bug_bounty_hunting | aws | kubernetes | containers | iac
+            ctf_category:   CTF challenge category (web|crypto|pwn|forensics|rev|misc|osint)
+            ctf_difficulty: CTF difficulty (easy|medium|hard|insane)
+            ctf_points:     CTF point value
+            ctf_description: CTF challenge description
 
         Returns:
             AttackChain dict with ordered steps, tools, probabilities, estimated time
@@ -1130,6 +1156,84 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         await ctx.info(f"🧠 Analyzing target: {target} (objective={objective})")
         await ctx.report_progress(0, 100)
 
+        # -----------------------------------------------------------------------
+        # CTF objective — use CTFWorkflowManager for rich per-category workflows
+        # -----------------------------------------------------------------------
+        if objective == "ctf":
+            from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+            from server_core.workflows.ctf.workflowManager import CTFWorkflowManager
+            from shared.target_profile import TargetProfile
+            from shared.attack_chain import AttackChain
+            from shared.attack_step import AttackStep
+            from shared.target_types import TargetType
+
+            if not ctf_category:
+                ctf_category = "web"
+            target_str = str(target)
+            points_str = f" | {ctf_points}pts" if ctf_points else ""
+            await ctx.info(f"🏴 CTF Workflow — [{ctf_category.upper()}] {target_str} ({ctf_difficulty}{points_str})")
+
+            challenge = CTFChallenge(
+                name=target_str,
+                category=ctf_category,
+                description=ctf_description or f"CTF challenge targeting {target_str}",
+                difficulty=ctf_difficulty,
+                points=ctf_points,
+                target=target_str,
+            )
+
+            ctf_wfm = CTFWorkflowManager()
+            workflow = ctf_wfm.create_ctf_challenge_workflow(challenge)
+
+            profile = TargetProfile(target=target_str, target_type=TargetType.CTF_CHALLENGE)
+            profile.risk_level = "medium" if ctf_difficulty in ("hard", "insane") else "low"
+            chain = AttackChain(profile)
+            chain.risk_level = profile.risk_level
+
+            manual_tools = {"manual", "custom", "python", "sage", "ida",
+                            "x64dbg", "ollydbg", "burpsuite", "wireshark",
+                            "audacity", "maltego"}
+
+            for step in workflow.get("workflow_steps", []):
+                tools = step.get("tools", ["manual"])
+                step_desc = step.get("description", f"CTF step: {step.get('action', 'unknown')}")
+                step_time = step.get("estimated_time", 600)
+                for tool in tools:
+                    if tool not in manual_tools:
+                        step_obj = AttackStep(
+                            tool=tool,
+                            parameters={"target": target_str, "category": ctf_category},
+                            expected_outcome=step_desc,
+                            success_probability=workflow.get("success_probability", 0.5),
+                            execution_time_estimate=step_time,
+                        )
+                        chain.add_step(step_obj)
+
+            chain.calculate_success_probability()
+
+            result = chain.to_dict()
+            result["ctf_metadata"] = {
+                "category": ctf_category,
+                "difficulty": ctf_difficulty,
+                "points": ctf_points,
+                "strategies": workflow.get("strategies", []),
+                "parallel_tasks": workflow.get("parallel_tasks", []),
+                "automation_level": workflow.get("automation_level", "high"),
+                "resource_requirements": workflow.get("resource_requirements", {}),
+                "validation_steps": workflow.get("validation_steps", []),
+            }
+
+            await ctx.info(
+                f"✅ CTF attack chain ready: {len(chain.steps)} steps | "
+                f"{len(workflow.get('strategies', []))} strategies | "
+                f"success: {chain.success_probability:.0%}"
+            )
+            await ctx.report_progress(100, 100)
+            return result
+
+        # -----------------------------------------------------------------------
+        # Standard objective — use IntelligentDecisionEngine
+        # -----------------------------------------------------------------------
         loop = asyncio.get_running_loop()
 
         # Check session state first — avoid re-analyzing if profile already exists
@@ -1171,6 +1275,150 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         await ctx.info(f"✅ Attack chain ready: {len(chain.steps)} steps | Risk: {chain.risk_level}")
         return chain.to_dict()
 
+    # ========================================================================
+    # validate_environment — check which external binaries are available
+    # ========================================================================
+
+    _TOOL_BINARY_MAP = {
+        "airmon_ng": "airmon-ng", "airodump_ng": "airodump-ng",
+        "aireplay_ng": "aireplay-ng", "aircrack_ng": "aircrack-ng",
+        "hcxdumptool": "hcxdumptool", "wifite": "wifite", "wifite2": "wifite2",
+        "hcxpcapngtool": "hcxpcapngtool", "eaphammer": "eaphammer",
+        "bettercap_wifi": "bettercap", "mdk4": "mdk4",
+        "amass": "amass", "subfinder": "subfinder", "autorecon": "autorecon",
+        "theharvester": "theHarvester", "dnsenum": "dnsenum", "fierce": "fierce",
+        "whois": "whois",
+        "nmap": "nmap", "nmap_advanced": "nmap", "masscan": "masscan",
+        "rustscan": "rustscan", "arp_scan": "arp-scan",
+        "nikto": "nikto", "sqlmap": "sqlmap", "wpscan": "wpscan",
+        "dalfox": "dalfox", "jaeles": "jaeles", "xsser": "xsser", "zap": "zaproxy",
+        "gobuster": "gobuster", "ffuf": "ffuf", "feroxbuster": "feroxbuster",
+        "dirsearch": "dirsearch", "dirb": "dirb", "wfuzz": "wfuzz",
+        "dotdotpwn": "dotdotpwn",
+        "hydra": "hydra", "hashcat": "hashcat", "john": "john",
+        "medusa": "medusa", "patator": "patator", "hashid": "hashid",
+        "ophcrack": "ophcrack",
+        "enum4linux": "enum4linux", "enum4linux_ng": "enum4linux-ng",
+        "netexec": "netexec", "rpcclient": "rpcclient", "smbmap": "smbmap",
+        "nbtscan": "nbtscan",
+        "metasploit": "msfconsole", "msfvenom": "msfvenom",
+        "searchsploit": "searchsploit", "exploit_db": "searchsploit",
+        "pwntools": "python3",
+        "katana": "katana", "hakrawler": "hakrawler", "gau": "gau",
+        "waybackurls": "waybackurls", "httpx": "httpx", "wafw00f": "wafw00f",
+        "arjun": "arjun", "paramspider": "paramspider", "x8": "x8",
+        "prowler": "prowler", "trivy": "trivy", "kube_hunter": "kube-hunter",
+        "kube_bench": "kube-bench", "checkov": "checkov", "terrascan": "terrascan",
+        "ropgadget": "ROPgadget", "ropper": "ropper", "one_gadget": "one_gadget",
+        "volatility": "volatility", "volatility3": "vol3", "gdb": "gdb",
+        "radare2": "r2", "strings": "strings", "objdump": "objdump",
+        "checksec": "checksec", "binwalk": "binwalk", "ghidra": "ghidra",
+        "angr": "angr", "xxd": "xxd", "mysql": "mysql", "sqlite": "sqlite3",
+        "exiftool": "exiftool", "foremost": "foremost", "steghide": "steghide",
+        "hashpump": "hashpump", "anew": "anew", "uro": "uro",
+        "nuclei": "nuclei", "responder": "responder",
+        "jwt_analyzer": "jwt_analyzer", "autopsy": "autopsy",
+        "sherlock": "sherlock", "spiderfoot": "spiderfoot",
+        "sublist3r": "sublist3r", "parsero": "parsero",
+        "testssl": "testssl", "whatweb": "whatweb", "commix": "commix",
+        "joomscan": "joomscan",
+        "vulnx": "vulnx",
+        "impacket": "impacket", "ldapdomaindump": "ldapdomaindump",
+        "adidnsdump": "adidnsdump", "certipy": "certipy",
+        "certipy_ad": "certipy", "mitm6": "mitm6",
+        "pywerview": "pywerview", "bloodhound": "bloodhound",
+        "bloodhound_python": "bloodhound",
+    }
+
+    @mcp.tool(
+        description="Validate which external binaries are available on this system. Returns a report of installed, missing, and deprecated tools.",
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+    )
+    async def validate_environment(
+        ctx: Context,
+        tool_filter: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Check which external binaries are installed and functional.
+
+        Args:
+            tool_filter: Optional comma-separated list of tool names to check.
+                         If empty, all registered tools are validated.
+
+        Returns:
+            Environment validation report with per-tool status, binary paths, versions
+        """
+        await ctx.info("🔍 Validating tool environment...")
+        await ctx.report_progress(0, 100)
+
+        loop = asyncio.get_running_loop()
+
+        # Determine which tools to check
+        if tool_filter:
+            requested = {t.strip().lower() for t in tool_filter.split(",") if t.strip()}
+            tools_to_check = [t for t in DIRECT_TOOLS if t in requested]
+            if not tools_to_check:
+                unknown = requested - set(DIRECT_TOOLS.keys())
+                return {"success": False, "error": f"No registered tools match filter", "unknown_tools": sorted(unknown)}
+        else:
+            tools_to_check = list(DIRECT_TOOLS.keys())
+
+        await ctx.info(f"📋 Validating {len(tools_to_check)} tools...")
+
+        def _check_binary(binary: str) -> Dict[str, Any]:
+            import shutil, subprocess
+            path = shutil.which(binary)
+            if not path:
+                return {"present": False, "path": None, "version": None}
+            version = None
+            for flag in ("--version", "-v"):
+                try:
+                    r = subprocess.run([path, flag], capture_output=True, text=True, timeout=3)
+                    output = (r.stdout or "")[:200] + (r.stderr or "")[:200]
+                    line = (output.strip() or "").split("\n")[0][:150]
+                    if line and len(line) > 3 and path not in line:
+                        version = line
+                        break
+                except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError):
+                    continue
+            return {"present": True, "path": path, "version": version}
+
+        results = {}
+        sorted_tools = sorted(tools_to_check)
+        # Check binaries concurrently in batches of 10
+        batch_size = 10
+        for batch_start in range(0, len(sorted_tools), batch_size):
+            batch = sorted_tools[batch_start:batch_start + batch_size]
+            tasks = []
+            for tool_name in batch:
+                binary = _TOOL_BINARY_MAP.get(tool_name, tool_name)
+                tasks.append(loop.run_in_executor(None, _check_binary, binary))
+            batch_results = await asyncio.gather(*tasks)
+            for tool_name, info in zip(batch, batch_results):
+                binary = _TOOL_BINARY_MAP.get(tool_name, tool_name)
+                results[tool_name] = {
+                    "binary": binary,
+                    "present": info["present"],
+                    "path": info["path"],
+                    "version": info["version"],
+                }
+            await ctx.report_progress(int(min(batch_start + batch_size, len(sorted_tools)) / len(sorted_tools) * 100), 100)
+
+        await ctx.report_progress(100, 100)
+
+        present = sum(1 for v in results.values() if v["present"])
+        missing = sum(1 for v in results.values() if not v["present"])
+
+        await ctx.info(f"✅ Validation complete: {present} present, {missing} missing")
+
+        return {
+            "success": True,
+            "total": len(results),
+            "present": present,
+            "missing": missing,
+            "tools": results,
+        }
+
     typed_tools_registered = 0
     for public_name in sorted(DIRECT_TOOLS):
         tool_def = _get_registry_tool_definition(public_name)
@@ -1185,6 +1433,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             description=tool_def["desc"],
             annotations={"readOnlyHint": False, "openWorldHint": True},
             timeout=tool_timeout,
+            task=True,
         )(wrapper)
         typed_tools_registered += 1
 
