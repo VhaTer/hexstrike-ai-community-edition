@@ -335,10 +335,6 @@ def _sqlite(data: dict) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def _postgresql(data: dict) -> dict:
-    return {"success": False, "error": "PostgreSQL requires psycopg2 — pip install psycopg2-binary"}
-
-
 # ---------------------------------------------------------------------------
 # api_scan/
 # ---------------------------------------------------------------------------
@@ -695,7 +691,7 @@ _HANDLERS = {
     # db_query
     "mysql":               _mysql,
     "sqlite":              _sqlite,
-    "postgresql":          _postgresql,
+
     # api_scan
     "api_schema_analyzer": _api_schema_analyzer,
     "graphql_scanner":     _graphql_scanner,

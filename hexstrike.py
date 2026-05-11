@@ -18,12 +18,14 @@ Flags:
 
 import argparse
 import importlib
+import io
 import json
 import logging
 import os
 import sys
 import urllib.request
 import urllib.error
+from contextlib import redirect_stdout
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -150,7 +152,6 @@ DIRECT_ROUTES = {
     "jwt_analyzer":      ("mcp_core.misc_direct", "misc_exec", "jwt_analyzer"),
     "autopsy":           ("mcp_core.misc_direct", "misc_exec", "autopsy"),
     "libc":              ("mcp_core.misc_direct", "misc_exec", "libc"),
-    "postgresql":        ("mcp_core.misc_direct", "misc_exec", "postgresql"),
     "api_schema_analyzer": ("mcp_core.misc_direct", "misc_exec", "api_schema_analyzer"),
     "graphql_scanner":   ("mcp_core.misc_direct", "misc_exec", "graphql_scanner"),
     "api_fuzzer":        ("mcp_core.misc_direct", "misc_exec", "api_fuzzer"),
@@ -277,8 +278,25 @@ def cmd_scan(args):
                 params[k] = v
 
     logger.info(f"🔍 Running {tool_name} against {target or '...'}")
-    result = exec_func(tool_key, params)
-    print(_format_result(result))
+
+    if args.json:
+        _stdout_buf = io.StringIO()
+        with redirect_stdout(_stdout_buf):
+            result = exec_func(tool_key, params)
+        _stdout_buf.close()
+    else:
+        result = exec_func(tool_key, params)
+
+    if args.json:
+        output = json.dumps(result, indent=2, default=str)
+    else:
+        output = _format_result(result)
+
+    if args.output:
+        Path(args.output).write_text(output)
+        logger.info(f"📝 Output written to {args.output}")
+
+    print(output)
 
 
 # ============================================================================
@@ -466,6 +484,7 @@ Examples:
   hexstrike serve                         Start server on :8888
   hexstrike serve --host 0.0.0.0 --port 8080
   hexstrike scan nmap target=scanme.nmap.org scan_type=-sV
+  hexstrike scan nmap target=scanme.nmap.org scan_type=-sV --json -o result.json
   hexstrike scan nuclei target=http://scanme.nmap.org severity=critical
   hexstrike tools --filter nmap
   hexstrike status --host 192.168.1.10
@@ -488,6 +507,8 @@ Examples:
     p_scan.add_argument("tool", help="Tool name (nmap, nuclei, whatweb, ...)")
     p_scan.add_argument("target", nargs="?", default="", help="Target (host/URL/domain)")
     p_scan.add_argument("-p", "--param", action="append", default=[], help="Extra params key=val")
+    p_scan.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_scan.add_argument("-o", "--output", default="", help="Write output to file")
 
     # tools
     p_tools = sub.add_parser("tools", help="List available tools")
