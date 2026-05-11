@@ -310,7 +310,10 @@ def cmd_tools(args):
     if args.filter:
         matching = {k: v for k, v in TOOLS.items() if args.filter.lower() in k.lower()}
         if not matching:
-            logger.info(f"No tools matching '{args.filter}'")
+            msg = f"No tools matching '{args.filter}'"
+            print(msg)
+            if args.output:
+                Path(args.output).write_text(msg + "\n")
             return
         source = matching
     else:
@@ -328,23 +331,50 @@ def cmd_tools(args):
         cat = defn.get("category", "uncategorized")
         by_cat.setdefault(cat, []).append((name, defn))
 
-    idx = 0
-    for cat in cat_order:
-        if cat not in by_cat:
-            continue
-        print(f"\n── {cat} ──")
-        for name, defn in sorted(by_cat[cat]):
-            idx += 1
-            desc = defn.get("desc", "")
-            eff = defn.get("effectiveness", "")
-            eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
-            print(f"({idx:2d}) {name:22s} {desc}{eff_str}")
+    if args.json:
+        data = {}
+        for cat in cat_order:
+            if cat not in by_cat:
+                continue
+            for name, defn in sorted(by_cat[cat]):
+                data[name] = {
+                    "category": cat,
+                    "description": defn.get("desc", ""),
+                    "effectiveness": defn.get("effectiveness", None),
+                }
+        for cat in sorted(set(by_cat) - set(cat_order)):
+            for name, defn in sorted(by_cat[cat]):
+                data[name] = {
+                    "category": cat,
+                    "description": defn.get("desc", ""),
+                    "effectiveness": defn.get("effectiveness", None),
+                }
+        output = json.dumps(data, indent=2)
+    else:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            idx = 0
+            for cat in cat_order:
+                if cat not in by_cat:
+                    continue
+                print(f"\n── {cat} ──")
+                for name, defn in sorted(by_cat[cat]):
+                    idx += 1
+                    desc = defn.get("desc", "")
+                    eff = defn.get("effectiveness", "")
+                    eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
+                    print(f"({idx:2d}) {name:22s} {desc}{eff_str}")
 
-    for cat in sorted(set(by_cat) - set(cat_order)):
-        print(f"\n── {cat} ──")
-        for name, defn in sorted(by_cat[cat]):
-            idx += 1
-            print(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
+            for cat in sorted(set(by_cat) - set(cat_order)):
+                print(f"\n── {cat} ──")
+                for name, defn in sorted(by_cat[cat]):
+                    idx += 1
+                    print(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
+        output = buf.getvalue()
+
+    print(output, end="")
+    if args.output:
+        Path(args.output).write_text(output)
 
 
 # ============================================================================
@@ -364,20 +394,42 @@ def cmd_status(args):
         uptime = data.get("uptime_seconds", 0)
         checks = data.get("checks", {})
 
-        icon = "🟢" if status == "ready" else "🟡" if status == "degraded" else "🔴"
-        print(f"{icon} Pulse server: {status}")
-        print(f"   Uptime: {uptime // 3600}h{uptime % 3600 // 60}m")
-        tools = checks.get("essential_tools", {})
-        print(f"   Tools: {tools.get('available', '?')}/{tools.get('total', '?')} essential")
-        disk = checks.get("disk", {})
-        if disk:
-            print(f"   Disk: {disk.get('free_gb', '?')} GB free ({disk.get('usage_pct', '?')}% used)")
-        print(f"   URL: {url}")
+        if args.json:
+            output = json.dumps({
+                "status": status,
+                "uptime_seconds": uptime,
+                "host": host,
+                "port": port,
+                "checks": checks,
+            }, indent=2)
+        else:
+            icon = "🟢" if status == "ready" else "🟡" if status == "degraded" else "🔴"
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                print(f"{icon} Pulse server: {status}")
+                print(f"   Uptime: {uptime // 3600}h{uptime % 3600 // 60}m")
+                tools = checks.get("essential_tools", {})
+                print(f"   Tools: {tools.get('available', '?')}/{tools.get('total', '?')} essential")
+                disk = checks.get("disk", {})
+                if disk:
+                    print(f"   Disk: {disk.get('free_gb', '?')} GB free ({disk.get('usage_pct', '?')}% used)")
+                print(f"   URL: {url}")
+            output = buf.getvalue()
+
+        print(output, end="")
+        if args.output:
+            Path(args.output).write_text(output)
     except urllib.error.URLError:
-        print(f"🔴 Pulse server not responding at {url}")
+        msg = f"🔴 Pulse server not responding at {url}\n"
+        print(msg, end="")
+        if args.output:
+            Path(args.output).write_text(msg)
         sys.exit(1)
     except Exception as e:
-        print(f"🔴 Error: {e}")
+        msg = f"🔴 Error: {e}\n"
+        print(msg, end="")
+        if args.output:
+            Path(args.output).write_text(msg)
         sys.exit(1)
 
 
@@ -403,15 +455,31 @@ def cmd_validate(args):
         else:
             missing.append(tool_name)
 
-    print(f"✅ {len(present)} present   ❌ {len(missing)} missing   Total: {len(tools_to_check)}")
-    if missing:
-        print(f"\nMissing ({len(missing)}):")
-        for m in missing:
-            print(f"  {m}: {DIRECT_ROUTES[m][2]}")
-    if args.verbose and present:
-        print(f"\nPresent ({len(present)}):")
-        for p in present:
-            print(f"  {p}: {shutil.which(DIRECT_ROUTES[p][2])}")
+    if args.json:
+        output = json.dumps({
+            "total": len(tools_to_check),
+            "present_count": len(present),
+            "missing_count": len(missing),
+            "present": [{"tool": t, "binary": DIRECT_ROUTES[t][2], "path": shutil.which(DIRECT_ROUTES[t][2])} for t in present],
+            "missing": [{"tool": t, "binary": DIRECT_ROUTES[t][2]} for t in missing],
+        }, indent=2)
+    else:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            print(f"✅ {len(present)} present   ❌ {len(missing)} missing   Total: {len(tools_to_check)}")
+            if missing:
+                print(f"\nMissing ({len(missing)}):")
+                for m in missing:
+                    print(f"  {m}: {DIRECT_ROUTES[m][2]}")
+            if args.verbose and present:
+                print(f"\nPresent ({len(present)}):")
+                for p in present:
+                    print(f"  {p}: {shutil.which(DIRECT_ROUTES[p][2])}")
+        output = buf.getvalue()
+
+    print(output, end="")
+    if args.output:
+        Path(args.output).write_text(output)
 
 
 # ============================================================================
@@ -464,13 +532,31 @@ def cmd_ctf(args):
     result = wm.create_ctf_challenge_workflow(challenge)
     steps = result.get("workflow_steps", [])
 
-    print(f"🏴 CTF: {name} [{category}, {difficulty}]")
-    print(f"   Points: {points} | Target: {target or '(unknown)'}")
-    print(f"\nWorkflow ({len(steps)} steps):")
-    for i, step in enumerate(steps, 1):
-        tool = step.get("action", step.get("step", "?"))
-        desc = step.get("description", "")
-        print(f"  {i:2d}. {tool:20s} {desc[:80]}")
+    if args.json:
+        output = json.dumps({
+            "name": name,
+            "category": category,
+            "difficulty": difficulty,
+            "points": points,
+            "target": target,
+            "total_steps": len(steps),
+            "steps": steps,
+        }, indent=2)
+    else:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            print(f"🏴 CTF: {name} [{category}, {difficulty}]")
+            print(f"   Points: {points} | Target: {target or '(unknown)'}")
+            print(f"\nWorkflow ({len(steps)} steps):")
+            for i, step in enumerate(steps, 1):
+                tool = step.get("action", step.get("step", "?"))
+                desc = step.get("description", "")
+                print(f"  {i:2d}. {tool:20s} {desc[:80]}")
+        output = buf.getvalue()
+
+    print(output, end="")
+    if args.output:
+        Path(args.output).write_text(output)
 
 
 # ============================================================================
@@ -516,16 +602,22 @@ Examples:
     # tools
     p_tools = sub.add_parser("tools", help="List available tools")
     p_tools.add_argument("--filter", "-f", default="", help="Filter tools by name")
+    p_tools.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_tools.add_argument("-o", "--output", default="", help="Write output to file")
 
     # status
     p_status = sub.add_parser("status", help="Check server health")
     p_status.add_argument("--host", default=None, help=f"Server host (default: {DEFAULT_HOST})")
     p_status.add_argument("--port", type=int, default=None, help=f"Server port (default: {DEFAULT_PORT})")
+    p_status.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_status.add_argument("-o", "--output", default="", help="Write output to file")
 
     # validate
     p_val = sub.add_parser("validate", help="Validate tool environment")
     p_val.add_argument("--tool-filter", "-f", default="", help="Filter specific tools")
     p_val.add_argument("--verbose", "-v", action="store_true", help="Show present tools too")
+    p_val.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_val.add_argument("-o", "--output", default="", help="Write output to file")
 
     # mcp (stdio bridge)
     p_mcp = sub.add_parser("mcp", help="Run MCP stdio bridge (Claude Desktop)")
@@ -545,6 +637,8 @@ Examples:
     p_ctf.add_argument("--difficulty", default="medium", help="Difficulty (easy/medium/hard/insane)")
     p_ctf.add_argument("--points", type=int, default=0, help="Challenge points")
     p_ctf.add_argument("--target", default="", help="Target IP/host")
+    p_ctf.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_ctf.add_argument("-o", "--output", default="", help="Write output to file")
 
     return parser
 
