@@ -8,72 +8,81 @@ Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive securi
 
 ```mermaid
 flowchart TB
-    classDef entry fill:#0d2818,stroke:#2ecc71,stroke-width:2px,color:#2ecc71
-    classDef routing fill:#0c1828,stroke:#3498db,stroke-width:2px,color:#3498db
-    classDef engine fill:#1a0f1e,stroke:#e67e22,stroke-width:2px,color:#e67e22
-    classDef exec fill:#140a1e,stroke:#9b59b6,stroke-width:2px,color:#9b59b6
-    classDef tools fill:#0d0d0d,stroke:#555,stroke-width:1px,color:#888
 
-    subgraph ENTRY["🟢  Entry Points"]
-        cli["📟  hexstrike.py"]
-        http["🌐  hexstrike_server.py"]
-        mcp["🔌  hexstrike_mcp.py"]
-    end
+classDef entry fill:#0f172a,stroke:#22c55e,stroke-width:2px,color:#ffffff
+classDef routing fill:#111827,stroke:#3b82f6,stroke-width:2px,color:#ffffff
+classDef engine fill:#111827,stroke:#f59e0b,stroke-width:2px,color:#ffffff
+classDef exec fill:#111827,stroke:#a855f7,stroke-width:2px,color:#ffffff
+classDef tools fill:#0b1220,stroke:#64748b,stroke-width:1.5px,color:#d1d5db
 
-    subgraph ROUTING["🔷  Routing Layer"]
-        setup["⚙️  setup_mcp_server_standalone<br/>131 routes"]
-        runner["▶️  run_security_tool<br/>central dispatcher"]
-    end
+linkStyle default stroke:#475569,stroke-width:2px
 
-    subgraph ENGINE["🔶  Intelligence"]
-        ide["🧠  IntelligentDecisionEngine<br/>attack planner"]
-        ctf["🚩  CTF Workflow Manager<br/>per-category workflows"]
-        exploit["💥  AI Exploit Generator<br/>SQLi / XSS / RCE"]
-        cache["💾  Adaptive Scan Cache<br/>LRU · 30-90min TTL"]
-    end
+subgraph ENTRY["🟢 ENTRY"]
+    cli["📟 CLI"]
+    http["🌐 HTTP"]
+    mcp["🔌 MCP"]
+end
 
-    subgraph EXEC["🟣  Direct Executors"]
-        recon["recon_direct"]
-        scan["scan_direct"]
-        web["web_probe_direct"]
-        vuln["vuln_intel_direct"]
-        wifi["wifi_direct"]
-        ad["active_directory_direct"]
-        osint["osint_direct"]
-        misc["misc_direct"]
-    end
+subgraph ROUTE["🔷 ROUTING"]
+    setup["⚙ setup"]
+    runner["▶ dispatcher"]
+end
 
-    subgraph TOOLS["🛠️  Security Tools (130+)"]
-        net["nmap / masscan / naabu"]
-        web_t["whatweb / nuclei / dalfox"]
-        exp_t["sqlmap / metasploit / responder"]
-        recon_t["sherlock / theHarvester / bbot"]
-    end
+subgraph AI["🔶 AI ENGINE"]
+    ide["🧠 Decision"]
+    ctf["🚩 CTF"]
+    exploit["💥 Exploit AI"]
+    cache["💾 Cache"]
+end
 
-    cli --> setup
-    http --> setup
-    mcp --> setup
-    setup --> runner
-    runner --> recon
-    runner --> scan
-    runner --> web
-    runner --> vuln
-    runner --> wifi
-    runner --> ad
-    runner --> osint
-    runner --> misc
-    recon --> net
-    scan --> net
-    web --> web_t
-    vuln --> web_t
-    wifi --> exp_t
-    ad --> exp_t
-    osint --> recon_t
-    misc --> recon_t
-    ide --> runner
-    ctf --> runner
-    exploit --> runner
-    cache --> runner
+subgraph EXEC["🟣 EXECUTORS"]
+    recon["🛰 recon"]
+    scan["📡 scan"]
+    web["🌍 web"]
+    vuln["☠ vuln"]
+    wifi["📶 wifi"]
+    ad["🏢 AD"]
+    osint["🕵 osint"]
+    misc["🧰 misc"]
+end
+
+subgraph TOOLS["⚫ TOOLCHAIN"]
+    net["📡 nmap / masscan / naabu"]
+    webt["🌐 nuclei / dalfox / whatweb"]
+    exp["💣 metasploit / sqlmap"]
+    rect["🕵 sherlock / bbot"]
+end
+
+cli --> setup
+http --> setup
+mcp --> setup
+setup --> runner
+ide --> runner
+ctf --> runner
+exploit --> runner
+cache --> runner
+runner --> recon
+runner --> scan
+runner --> web
+runner --> vuln
+runner --> wifi
+runner --> ad
+runner --> osint
+runner --> misc
+recon --> net
+scan --> net
+web --> webt
+vuln --> webt
+wifi --> exp
+ad --> exp
+osint --> rect
+misc --> rect
+
+class cli,http,mcp entry
+class setup,runner routing
+class ide,ctf,exploit,cache engine
+class recon,scan,web,vuln,wifi,ad,osint,misc exec
+class net,webt,exp,rect tools
 ```
 
 ## Features
