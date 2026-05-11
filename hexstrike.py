@@ -328,11 +328,13 @@ def cmd_tools(args):
         cat = defn.get("category", "uncategorized")
         by_cat.setdefault(cat, []).append((name, defn))
 
+    idx = 0
     for cat in cat_order:
         if cat not in by_cat:
             continue
         print(f"\n── {cat} ──")
-        for idx, (name, defn) in enumerate(sorted(by_cat[cat]), 1):
+        for name, defn in sorted(by_cat[cat]):
+            idx += 1
             desc = defn.get("desc", "")
             eff = defn.get("effectiveness", "")
             eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
@@ -340,7 +342,8 @@ def cmd_tools(args):
 
     for cat in sorted(set(by_cat) - set(cat_order)):
         print(f"\n── {cat} ──")
-        for idx, (name, defn) in enumerate(sorted(by_cat[cat]), 1):
+        for name, defn in sorted(by_cat[cat]):
+            idx += 1
             print(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
 
 
