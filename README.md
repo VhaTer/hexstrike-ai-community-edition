@@ -24,8 +24,7 @@ subgraph ENTRY["🟢 ENTRY"]
 end
 
 subgraph ROUTE["🔷 ROUTING"]
-    setup["⚙ setup"]
-    runner["▶ dispatcher"]
+    setup["⚙ setup"] --> runner["▶ run"]
 end
 
 subgraph AI["🔶 AI ENGINE"]
@@ -56,7 +55,6 @@ end
 cli --> setup
 http --> setup
 mcp --> setup
-setup --> runner
 ide --> runner
 ctf --> runner
 exploit --> runner
