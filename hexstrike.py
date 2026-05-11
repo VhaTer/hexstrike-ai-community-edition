@@ -332,16 +332,16 @@ def cmd_tools(args):
         if cat not in by_cat:
             continue
         print(f"\n── {cat} ──")
-        for name, defn in sorted(by_cat[cat]):
+        for idx, (name, defn) in enumerate(sorted(by_cat[cat]), 1):
             desc = defn.get("desc", "")
             eff = defn.get("effectiveness", "")
             eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
-            print(f"  {name:20s} {desc}{eff_str}")
+            print(f"({idx:2d}) {name:22s} {desc}{eff_str}")
 
     for cat in sorted(set(by_cat) - set(cat_order)):
         print(f"\n── {cat} ──")
-        for name, defn in sorted(by_cat[cat]):
-            print(f"  {name:20s} {defn.get('desc', '')}")
+        for idx, (name, defn) in enumerate(sorted(by_cat[cat]), 1):
+            print(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
 
 
 # ============================================================================
