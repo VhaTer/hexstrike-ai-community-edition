@@ -6,10 +6,16 @@ We appreciate all contributions from the community. To keep the project stable a
 ## Getting Started
 
 1. Fork the repository
-2. Create a feature branch from beta/x.x.x
-3. Make your changes
-4. Test your changes
-5. Open a Pull Request against beta/x.x.x
+2. Create a feature branch from `beta/x.x.x`
+3. Set up the environment:
+   ```bash
+   python3 -m venv hexstrike-env
+   source hexstrike-env/bin/activate
+   pip install -r requirements.txt
+   ```
+4. Make your changes
+5. Test your changes (see Testing section below)
+6. Open a Pull Request against `beta/x.x.x`
 
 ## Pull Request Guidelines
 
@@ -90,33 +96,70 @@ Maintainers may reject Pull Requests containing unreviewed, low-quality, or nois
 
 Before submitting a Pull Request:
 
-- Ensure existing tests pass
-- Add tests when appropriate
+- Ensure existing tests pass:
+  ```bash
+  source hexstrike-env/bin/activate
+  pytest tests/ -q           # ~45s, 1200+ tests
+  ```
+- **Slow integration tests** are excluded by default. Run explicitly:
+  ```bash
+  pytest tests/test_real_integration.py -q         # ~54s, needs real tools
+  pytest tests/test_server_setup_standalone.py -q   # ~30s
+  ```
+- **Coverage** (when beartype doesn't conflict):
+  ```bash
+  coverage run -m pytest tests/ -q
+  coverage report --skip-covered
+  ```
+- Add tests when appropriate — aim for meaningful coverage, not 100% for its own sake
 - Verify your changes do not break existing functionality
+
+## Architecture Overview
+
+The project uses a **direct execution architecture** (no Flask):
+
+- `mcp_core/server_setup.py` — central tool registration via `DIRECT_TOOLS` dict (130 entries)
+- `mcp_core/*_direct.py` — 16 direct execution modules (e.g. `wifi_direct.py`, `osint_direct.py`)
+- `tool_registry.py` — tool schemas (160+ definitions), `get_tool()` lookup
+- Agent entrypoints: `hexstripe.py` (CLI, 7 subcommands), `hexstrike_server.py` (HTTP/SSE), `hexstrike_mcp.py` (stdio MCP)
+
+Each tool follows this path:
+
+```
+mcp.tool() → setup_mcp_server_standalone() → DIRECT_TOOLS dict → *_direct.py → subprocess/command
+```
+
+## Session Memory
+
+Local-only `AGENTS.md` in the project root tracks session history. Append a block after each significant session.
 
 ## Commit Messages
 
 Please use clear and descriptive commit messages.
 
-### Recommended style
+### Format
 
+```
 type: short description
+```
 
 ### Examples
 
-- fix: resolve null pointer issue in mcp handler
+- fix: resolve null pointer in mcp handler
 - feat: add support for configuration profiles
 - docs: update installation instructions
 - refactor: simplify validation logic
+- test: add coverage for wifi_direct routing
 
 ## Branch Naming
 
 Please use descriptive branch names:
 
-- feature/short-description
-- fix/short-description
-- docs/short-description
-- refactor/short-description
+- `feature/short-description`
+- `fix/short-description`
+- `docs/short-description`
+- `refactor/short-description`
+- `test/short-description`
 
 ## Code Reviews
 

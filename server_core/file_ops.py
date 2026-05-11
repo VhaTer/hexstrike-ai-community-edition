@@ -29,7 +29,8 @@ class FileOperationsManager:
             file_path = self._safe_path(filename)
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            if len(content.encode()) > self.max_file_size:
+            content_bytes = content if isinstance(content, bytes) else content.encode()
+            if len(content_bytes) > self.max_file_size:
                 return {"success": False, "error": f"File size exceeds {self.max_file_size} bytes"}
 
             mode = "wb" if binary else "w"

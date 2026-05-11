@@ -15,12 +15,6 @@ from server_core.operational_metrics import _op_metrics
 from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
-from mcp_core.tool_profiles import (
-    TOOL_PROFILES,
-    DEFAULT_PROFILE,
-    FULL_PROFILE,
-    resolve_profile_dependencies,
-)
 
 try:
     from fastmcp.server.providers.skills import SkillsDirectoryProvider
@@ -375,9 +369,18 @@ _TOOL_REGISTRY_ALIASES = {
     "airodump_ng": "airodump-ng",
     "aireplay_ng": "aireplay-ng",
     "arp_scan": "arp-scan",
+    "bettercap_wifi": "bettercap",
+    "airbase_ng": "airbase-ng",
+    "airdecap_ng": "airdecap-ng",
+    "api_schema_analyzer": "api-schema-analyzer",
+    "evil_winrm": "evil-winrm",
+    "graphql_scanner": "graphql-scanner",
+    "jwt_analyzer": "jwt-analyzer",
     "kube_hunter": "kube-hunter",
+    "libc": "libc-database",
     "one_gadget": "one-gadget",
     "theharvester": "theHarvester",
+    "wifite2": "wifite",
 }
 
 
@@ -754,7 +757,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "jwt_analyzer":      (misc_exec, "jwt_analyzer"),
         "autopsy":           (misc_exec, "autopsy"),
         "libc":              (misc_exec, "libc"),
-        "postgresql":        (misc_exec, "postgresql"),
         "api_schema_analyzer": (misc_exec, "api_schema_analyzer"),
         "graphql_scanner":   (misc_exec, "graphql_scanner"),
         "api_fuzzer":        (misc_exec, "api_fuzzer"),
@@ -765,7 +767,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "qsreplace":         (misc_exec, "qsreplace"),
     }
 
-    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True)
+    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True, timeout=None)
     async def run_security_tool(
         ctx: Context,
         tool_name: str,
@@ -1093,6 +1095,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     @mcp.tool(
         description="Return the local skill bundle associated with a HexStrike tool",
         annotations={"readOnlyHint": True, "openWorldHint": False},
+        task=True,
+        timeout=None,
     )
     async def get_tool_skill(
         ctx: Context,
@@ -1131,6 +1135,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     @mcp.tool(
         description="Analyze a target and generate an intelligent attack chain with ordered steps, tool selection and success probabilities",
         annotations={"readOnlyHint": False, "openWorldHint": True},
+        task=True,
+        timeout=None,
     )
     async def plan_attack(
         ctx: Context,
@@ -1336,6 +1342,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     @mcp.tool(
         description="Validate which external binaries are available on this system. Returns a report of installed, missing, and deprecated tools.",
         annotations={"readOnlyHint": True, "openWorldHint": False},
+        task=True,
+        timeout=None,
     )
     async def validate_environment(
         ctx: Context,
@@ -1566,7 +1574,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     # ========================================================================
     @mcp.tool(
         description="Check HexStrike server health, runtime statistics and operational metrics",
-        annotations={"readOnlyHint": True},
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+        task=True,
+        timeout=None,
     )
     async def server_health() -> Dict[str, Any]:
         """Get server health status, runtime statistics and operational metrics."""
