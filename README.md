@@ -7,69 +7,81 @@
 Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive security arsenal. Every tool execution streams live progress directly into your AI conversation — the AI sees what's happening, suggests next steps, and asks for confirmation before running destructive actions.
 
 ```mermaid
-architecture-beta
-    group entry[🟢 Entry Points]
-    service cli(default)[📟 hexstrike.py CLI]
-    service http(default)[🌐 hexstrike_server.py HTTP]
-    service mcp(default)[🔌 hexstrike_mcp.py stdio]
+flowchart TB
+    classDef entry fill:#1a1a2e,stroke:#2ecc71,stroke-width:2px,color:#fff
+    classDef routing fill:#1a1a2e,stroke:#3498db,stroke-width:2px,color:#fff
+    classDef engine fill:#1a1a2e,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef exec fill:#1a1a2e,stroke:#9b59b6,stroke-width:2px,color:#fff
+    classDef tools fill:#1a1a2e,stroke:#95a5a6,stroke-width:1px,color:#bdc3c7
+
+    subgraph ENTRY["🟢 Entry Points"]
+        cli["📟 hexstrike.py CLI"]
+        http["🌐 hexstrike_server.py HTTP"]
+        mcp["🔌 hexstrike_mcp.py stdio"]
     end
 
-    group routing[🔷 Routing Layer]
-    service setup(default)[⚙️ setup_mcp_server_standalone]
-    service runner(default)[▶️ run_security_tool dispatcher]
-    service registry(default)[📋 tool_registry.py 162 tools]
+    subgraph ROUTING["🔷 Routing Layer"]
+        setup["⚙️ setup_mcp_server_standalone"]
+        runner["▶️ run_security_tool"]
+        registry["📋 tool_registry.py"]
     end
 
-    group engines[🔶 Intelligence Layer]
-    service ide(default)[🧠 IntelligentDecisionEngine]
-    service ctf(default)[🚩 CTF Workflow Manager]
-    service exploit(default)[💥 AI Exploit Generator]
-    service cache(default)[💾 Adaptive Scan Cache]
+    subgraph ENGINE["🔶 Intelligence Layer"]
+        ide["🧠 IntelligentDecisionEngine"]
+        ctf["🚩 CTF Workflow Manager"]
+        exploit["💥 AI Exploit Generator"]
+        cache["💾 Adaptive Scan Cache"]
     end
 
-    group exec[🟣 16 Direct Executors]
-    service recon(default)[recon_direct]
-    service scan(default)[scan_direct]
-    service web(default)[web_probe_direct]
-    service vuln(default)[vuln_intel_direct]
-    service wifi(default)[wifi_direct]
-    service ad(default)[active_directory_direct]
-    service osint(default)[osint_direct]
-    service misc(default)[misc_direct]
+    subgraph EXEC["🟣 Direct Executors"]
+        recon["recon_direct"]
+        scan["scan_direct"]
+        web["web_probe_direct"]
+        vuln["vuln_intel_direct"]
+        wifi["wifi_direct"]
+        ad["active_directory_direct"]
+        osint["osint_direct"]
+        misc["misc_direct"]
     end
 
-    group tools[🛠️ 130+ Security Tools]
-    service net(default)[nmap · masscan · naabu]
-    service web_tools(default)[whatweb · nuclei · dalfox]
-    service exploit_tools(default)[sqlmap · metasploit · responder]
-    service recon_tools(default)[sherlock · theHarvester · bbot]
+    subgraph TOOLS["🛠️ Security Tools 130+"]
+        net["nmap / masscan / naabu"]
+        web_t["whatweb / nuclei / dalfox"]
+        exp_t["sqlmap / metasploit / responder"]
+        recon_t["sherlock / theHarvester / bbot"]
     end
 
-    cli:B --> T:setup
-    http:B --> T:setup
-    mcp:B --> T:setup
-    registry:R --> L:setup
-    setup:B --> T:runner
-    runner:B --> T:recon
-    runner:B --> T:scan
-    runner:B --> T:web
-    runner:B --> T:vuln
-    runner:B --> T:wifi
-    runner:B --> T:ad
-    runner:B --> T:osint
-    runner:B --> T:misc
-    recon:B --> T:net
-    scan:B --> T:net
-    web:B --> T:web_tools
-    vuln:B --> T:web_tools
-    wifi:B --> T:exploit_tools
-    ad:B --> T:exploit_tools
-    osint:B --> T:recon_tools
-    misc:B --> T:recon_tools
-    ide:R --> L:runner
-    ctf:R --> L:runner
-    exploit:R --> L:runner
-    cache:R --> L:runner
+    cli --> setup
+    http --> setup
+    mcp --> setup
+    registry -.-> setup
+    setup --> runner
+    runner --> recon
+    runner --> scan
+    runner --> web
+    runner --> vuln
+    runner --> wifi
+    runner --> ad
+    runner --> osint
+    runner --> misc
+    recon --> net
+    scan --> net
+    web --> web_t
+    vuln --> web_t
+    wifi --> exp_t
+    ad --> exp_t
+    osint --> recon_t
+    misc --> recon_t
+    ide --> runner
+    ctf --> runner
+    exploit --> runner
+    cache --> runner
+
+    class cli,http,mcp entry
+    class setup,runner,registry routing
+    class ide,ctf,exploit,cache engine
+    class recon,scan,web,vuln,wifi,ad,osint,misc exec
+    class net,web_t,exp_t,recon_t tools
 ```
 
 ## Features
