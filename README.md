@@ -2,7 +2,7 @@
 
  AI-powered penetration testing platform — 150+ security tools, real-time LLM feedback, MCP native.
 
-![HexStrike AI-PULSE](assets/hexstrike-pulse-logo.png)
+<img src="assets/hexstrike-pulse-logo.png" alt="HexStrike AI-PULSE" width="160"/>
 
 Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive security arsenal. Every tool execution streams live progress directly into your AI conversation — the AI sees what's happening, suggests next steps, and asks for confirmation before running destructive actions.
 
