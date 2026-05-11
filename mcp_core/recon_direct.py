@@ -7,7 +7,7 @@ Bypasses Flask/HTTP entirely. Each function extracts the pure logic from
 server_api/recon/, server_api/dns_enum/, and server_api/net_lookup/
 and calls execute_command() directly.
 
-Usage in mcp_tools/:
+Usage:
     from mcp_core.recon_direct import recon_exec
 
     result = await recon_exec("amass", {

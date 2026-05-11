@@ -6,7 +6,71 @@
 
 Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive security arsenal. Every tool execution streams live progress directly into your AI conversation — the AI sees what's happening, suggests next steps, and asks for confirmation before running destructive actions.
 
----
+```mermaid
+architecture-beta
+    group entry[🟢 Entry Points]
+    service cli(default)[📟 hexstrike.py CLI]
+    service http(default)[🌐 hexstrike_server.py HTTP]
+    service mcp(default)[🔌 hexstrike_mcp.py stdio]
+    end
+
+    group routing[🔷 Routing Layer]
+    service setup(default)[⚙️ setup_mcp_server_standalone]
+    service runner(default)[▶️ run_security_tool dispatcher]
+    service registry(default)[📋 tool_registry.py 162 tools]
+    end
+
+    group engines[🔶 Intelligence Layer]
+    service ide(default)[🧠 IntelligentDecisionEngine]
+    service ctf(default)[🚩 CTF Workflow Manager]
+    service exploit(default)[💥 AI Exploit Generator]
+    service cache(default)[💾 Adaptive Scan Cache]
+    end
+
+    group exec[🟣 16 Direct Executors]
+    service recon(default)[recon_direct]
+    service scan(default)[scan_direct]
+    service web(default)[web_probe_direct]
+    service vuln(default)[vuln_intel_direct]
+    service wifi(default)[wifi_direct]
+    service ad(default)[active_directory_direct]
+    service osint(default)[osint_direct]
+    service misc(default)[misc_direct]
+    end
+
+    group tools[🛠️ 130+ Security Tools]
+    service net(default)[nmap · masscan · naabu]
+    service web_tools(default)[whatweb · nuclei · dalfox]
+    service exploit_tools(default)[sqlmap · metasploit · responder]
+    service recon_tools(default)[sherlock · theHarvester · bbot]
+    end
+
+    cli:B --> T:setup
+    http:B --> T:setup
+    mcp:B --> T:setup
+    registry:R --> L:setup
+    setup:B --> T:runner
+    runner:B --> T:recon
+    runner:B --> T:scan
+    runner:B --> T:web
+    runner:B --> T:vuln
+    runner:B --> T:wifi
+    runner:B --> T:ad
+    runner:B --> T:osint
+    runner:B --> T:misc
+    recon:B --> T:net
+    scan:B --> T:net
+    web:B --> T:web_tools
+    vuln:B --> T:web_tools
+    wifi:B --> T:exploit_tools
+    ad:B --> T:exploit_tools
+    osint:B --> T:recon_tools
+    misc:B --> T:recon_tools
+    ide:R --> L:runner
+    ctf:R --> L:runner
+    exploit:R --> L:runner
+    cache:R --> L:runner
+```
 
 ## Features
 

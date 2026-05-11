@@ -6,7 +6,7 @@ Phase 1 — Direct execution layer for wifi_pentest tools.
 Bypasses Flask/HTTP entirely. Each function extracts the pure logic from
 server_api/wifi_pentest/ and calls execute_command() directly.
 
-Usage in mcp_tools/wifi_pentest/:
+Usage:
     from mcp_core.wifi_direct import wifi_exec
 
     result = await wifi_exec("airmon_ng", {
