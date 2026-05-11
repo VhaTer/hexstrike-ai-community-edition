@@ -8,32 +8,31 @@ Connect any AI agent (Claude, GPT, Copilot, and more) to a full offensive securi
 
 ```mermaid
 flowchart TB
-    classDef entry fill:#1a1a2e,stroke:#2ecc71,stroke-width:2px,color:#fff
-    classDef routing fill:#1a1a2e,stroke:#3498db,stroke-width:2px,color:#fff
-    classDef engine fill:#1a1a2e,stroke:#e67e22,stroke-width:2px,color:#fff
-    classDef exec fill:#1a1a2e,stroke:#9b59b6,stroke-width:2px,color:#fff
-    classDef tools fill:#1a1a2e,stroke:#95a5a6,stroke-width:1px,color:#bdc3c7
+    classDef entry fill:#0d2818,stroke:#2ecc71,stroke-width:2px,color:#2ecc71
+    classDef routing fill:#0c1828,stroke:#3498db,stroke-width:2px,color:#3498db
+    classDef engine fill:#1a0f1e,stroke:#e67e22,stroke-width:2px,color:#e67e22
+    classDef exec fill:#140a1e,stroke:#9b59b6,stroke-width:2px,color:#9b59b6
+    classDef tools fill:#0d0d0d,stroke:#555,stroke-width:1px,color:#888
 
-    subgraph ENTRY["🟢 Entry Points"]
-        cli["📟 hexstrike.py CLI"]
-        http["🌐 hexstrike_server.py HTTP"]
-        mcp["🔌 hexstrike_mcp.py stdio"]
+    subgraph ENTRY["🟢  Entry Points"]
+        cli["📟  hexstrike.py"]
+        http["🌐  hexstrike_server.py"]
+        mcp["🔌  hexstrike_mcp.py"]
     end
 
-    subgraph ROUTING["🔷 Routing Layer"]
-        setup["⚙️ setup_mcp_server_standalone"]
-        runner["▶️ run_security_tool"]
-        registry["📋 tool_registry.py"]
+    subgraph ROUTING["🔷  Routing Layer"]
+        setup["⚙️  setup_mcp_server_standalone<br/>131 routes"]
+        runner["▶️  run_security_tool<br/>central dispatcher"]
     end
 
-    subgraph ENGINE["🔶 Intelligence Layer"]
-        ide["🧠 IntelligentDecisionEngine"]
-        ctf["🚩 CTF Workflow Manager"]
-        exploit["💥 AI Exploit Generator"]
-        cache["💾 Adaptive Scan Cache"]
+    subgraph ENGINE["🔶  Intelligence"]
+        ide["🧠  IntelligentDecisionEngine<br/>attack planner"]
+        ctf["🚩  CTF Workflow Manager<br/>per-category workflows"]
+        exploit["💥  AI Exploit Generator<br/>SQLi / XSS / RCE"]
+        cache["💾  Adaptive Scan Cache<br/>LRU · 30-90min TTL"]
     end
 
-    subgraph EXEC["🟣 Direct Executors"]
+    subgraph EXEC["🟣  Direct Executors"]
         recon["recon_direct"]
         scan["scan_direct"]
         web["web_probe_direct"]
@@ -44,7 +43,7 @@ flowchart TB
         misc["misc_direct"]
     end
 
-    subgraph TOOLS["🛠️ Security Tools 130+"]
+    subgraph TOOLS["🛠️  Security Tools (130+)"]
         net["nmap / masscan / naabu"]
         web_t["whatweb / nuclei / dalfox"]
         exp_t["sqlmap / metasploit / responder"]
@@ -54,7 +53,6 @@ flowchart TB
     cli --> setup
     http --> setup
     mcp --> setup
-    registry -.-> setup
     setup --> runner
     runner --> recon
     runner --> scan
@@ -76,12 +74,6 @@ flowchart TB
     ctf --> runner
     exploit --> runner
     cache --> runner
-
-    class cli,http,mcp entry
-    class setup,runner,registry routing
-    class ide,ctf,exploit,cache engine
-    class recon,scan,web,vuln,wifi,ad,osint,misc exec
-    class net,web_t,exp_t,recon_t tools
 ```
 
 ## Features
