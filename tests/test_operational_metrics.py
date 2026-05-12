@@ -18,6 +18,7 @@ Covers:
 
 import threading
 import pytest
+from unittest.mock import patch
 from server_core.operational_metrics import OperationalMetricsStore
 
 
@@ -270,3 +271,21 @@ class TestThreadSafety:
         assert m._tools["nmap"]["runs"] == 1000
         assert m._tools["nmap"]["successes"] == 1000
         assert m._cache_misses == 1000
+
+
+class TestSystemMetrics:
+    def test_system_metrics_exception(self):
+        with patch("server_core.operational_metrics.psutil") as mock_psutil:
+            mock_psutil.cpu_percent.side_effect = RuntimeError("oops")
+            result = OperationalMetricsStore.system_metrics()
+            assert result["status"] == "error"
+
+    def test_system_metrics_unavailable_without_psutil(self):
+        import importlib
+        with patch.dict('sys.modules', {'psutil': None}):
+            mod = importlib.import_module('server_core.operational_metrics')
+            importlib.reload(mod)
+            mod2 = importlib.import_module('server_core.operational_metrics')
+            importlib.reload(mod2)
+            result = mod2.OperationalMetricsStore.system_metrics()
+            assert result == {"status": "unavailable", "reason": "psutil not installed"}

@@ -29,8 +29,16 @@ from typing import Any, Dict, Literal
 try:
     import psutil
     _PSUTIL_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover
     _PSUTIL_AVAILABLE = False
+
+
+def _check_psutil():
+    try:
+        import psutil
+        return True
+    except ImportError:
+        return False
 
 from mcp_core.technology_detector import TechProfile
 

@@ -398,3 +398,24 @@ class TestCveIntel:
 
         assert result["success"] is False
         assert result["risk_level"] == "LOW"
+
+    @pytest.mark.asyncio
+    async def test_intel_medium_risk_level(self, mock_ctx, mock_cve_mgr):
+        """Cover risk_level = 'MEDIUM' (line 274): score in [0.40, 0.65)."""
+        mock_cve_mgr.analyze_cve_exploitability.return_value = {
+            "success": True, "cvss_score": 7.5, "severity": "HIGH",
+            "exploitability_score": 0.5, "exploitability_level": "MEDIUM",
+            "attack_vector": "NETWORK", "threat_intelligence": {},
+        }
+        mock_cve_mgr.search_existing_exploits.return_value = {
+            "success": True, "exploits": [],
+            "search_summary": {"github_repos": 0, "metasploit_modules": 0, "exploit_db_refs": 0},
+        }
+        mcp = FastMCP("test")
+        from mcp_core.cve_engine import register_cve_tools
+        register_cve_tools(mcp)
+        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
+             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+            tool = await mcp.get_tool("cve_intel")
+            result = await tool.fn(cve_id="CVE-2024-0001")
+        assert result["risk_level"] == "MEDIUM"

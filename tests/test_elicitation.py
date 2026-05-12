@@ -63,3 +63,9 @@ class TestConfirmDestructiveAction:
         result = await confirm_destructive_action(ctx, "Test action")
         assert result is False
         ctx.error.assert_awaited()
+
+    async def test_unexpected_response_type(self, ctx):
+        ctx.elicit.return_value = "unexpected_string"
+        result = await confirm_destructive_action(ctx, "Test action")
+        assert result is False
+        ctx.info.assert_awaited_with("🚫 Action cancelled — unexpected elicitation response")

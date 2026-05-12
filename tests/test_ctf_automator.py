@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from server_core.workflows.ctf.CTFChallenge import CTFChallenge
 from server_core.workflows.ctf.automator import CTFChallengeAutomator
 
@@ -105,6 +107,13 @@ class TestManualGuidance:
         actions = [g["action"] for g in guidance]
         assert "algorithm_analysis" in actions
 
+    def test_unknown_category_guidance(self):
+        ch = make_challenge("osint", "osint-challenge")
+        result = {"automated_steps": []}
+        guidance = self.automator._generate_manual_guidance(ch, result)
+        # No category-specific guidance for osint, and get_category_tools returns empty
+        assert len(guidance) == 0
+
 
 class TestAutoSolve:
     def setup_method(self):
@@ -129,6 +138,36 @@ class TestAutoSolve:
         assert result["status"] in ("solved", "needs_manual_intervention")
         if result["status"] == "needs_manual_intervention":
             assert len(result["manual_steps"]) > 0
+
+    def test_step_failure_does_not_increase_confidence(self):
+        ch = make_challenge("web")
+        with patch(
+            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
+            side_effect=Exception("Tool not found"),
+        ):
+            result = self.automator.auto_solve_challenge(ch)
+        # 4 manual/custom steps succeed (don't call get_tool_command): 4 × 0.1 = 0.4
+        assert result["confidence"] == 0.4
+
+    def test_early_termination_on_flag_found(self):
+        ch = make_challenge("crypto", "flag-test")
+        with patch(
+            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
+            return_value="flag{found_early}",
+        ):
+            result = self.automator.auto_solve_challenge(ch)
+        assert result["status"] == "solved"
+        assert result["flag"] == "flag{found_early}"
+
+    def test_exception_within_try_block(self):
+        ch = make_challenge("web")
+        with patch(
+            "server_core.workflows.ctf.automator.ctf_manager.create_ctf_challenge_workflow",
+            side_effect=RuntimeError("Workflow creation failed"),
+        ):
+            result = self.automator.auto_solve_challenge(ch)
+        assert result["status"] == "error"
+        assert "Workflow creation failed" in result["error"]
 
 
 class TestParallelStep:
@@ -160,6 +199,23 @@ class TestParallelStep:
         }
         result = self.automator._execute_parallel_step(step, ch)
         assert result["tools_used"] == []
+
+    def test_parallel_step_tool_exception(self):
+        ch = make_challenge("web")
+        step = {
+            "step": "recon",
+            "action": "scan",
+            "description": "Parallel recon",
+            "parallel": True,
+            "tools": ["httpx", "whatweb"],
+        }
+        with patch(
+            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
+            side_effect=Exception("Tool binary not found"),
+        ):
+            result = self.automator._execute_parallel_step(step, ch)
+        assert "[httpx] Error: Tool binary not found" in result["output"]
+        assert result["success"] is False
 
 
 class TestSequentialStep:
@@ -202,6 +258,23 @@ class TestSequentialStep:
         }
         result = self.automator._execute_sequential_step(step, ch)
         assert "[CUSTOM]" in result["output"]
+
+    def test_sequential_step_tool_exception(self):
+        ch = make_challenge("web")
+        step = {
+            "step": "recon",
+            "action": "scan",
+            "description": "Sequential recon",
+            "parallel": False,
+            "tools": ["nmap"],
+        }
+        with patch(
+            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
+            side_effect=Exception("Binary not found"),
+        ):
+            result = self.automator._execute_sequential_step(step, ch)
+        assert "[nmap] Error: Binary not found" in result["output"]
+        assert result["success"] is False
 
 
 class TestErrorHandling:
