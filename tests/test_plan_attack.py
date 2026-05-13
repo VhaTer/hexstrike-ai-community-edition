@@ -3,6 +3,16 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _clear_scan_cache():
+    """Clear global scan cache before every test (prevents state leak across tests)."""
+    from mcp_core.server_setup import _scan_cache
+    _scan_cache.cache.clear()
+    _scan_cache.ttl_times.clear()
+
 
 def make_mock_context():
     ctx = SimpleNamespace()

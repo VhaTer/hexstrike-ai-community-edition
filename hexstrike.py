@@ -381,6 +381,20 @@ def cmd_tools(args):
 # Subcommand: status
 # ============================================================================
 
+def _cli_colors():
+    from server_core.modern_visual_engine import ModernVisualEngine as _MVE
+    return _MVE.COLORS
+
+
+_ansi_strip = __import__('re').compile(r'\x1b\[[0-9;]*m').sub
+_wcwidth = None
+def _dw(s: str) -> int:
+    global _wcwidth
+    if _wcwidth is None:
+        from wcwidth import wcswidth as _wcwidth
+    return _wcwidth(_ansi_strip('', s))
+
+
 def cmd_status(args):
     """Check Pulse server health."""
     host = args.host or os.environ.get("HEXSTRIKE_HOST", DEFAULT_HOST)
@@ -396,25 +410,31 @@ def cmd_status(args):
 
         if args.json:
             output = json.dumps({
-                "status": status,
-                "uptime_seconds": uptime,
-                "host": host,
-                "port": port,
-                "checks": checks,
+                "status": status, "uptime_seconds": uptime,
+                "host": host, "port": port, "checks": checks,
             }, indent=2)
         else:
+            C = _cli_colors()
+            b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
             icon = "🟢" if status == "ready" else "🟡" if status == "degraded" else "🔴"
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                print(f"{icon} Pulse server: {status}")
-                print(f"   Uptime: {uptime // 3600}h{uptime % 3600 // 60}m")
-                tools = checks.get("essential_tools", {})
-                print(f"   Tools: {tools.get('available', '?')}/{tools.get('total', '?')} essential")
-                disk = checks.get("disk", {})
-                if disk:
-                    print(f"   Disk: {disk.get('free_gb', '?')} GB free ({disk.get('usage_pct', '?')}% used)")
-                print(f"   URL: {url}")
-            output = buf.getvalue()
+            tools = checks.get("essential_tools", {})
+            disk = checks.get("disk", {})
+            rows = [
+                f"  {w}Status:{R}   {icon} {status}",
+                f"  {w}Uptime:{R}   {uptime // 3600}h{uptime % 3600 // 60}m",
+                f"  {w}Tools:{R}    {tools.get('available', '?')}/{tools.get('total', '?')} available",
+            ]
+            if disk:
+                rows.append(f"  {w}Disk:{R}     {disk.get('free_gb', '?')} GB free ({disk.get('usage_pct', '?')}% used)")
+            rows.append(f"  {g}{url}{R}")
+            inner = max(_dw(r) for r in rows)
+            def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
+            buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
+            buf.append(p(rows[0]))
+            buf.extend(p(r) for r in rows[1:-1])
+            buf.append(f"  {b}│{R}  {g}{url}{R}{' ' * (inner - len(url))}  {b}│{R}")
+            buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
+            output = '\n'.join(buf) + '\n'
 
         print(output, end="")
         if args.output:
@@ -464,18 +484,27 @@ def cmd_validate(args):
             "missing": [{"tool": t, "binary": DIRECT_ROUTES[t][2]} for t in missing],
         }, indent=2)
     else:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            print(f"✅ {len(present)} present   ❌ {len(missing)} missing   Total: {len(tools_to_check)}")
-            if missing:
-                print(f"\nMissing ({len(missing)}):")
-                for m in missing:
-                    print(f"  {m}: {DIRECT_ROUTES[m][2]}")
-            if args.verbose and present:
-                print(f"\nPresent ({len(present)}):")
-                for p in present:
-                    print(f"  {p}: {shutil.which(DIRECT_ROUTES[p][2])}")
-        output = buf.getvalue()
+        C = _cli_colors()
+        b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
+        total = len(tools_to_check)
+        widest = max(len(m) for m in missing) if missing else 0
+        rows = []
+        if missing:
+            rows.append(f"  {w}❌ Missing ({len(missing)}):{R}")
+            for m in missing:
+                rows.append(f"     {m:{widest}}  →  {g}{DIRECT_ROUTES[m][2]}{R}")
+        if args.verbose and present:
+            rows.append(f"  {w}✅ Present ({len(present)}):{R}")
+            for p in present:
+                rows.append(f"     {p:{widest}}  →  {g}{shutil.which(DIRECT_ROUTES[p][2])}{R}")
+        inner = max(_dw(r) for r in rows) if rows else 30
+        def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
+        buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
+        buf.append(p(f"  {w}Validate:{R} {len(present)}/{total} tools available"))
+        for r in rows:
+            buf.append(p(r))
+        buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
+        output = '\n'.join(buf) + '\n'
 
     print(output, end="")
     if args.output:
@@ -507,16 +536,9 @@ def cmd_mcp(args):
 # ============================================================================
 
 def cmd_ctf(args):
-    """CTF challenge analysis."""
-    category = args.category or "web"
-    name = args.name or f"CTF-{category}-challenge"
-    description = args.description or f"A {category} CTF challenge"
-    difficulty = args.difficulty or "medium"
-    points = args.points or 0
-    target = args.target or ""
-
-    from server_core.workflows.ctf.workflowManager import CTFWorkflowManager
-    from shared.target_types import TargetType
+    """CTF challenge workflow analysis."""
+    from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+    from server_core.workflows.ctf.automator import CTFWorkflowManager
     from server_core.workflows.ctf.CTFChallenge import CTFChallenge
 
     challenge = CTFChallenge(
@@ -565,21 +587,21 @@ def cmd_ctf(args):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="hexstrike",
+        prog="python3 hexstrike.py",
         description="HexStrike AI-PULSE CLI — Cybersecurity automation toolkit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  hexstrike serve                         Start server on :8888
-  hexstrike serve --host 0.0.0.0 --port 8080
-  hexstrike scan nmap target=scanme.nmap.org scan_type=-sV
-  hexstrike scan nmap target=scanme.nmap.org scan_type=-sV --json -o result.json
-  hexstrike scan nuclei target=http://scanme.nmap.org severity=critical
-  hexstrike tools --filter nmap
-  hexstrike status --host 192.168.1.10
-  hexstrike validate --verbose
-  hexstrike mcp --debug
-  hexstrike ctf --category pwn --difficulty hard
+  python3 hexstrike.py serve                         Start server on :8888
+  python3 hexstrike.py serve --host 0.0.0.0 --port 8080
+  python3 hexstrike.py scan nmap target=scanme.nmap.org scan_type=-sV
+  python3 hexstrike.py scan nmap target=scanme.nmap.org scan_type=-sV --json -o result.json
+  python3 hexstrike.py scan nuclei target=http://scanme.nmap.org severity=critical
+  python3 hexstrike.py tools --filter nmap
+  python3 hexstrike.py status --host 192.168.1.10
+  python3 hexstrike.py validate --verbose
+  python3 hexstrike.py mcp --debug
+  python3 hexstrike.py ctf --category pwn --difficulty hard
         """,
     )
     parser.add_argument("--version", action="version", version=f"hexstrike {VERSION}")

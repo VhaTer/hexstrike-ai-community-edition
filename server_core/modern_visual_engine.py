@@ -1,5 +1,8 @@
 import os
+import re
 from typing import Dict, Any
+
+from wcwidth import wcswidth
 
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
@@ -75,27 +78,57 @@ class ModernVisualEngine:
     }
 
     @staticmethod
-    def create_banner() -> str:
-        """Create the enhanced HexStrike AI-PULSE banner"""
-        accent = ModernVisualEngine.COLORS['ACCENT_LINE']
-        RESET = ModernVisualEngine.COLORS['RESET']
-        MATRIX_GREEN = ModernVisualEngine.COLORS['MATRIX_GREEN']
-        CRIMSON = ModernVisualEngine.COLORS['CRIMSON']
-        title_block = f"{accent}{MATRIX_GREEN}"
-        banner = f"""{title_block}
-██╗  ██╗███████╗██╗  ██╗███████╗████████╗██████╗ ██╗██╗  ██╗███████╗
-██║  ██║██╔════╝╚██╗██╔╝██╔════╝╚══██╔══╝██╔══██╗██║██║ ██╔╝██╔════╝
-███████║█████╗   ╚███╔╝ ███████╗   ██║   ██████╔╝██║█████╔╝ █████╗
-██╔══██║██╔══╝   ██╔██╗ ╚════██║   ██║   ██╔══██╗██║██╔═██╗ ██╔══╝
-██║  ██║███████╗██╔╝ ██╗███████║   ██║   ██║  ██║██║██║  ██╗███████╗
-╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚══════╝
-{RESET}{CRIMSON}                    ░█████╗░██╗    ██████╗░██╗   ██╗██╗     ███████╗███████╗
-                    ██╔══██╗██║    ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝
-                    ███████║██║    ██████╔╝██║   ██║██║     ███████╗█████╗
-                    ██╔══██║██║    ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝
-                    ██║  ██║██║    ██║     ╚██████╔╝███████╗███████║███████╗
-                    ╚═╝  ╚═╝╚═╝    ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝{RESET}"""
-        return banner
+    @staticmethod
+    def create_banner(
+        host: str = "127.0.0.1",
+        port: int = 8888,
+        tools_count: int = 130,
+        version: str = "0.7.5",
+    ) -> str:
+        C = ModernVisualEngine.COLORS
+        b = C['ACCENT_LINE']
+        a = C['ACCENT_GRADIENT']
+        w = C['BRIGHT_WHITE']
+        g = C['TERMINAL_GRAY']
+        R = C['RESET']
+        W = 74
+        T = W - 4  # content area width
+
+        _ansi = re.compile(r'\x1b\[[0-9;]*m')
+
+        def dw(s: str) -> int:
+            return wcswidth(_ansi.sub('', s))
+
+        def center(body: str) -> str:
+            pad = T - dw(body)
+            left = pad // 2
+            right = pad - left
+            return f"{' ' * left}{body}{' ' * right}"
+
+        def line(body: str) -> str:
+            pad = T - dw(body)
+            return f"{b}║{R}  {body}{' ' * pad}  {b}║{R}"
+
+        def col2(left_part: str, right_part: str, col_start: int = 27) -> str:
+            """Align two columns in a resource line."""
+            pad = col_start - dw(left_part)
+            return f"{left_part}{' ' * pad}{right_part}"
+
+        top = f"{b}╔{'═' * W}╗{R}"
+        bot = f"{b}╚{'═' * W}╝{R}"
+        sep = '─' * T
+
+        return (
+            f"{top}\n"
+            f"{line(center(f'⚡ {w}P U L S E{R}  {g}v{version}{R}'))}\n"
+            f"{line(center(f'{g}{tools_count} tools{R}  ·  🏴 CTF  ·  🔍 CVE  ·  🎯 Bug Bounty  ·  💾 Cache'))}\n"
+            f"{line(sep)}\n"
+            f"{line(f'🌐 {a}http://{host}:{port}{R}')}\n"
+            f"{line(col2(f'🩺 {b}health{R}://server', f'📊 {b}metrics{R}://tools'))}\n"
+            f"{line(col2(f'🔍 {b}scan{R}://{g}{{target}}{R}/{g}{{tool}}{R}', f'⚠️ {b}errors{R}://statistics'))}\n"
+            f"{line(f'📖 {g}github.com/VhaTer/hexstrike-ai-community-edition/wiki{R}')}\n"
+            f"{bot}"
+        )
 
     @staticmethod
     def create_progress_bar(current: int, total: int, width: int = 50, tool: str = "") -> str:

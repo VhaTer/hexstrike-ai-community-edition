@@ -229,7 +229,7 @@ def register_prompts(mcp: FastMCP) -> None:
         description: str,
         difficulty: str = "unknown",
         target: str = "",
-        points: int = 0,
+        points: str | int = "0",
     ) -> list[Message]:
         """
         Universal CTF challenge workflow — all categories.
@@ -253,13 +253,20 @@ def register_prompts(mcp: FastMCP) -> None:
         from server_core.workflows.ctf.CTFChallenge import CTFChallenge
         from server_core.workflows.ctf.toolManager import CTFToolManager
 
+        try:
+            points_int = int(points)
+        except (ValueError, TypeError):
+            import re as _re
+            match = _re.search(r'\d+', str(points))
+            points_int = int(match.group()) if match else 0
+
         challenge = CTFChallenge(
             name=name,
             category=category,
             description=description,
             difficulty=difficulty,
             target=target,
-            points=points,
+            points=points_int,
         )
 
         ctf = get_ctf_manager()

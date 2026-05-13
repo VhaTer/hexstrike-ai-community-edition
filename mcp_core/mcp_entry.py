@@ -1,12 +1,10 @@
 """
 mcp_core/mcp_entry.py
 
-Track 2 refactor: Flask dependency removed.
-HexStrikeClient and setup_mcp_server() (Flask-era) are gone.
-Entry point now uses setup_mcp_server_standalone() directly.
+Entry point for stdio transport used by Claude Desktop
+and other MCP clients that speak stdio.
 
-hexstrike_mcp.py calls run_mcp() — this is the stdio transport path
-used by Claude Desktop and other MCP clients that speak stdio.
+hexstrike_mcp.py calls run_mcp().
 """
 
 import sys

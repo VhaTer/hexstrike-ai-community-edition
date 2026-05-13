@@ -152,7 +152,8 @@ class CTFWorkflowManager:
             "osint": 0.9
         }
 
-        base_time = base_times[challenge.difficulty]["avg"]
+        diff_key = challenge.difficulty if challenge.difficulty in base_times else "unknown"
+        base_time = base_times[diff_key]["avg"]
         category_mult = category_multipliers.get(challenge.category, 1.0)
 
         # Adjust based on description complexity
@@ -168,7 +169,7 @@ class CTFWorkflowManager:
             "hard": 0.45,
             "insane": 0.25,
             "unknown": 0.55
-        }[challenge.difficulty]
+        }.get(diff_key, 0.5)
 
         # Adjust based on tool availability and category expertise
         tool_availability_bonus = min(0.15, len(workflow["tools"]) * 0.02)

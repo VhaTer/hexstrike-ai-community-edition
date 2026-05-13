@@ -1,14 +1,13 @@
 """
 mcp_core/web_scan_direct.py
 
-Phase 2 — Direct execution layer for web_scan tools.
+Direct execution layer for web_scan tools.
 
-Bypasses Flask/HTTP entirely. Extracts pure logic from
-server_api/web_scan/ and calls execute_command() directly.
+Extracts pure logic from server_api/web_scan/
+and calls execute_command() directly.
 
-Note: burpsuite_alternative is excluded — it depends on
+Note: burpsuite_alternative is not ported — it depends on
 browser_agent and http_framework internal instances.
-It will be migrated in Phase 3.
 
 Usage:
     import mcp_core.web_scan_direct as _web_scan_direct
@@ -17,13 +16,10 @@ Usage:
     )
 """
 
-import logging
 import os
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
-
-logger = logging.getLogger(__name__)
 
 
 def _sanitize(value: str) -> str:
@@ -195,8 +191,7 @@ _HANDLERS = {
     "jaeles":  _jaeles,
     "xsser":   _xsser,
     "zap":     _zap,
-    # burpsuite-alternative: excluded — depends on browser_agent/http_framework
-    # will be migrated in Phase 3
+    # burpsuite-alternative: not ported — depends on browser_agent/http_framework
 }
 
 

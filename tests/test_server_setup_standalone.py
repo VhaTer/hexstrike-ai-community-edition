@@ -4,6 +4,20 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Auto-use fixture: clear global scan cache before every test to prevent
+# cross-test state leakage (same session_id + target + tool = cache key collision)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _clear_scan_cache():
+    from mcp_core.server_setup import _scan_cache
+    _scan_cache.cache.clear()
+    _scan_cache.ttl_times.clear()
+
 
 # ---------------------------------------------------------------------------
 # Test helpers (duplicated from conftest.py for correct patch() target resolution)

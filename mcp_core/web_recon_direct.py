@@ -11,13 +11,11 @@ Usage:
     )
 """
 
-import logging
 from typing import Any, Dict
 from pathlib import Path
 import shutil
 
 from server_core.command_executor import execute_command
-logger = logging.getLogger(__name__)
 
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
