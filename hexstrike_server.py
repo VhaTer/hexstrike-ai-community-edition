@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-HexStrike AI-PULSE — FastMCP 3.x Standalone Server (Phase 3)
+HexStrike AI-PULSE — FastMCP Standalone Server
 
-🚀 Direct tool execution, no Flask, native HTTP/SSE transport
+🚀 Direct tool execution, native HTTP/SSE transport
 📊 Dashboard served from server_static/ via Starlette StaticFiles
 """
 
 import os
+import sys
+import argparse
 import logging
 import json
 import time
@@ -24,7 +26,6 @@ import server_core.config_core as config_core
 
 # ---------------------------------------------------------------------------
 # Tool availability (formerly server_api/ops/system_monitoring.py)
-# Lightweight replacement — no Flask dependency
 # ---------------------------------------------------------------------------
 import shutil
 
@@ -250,19 +251,69 @@ def register_http_routes(mcp, logger, static_dir=None):
 
 
 if __name__ == "__main__":
-    print(ModernVisualEngine.create_banner())
-    logger.info("🚀 Starting HexStrike Pulse Standalone Server")
-    logger.info(f"📡 Server: http://{API_HOST}:{API_PORT}")
+    parser = argparse.ArgumentParser(
+        prog="python3 hexstrike_server.py",
+        description="HexStrike AI-PULSE — FastMCP Standalone Server",
+    )
+    parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.7.5')}")
+    parser.add_argument("--host", default=None, help=f"Bind address (default: {API_HOST})")
+    parser.add_argument("--port", type=int, default=None, help=f"Bind port (default: {API_PORT})")
+    args = parser.parse_args()
 
-    # Phase 3: Standalone MCP server with native HTTP transport
+    host = args.host or API_HOST
+    port = args.port or API_PORT
+
+    logging.getLogger("fastmcp").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    ver = config_core.get("VERSION", "0.7.5")
+    print()
+    print(ModernVisualEngine.create_banner(
+        host=host, port=port, version=ver,
+    ))
+    from server_core.modern_visual_engine import ModernVisualEngine as _MVE
+    from wcwidth import wcswidth
+    import re as _re
+    _asi = _re.compile(r'\x1b\[[0-9;]*m').sub
+    C = _MVE.COLORS
+    b = C['ACCENT_LINE']
+    g = C['TERMINAL_GRAY']
+    w = C['BRIGHT_WHITE']
+    R = C['RESET']
+
+    entries = [
+        ("status",        "server health, uptime"),
+        ("validate",      "check installed tools"),
+        ("scan",          "run tools directly"),
+        ("ctf",           "CTF attack planner"),
+    ]
+    rows = [f"  {g}${R} {w}python3 hexstrike.py {cmd:<12}{R} {g}·{R}  {desc}" for cmd, desc in entries]
+    tip  = f"  {g}Tip:{R} add {w}-h/--help{R} to any subcommand for options"
+    label = f"  {b}Useful HexStrike Pulse Commands{R}"
+    inner = max(wcswidth(_asi('', s)) for s in [label, tip] + rows)
+
+    banner_w = 76
+    indent = max(0, (banner_w - (inner + 6)) // 2)
+
+    def p(s):
+        return f"{' ' * indent}{b}│{R}  {s}{' ' * (inner - wcswidth(_asi('', s)))}  {b}│{R}"
+
+    print(f"{' ' * indent}{b}╭{'─' * (inner + 4)}╮{R}")
+    print(p(label))
+    print(p(""))
+    for r in rows:
+        print(p(r))
+    print(p(""))
+    print(p(tip))
+    print(f"{' ' * indent}{b}╰{'─' * (inner + 4)}╯{R}")
+    print()
+
     mcp = setup_mcp_server_standalone(logger)
-
     register_http_routes(mcp, logger)
 
-    # FastMCP 3.x native HTTP/SSE transport
     mcp.run(
         transport="http",
-        host=API_HOST,
-        port=API_PORT,
+        host=host,
+        port=port,
         show_banner=False,
     )

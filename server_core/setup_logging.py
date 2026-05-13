@@ -34,6 +34,7 @@ class _SuppressStartupNoise(logging.Filter):
         "* trace(message: str, ...)",
         "* fail(message: str, ...)",
         "* sleep(seconds: float, ...)",
+        "* tool:",  # FastMCP tool signature noise ("* tool:nmap@(target: str, ...)")
         "StreamableHTTP session manager started",
         "StreamableHTTP session manager shutting down",
         "Starting MCP server 'hexstrike-ai pulse' with transport 'http' on",

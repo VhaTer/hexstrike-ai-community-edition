@@ -141,6 +141,17 @@ class TestExecuteBbPhase:
         assert "shodan" in result["tools_skipped"]
 
     @pytest.mark.asyncio
+    async def test_gather_exception_skipped(self, mock_ctx):
+        from mcp_core.bugbounty_engine import _execute_bb_phase
+        async def fake_gather(*a, **kw):
+            return [RuntimeError("tool crashed")]
+        phase = {"name": "recon", "description": "Recon",
+                 "tools": [{"tool": "nmap", "params": {}}]}
+        with patch("mcp_core.bugbounty_engine.asyncio.gather", fake_gather):
+            result = await _execute_bb_phase(phase, "example.com", mock_ctx)
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
     async def test_empty_phase_no_tools(self, mock_ctx):
         from mcp_core.bugbounty_engine import _execute_bb_phase
         phase = {"name": "empty", "description": "No tools", "tools": []}

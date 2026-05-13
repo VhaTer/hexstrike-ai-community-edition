@@ -147,6 +147,15 @@ class TestExecuteCtfStep:
         assert "gobuster" not in result["tools_executed"]
 
     @pytest.mark.asyncio
+    async def test_gather_exception_returns_error(self, mock_ctx, challenge, parallel_step):
+        from mcp_core.ctf_engine import _execute_ctf_step_real
+        async def fake_gather(*a, **kw):
+            return [RuntimeError("tool crashed")]
+        with patch("mcp_core.ctf_engine.asyncio.gather", fake_gather):
+            result = await _execute_ctf_step_real(parallel_step, challenge, mock_ctx)
+        assert "[ERROR]" in result["output"]
+
+    @pytest.mark.asyncio
     async def test_flag_extraction_from_output(self, mock_ctx, challenge, sample_step):
         from mcp_core.ctf_engine import _execute_ctf_step_real
         async def fake_run(ctx, tool_name, parameters):

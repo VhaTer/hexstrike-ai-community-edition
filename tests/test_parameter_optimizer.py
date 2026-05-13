@@ -5,6 +5,8 @@ Unit tests for mcp_core/parameter_optimizer.py
 Covers: ParameterOptimizer.optimize(), handle_failure()
 """
 
+import builtins
+import sys
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -566,3 +568,29 @@ class TestIntegration:
         summary = result["_optimizer"]["tech_summary"]
         assert "apache" in summary
         assert "php" in summary
+
+
+# ---------------------------------------------------------------------------
+# Test _check_psutil helper
+# ---------------------------------------------------------------------------
+
+class TestCheckPsutil:
+
+    def test_check_psutil_available_returns_true(self):
+        from mcp_core.parameter_optimizer import _check_psutil
+        assert _check_psutil() is True
+
+    def test_check_psutil_import_error_returns_false(self):
+        from mcp_core.parameter_optimizer import _check_psutil
+        saved = sys.modules.pop("psutil", None)
+        saved_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
+            if name == "psutil":
+                raise ImportError("No module named psutil")
+            return saved_import(name, *args, **kwargs)
+        try:
+            with patch("builtins.__import__", mock_import):
+                assert _check_psutil() is False
+        finally:
+            if saved is not None:
+                sys.modules["psutil"] = saved

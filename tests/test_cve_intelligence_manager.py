@@ -393,6 +393,134 @@ class TestFetchLatestCVEs:
         assert result["success"] is False
         assert "Unexpected crash" in result["error"]
 
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_no_metrics_at_all(self, mock_sleep, mock_get, mgr):
+        vuln = {
+            "cve": {
+                "id": "CVE-2024-0099",
+                "published": "2024-01-01T00:00:00.000",
+                "lastModified": "2024-01-02T00:00:00.000",
+                "descriptions": [{"lang": "en", "value": "No metrics"}],
+                "references": [],
+                "metrics": {},
+                "configurations": [],
+            }
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"vulnerabilities": [vuln]}
+        broad = MagicMock()
+        broad.status_code = 200
+        broad.json.return_value = {"vulnerabilities": []}
+        mock_get.side_effect = [mock_resp, broad]
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["total_found"] == 0
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_non_english_description(self, mock_sleep, mock_get, mgr):
+        data = make_nvd_response("CVE-2024-0101", "CRITICAL", 9.5, "V31")
+        data["vulnerabilities"][0]["cve"]["descriptions"] = [
+            {"lang": "fr", "value": "Vulnerabilite critique"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["cves"][0]["description"] == "No description available"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_mixed_language_descriptions(self, mock_sleep, mock_get, mgr):
+        data = make_nvd_response("CVE-2024-0102", "CRITICAL", 9.5, "V31")
+        data["vulnerabilities"][0]["cve"]["descriptions"] = [
+            {"lang": "fr", "value": "Description francaise"},
+            {"lang": "de", "value": "Deutsche Beschreibung"},
+            {"lang": "en", "value": "English description"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["cves"][0]["description"] == "English description"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_non_cpe23_criteria(self, mock_sleep, mock_get, mgr):
+        data = make_nvd_response("CVE-2024-0103", "CRITICAL", 9.5, "V31")
+        data["vulnerabilities"][0]["cve"]["configurations"] = [
+            {"nodes": [{"cpeMatch": [{"criteria": "cpe:2.2:other:thing"}]}]}
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["cves"][0]["affected_software"] == []
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_cpe_short_criteria(self, mock_sleep, mock_get, mgr):
+        data = make_nvd_response("CVE-2024-0104", "CRITICAL", 9.5, "V31")
+        data["vulnerabilities"][0]["cve"]["configurations"] = [
+            {"nodes": [{"cpeMatch": [{"criteria": "cpe:2.3:a:vendor"}]}]}
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["cves"][0]["affected_software"] == []
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_broader_search_non_english(self, mock_sleep, mock_get, mgr):
+        empty = MagicMock()
+        empty.status_code = 200
+        empty.json.return_value = {"vulnerabilities": []}
+        broad_data = make_nvd_response("CVE-2024-0998", "CRITICAL", 9.5, "V31")
+        broad_data["vulnerabilities"][0]["cve"]["descriptions"] = [
+            {"lang": "fr", "value": "Critique"},
+        ]
+        broad = MagicMock()
+        broad.status_code = 200
+        broad.json.return_value = broad_data
+        mock_get.side_effect = [empty, broad]
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_fetch_broader_no_v31_metrics(self, mock_sleep, mock_get, mgr):
+        empty = MagicMock()
+        empty.status_code = 200
+        empty.json.return_value = {"vulnerabilities": []}
+        vuln = {
+            "cve": {
+                "id": "CVE-2024-0997",
+                "published": "2024-01-01T00:00:00.000",
+                "lastModified": "2024-01-02T00:00:00.000",
+                "descriptions": [{"lang": "en", "value": "No V31 metrics"}],
+                "references": [],
+                "metrics": {},
+            }
+        }
+        broad = MagicMock()
+        broad.status_code = 200
+        broad.json.return_value = {"vulnerabilities": [vuln]}
+        mock_get.side_effect = [empty, broad]
+        result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
+        assert result["success"] is True
+        assert result["cves"][0]["cvss_score"] == 0.0
+
 
 # ---------------------------------------------------------------------------
 # analyze_cve_exploitability — mocked network
@@ -595,6 +723,107 @@ class TestAnalyzeCVEExploitability:
 
         assert result["success"] is False
 
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_calculated_path_network(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0030", "HIGH", 7.0, "V31",
+                               attack_vector="NETWORK", attack_complexity="LOW",
+                               privileges_required="NONE", user_interaction="NONE",
+                               exploitability_subscore=0.0,
+                               description="Network vuln without subscore",
+                               references=[])
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0030")
+        assert result["success"] is True
+        assert result["attack_vector"] == "NETWORK"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_calculated_path_local(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0031", "HIGH", 6.5, "V31",
+                               attack_vector="LOCAL", attack_complexity="LOW",
+                               privileges_required="LOW", user_interaction="REQUIRED",
+                               exploitability_subscore=0.0,
+                               description="Local vulnerability", references=[])
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0031")
+        assert result["attack_vector"] == "LOCAL"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_calculated_path_physical(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0032", "LOW", 2.0, "V31",
+                               attack_vector="PHYSICAL", attack_complexity="HIGH",
+                               privileges_required="HIGH", user_interaction="REQUIRED",
+                               exploitability_subscore=0.0,
+                               description="Physical access required", references=[])
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0032")
+        assert result["attack_vector"] == "PHYSICAL"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_exploitability_medium(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0033", "HIGH", 6.5, "V31",
+                               attack_vector="LOCAL", attack_complexity="LOW",
+                               privileges_required="LOW", user_interaction="REQUIRED",
+                               exploitability_subscore=0.0,
+                               description="Medium exploitability", references=[])
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0033")
+        assert result["exploitability_level"] == "MEDIUM"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_weaponization_medium_with_exploit(self, mock_get, mgr):
+        refs = [{"url": "https://www.exploit-db.com/exploits/99999"}]
+        data = make_cve_detail("CVE-2024-0034", "HIGH", 7.0, "V31",
+                               attack_vector="NETWORK", attack_complexity="LOW",
+                               exploitability_subscore=2.0, references=refs,
+                               description="Neutral vulnerability test")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0034")
+        assert result["exploit_availability"]["weaponization_level"] == "MEDIUM"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_non_english_description(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0036", "HIGH", 7.5, "V31")
+        data["vulnerabilities"][0]["cve"]["descriptions"] = [
+            {"lang": "jp", "value": "脆弱性"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0036")
+        assert result["success"] is True
+        assert result["vulnerability_details"]["description"] == ""
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    def test_analyze_mixed_language_descriptions(self, mock_get, mgr):
+        data = make_cve_detail("CVE-2024-0037", "HIGH", 7.5, "V31")
+        data["vulnerabilities"][0]["cve"]["descriptions"] = [
+            {"lang": "fr", "value": "Francais"},
+            {"lang": "en", "value": "English description"},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = data
+        mock_get.return_value = mock_resp
+        result = mgr.analyze_cve_exploitability("CVE-2024-0037")
+        assert result["success"] is True
+        assert "English description" in result["vulnerability_details"]["description"]
+
 
 # ---------------------------------------------------------------------------
 # search_existing_exploits — mocked network
@@ -796,6 +1025,135 @@ class TestSearchExistingExploits:
         result = mgr.search_existing_exploits("CVE-2024-0001")
 
         assert result["success"] is False
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_search_metasploit_other_error(self, mock_sleep, mock_get, mgr):
+        responses = []
+        gh = MagicMock()
+        gh.status_code = 200
+        gh.json.return_value = {"items": []}
+        responses.append(gh)
+        nvd = MagicMock()
+        nvd.status_code = 200
+        nvd.json.return_value = {"vulnerabilities": []}
+        responses.append(nvd)
+        msf = MagicMock()
+        msf.status_code = 500
+        responses.append(msf)
+        mock_get.side_effect = responses
+        result = mgr.search_existing_exploits("CVE-2024-0035")
+        assert result["success"] is True
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_search_github_unverified_reliability(self, mock_sleep, mock_get, mgr):
+        responses = []
+        gh = MagicMock()
+        gh.status_code = 200
+        gh.json.return_value = {
+            "items": [{
+                "id": 200, "name": "CVE-2024-0105-poc",
+                "description": "PoC for CVE-2024-0105",
+                "owner": {"login": "test"},
+                "created_at": "2024-01-01", "updated_at": "2024-01-02",
+                "html_url": "https://github.com/test/poc",
+                "stargazers_count": 5, "forks_count": 1,
+            }]
+        }
+        responses.append(gh)
+        nvd = MagicMock()
+        nvd.status_code = 200
+        nvd.json.return_value = {"vulnerabilities": []}
+        responses.append(nvd)
+        msf = MagicMock()
+        msf.status_code = 200
+        msf.json.return_value = {"items": []}
+        responses.append(msf)
+        mock_get.side_effect = responses
+        result = mgr.search_existing_exploits("CVE-2024-0105")
+        assert result["success"] is True
+        assert result["exploits"][0]["reliability"] == "UNVERIFIED"
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_search_nvd_references_fails(self, mock_sleep, mock_get, mgr):
+        responses = []
+        gh = MagicMock()
+        gh.status_code = 200
+        gh.json.return_value = {"items": []}
+        responses.append(gh)
+        nvd = MagicMock()
+        nvd.status_code = 429
+        responses.append(nvd)
+        msf = MagicMock()
+        msf.status_code = 200
+        msf.json.return_value = {"items": []}
+        responses.append(msf)
+        mock_get.side_effect = responses
+        result = mgr.search_existing_exploits("CVE-2024-0106")
+        assert result["success"] is True
+        assert "exploit-db" in result["sources_searched"]
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_search_duplicate_exploit_source(self, mock_sleep, mock_get, mgr):
+        responses = []
+        gh = MagicMock()
+        gh.status_code = 200
+        gh.json.return_value = {"items": []}
+        responses.append(gh)
+        nvd = MagicMock()
+        nvd.status_code = 200
+        nvd.json.return_value = {
+            "vulnerabilities": [{
+                "cve": {
+                    "id": "CVE-2024-0107",
+                    "published": "2024-01-01",
+                    "references": [
+                        {"url": "https://www.exploit-db.com/exploits/11111"},
+                        {"url": "https://www.exploit-db.com/exploits/22222"},
+                    ],
+                }
+            }]
+        }
+        responses.append(nvd)
+        msf = MagicMock()
+        msf.status_code = 200
+        msf.json.return_value = {"items": []}
+        responses.append(msf)
+        mock_get.side_effect = responses
+        result = mgr.search_existing_exploits("CVE-2024-0107")
+        assert result["success"] is True
+        assert result["exploits_found"] == 2
+
+    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    def test_search_metasploit_non_exploit_path(self, mock_sleep, mock_get, mgr):
+        responses = []
+        gh = MagicMock()
+        gh.status_code = 200
+        gh.json.return_value = {"items": []}
+        responses.append(gh)
+        nvd = MagicMock()
+        nvd.status_code = 200
+        nvd.json.return_value = {"vulnerabilities": []}
+        responses.append(nvd)
+        msf = MagicMock()
+        msf.status_code = 200
+        msf.json.return_value = {
+            "items": [{
+                "path": "lib/msf/core/module.rb",
+                "name": "module.rb",
+                "sha": "def456",
+                "html_url": "https://github.com/rapid7/metasploit-framework/blob/main/lib/msf/core/module.rb",
+            }]
+        }
+        responses.append(msf)
+        mock_get.side_effect = responses
+        result = mgr.search_existing_exploits("CVE-2024-0108")
+        assert result["success"] is True
+        assert result["search_summary"]["metasploit_modules"] == 0
 
 
 class TestAnalyzeEdgeCases:

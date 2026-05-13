@@ -21,7 +21,7 @@ _LOG_LEVEL = {
     "debug": logging.DEBUG, "info": logging.INFO,
     "warning": logging.WARNING, "error": logging.ERROR,
     "critical": logging.CRITICAL,
-}.get(os.environ.get("HEXSTRIKE_LOG_LEVEL", "").strip().lower(), logging.DEBUG)
+}.get(os.environ.get("HEXSTRIKE_LOG_LEVEL", "").strip().lower(), logging.WARNING)
 
 logging.basicConfig(
     level=_LOG_LEVEL,

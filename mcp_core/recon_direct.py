@@ -19,13 +19,10 @@ All functions return the same dict shape as before:
     {"success": bool, "output": str, "returncode": int, ...}
 """
 
-import logging
 import subprocess
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
-
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

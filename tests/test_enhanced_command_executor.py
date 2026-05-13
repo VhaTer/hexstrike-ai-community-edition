@@ -3,9 +3,11 @@ Real tests for EnhancedCommandExecutor — fires real subprocesses.
 
 Covers: constructor, _box_row, execute() success/failure/timeout/shell/error.
 """
+import io
+import threading
 import time
 import subprocess
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -30,6 +32,10 @@ class TestBoxRow:
     def test_empty(self):
         result = _box_row("")
         assert "│" in result
+
+    def test_negative_wcswidth(self):
+        result = _box_row("\x01test")
+        assert "test" in result
 
 
 # ============================================================================
@@ -221,3 +227,133 @@ class TestShellDetection:
         ece = EnhancedCommandExecutor("echo test > /dev/null", timeout=10)
         result = ece.execute()
         assert result["success"] is True
+
+
+# ============================================================================
+# Reader thread edge cases
+# ============================================================================
+
+class TestReaderThreads:
+
+    def test_read_stdout_no_process(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        ece._read_stdout()
+        assert ece.stdout_data == ""
+
+    def test_read_stderr_no_process(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        ece._read_stderr()
+        assert ece.stderr_data == ""
+
+    def test_read_stdout_exception(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = Exception("read error")
+        mock_proc.stdout.readable = lambda: True
+        ece.process = mock_proc
+        ece._read_stdout()
+        assert ece.stdout_data == ""
+
+    def test_read_stderr_exception(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        mock_proc = MagicMock()
+        mock_proc.stderr.readline.side_effect = Exception("read error")
+        mock_proc.stderr.readable = lambda: True
+        ece.process = mock_proc
+        ece._read_stderr()
+        assert ece.stderr_data == ""
+
+    def test_read_stdout_multiple_lines(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = ["line1\n", "line2\n", "line3\n", ""]
+        ece.process = mock_proc
+        ece._read_stdout()
+        assert "line1" in ece.stdout_data
+        assert "line2" in ece.stdout_data
+        assert "line3" in ece.stdout_data
+
+    def test_read_stderr_multiple_lines(self):
+        ece = EnhancedCommandExecutor("echo hi", timeout=10)
+        mock_proc = MagicMock()
+        mock_proc.stderr.readline.side_effect = ["err1\n", "err2\n", "err3\n", ""]
+        ece.process = mock_proc
+        ece._read_stderr()
+        assert "err1" in ece.stderr_data
+
+
+# ============================================================================
+# shlex.split ValueError fallback
+# ============================================================================
+
+class TestShellDetectionEdgeCases:
+
+    def test_shlex_split_valueerror_fallback(self):
+        with patch("shlex.split", side_effect=ValueError("mock")):
+            ece = EnhancedCommandExecutor("echo hello", timeout=10)
+            result = ece.execute()
+        assert result["success"] is True
+
+
+# ============================================================================
+# Progress loop break on timeout
+# ============================================================================
+
+class TestProgressLoop:
+
+    def test_progress_break_on_timeout(self):
+        ece = EnhancedCommandExecutor("echo test", timeout=0.5)
+        mock_proc = MagicMock()
+        mock_proc.pid = 99999
+        mock_proc.poll.return_value = None
+        mock_proc.stdout = io.StringIO()
+        mock_proc.stderr = io.StringIO()
+        ece.process = mock_proc
+        ece._show_progress()
+
+
+# ============================================================================
+# Force-kill + thread join edge cases (mock-based)
+# ============================================================================
+
+class TestForceKillPath:
+
+    def test_force_kill_path_via_mock(self):
+        ece = EnhancedCommandExecutor("echo test", timeout=2)
+        mock_proc = MagicMock()
+        mock_proc.pid = 99999
+        mock_proc.wait.side_effect = [
+            subprocess.TimeoutExpired("cmd", 2),
+            subprocess.TimeoutExpired("cmd", 5),
+        ]
+        mock_proc.stdout = io.StringIO()
+        mock_proc.stderr = io.StringIO()
+        mock_proc.poll.return_value = None
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = ece.execute()
+
+        assert result["timed_out"] is True
+        mock_proc.terminate.assert_called_once()
+        mock_proc.kill.assert_called_once()
+
+    def test_alive_threads_joined_after_timeout(self):
+        ece = EnhancedCommandExecutor("sleep 30", timeout=2)
+        with patch.object(threading.Thread, "is_alive", return_value=True):
+            result = ece.execute()
+        assert result["timed_out"] is True
+
+
+# ============================================================================
+# Multi-line output (reader loop iterations)
+# ============================================================================
+
+class TestMultiLineOutput:
+
+    def test_multi_line_stdout(self):
+        ece = EnhancedCommandExecutor("printf 'a\\nb\\nc\\n'", timeout=10)
+        result = ece.execute()
+        assert result["success"] is True
+        assert "a" in result["stdout"]
+        assert "b" in result["stdout"]
+        assert "c" in result["stdout"]

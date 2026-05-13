@@ -1,15 +1,16 @@
 """
-Stub FileUploadTestingFramework for FastMCP migration.
+Stub FileUploadTestingFramework.
 
-This is a placeholder implementation that will be fully implemented
-in Phase 3 when Flask is removed and FastMCP Resources are introduced.
+Placeholder — depends on browser_agent/http_framework not yet ported.
 """
+
 
 class FileUploadTestingFramework:
     """
     Framework for testing file upload vulnerabilities in bug bounty workflows.
 
-    Currently a stub - will be implemented with FastMCP Resources in Phase 3.
+    Currently a stub — depends on browser_agent and http_framework
+    internal instances that have not been ported.
     """
 
     def __init__(self):
@@ -22,12 +23,11 @@ class FileUploadTestingFramework:
 
     def run_tests(self, target_url: str) -> dict:
         """Run file upload tests against target."""
-        # Stub implementation
         return {
             "success": True,
-            "message": "FileUploadTestingFramework is a stub - implement in Phase 3",
+            "message": "FileUploadTestingFramework is a stub — not yet implemented",
             "tests_run": len(self.upload_tests),
-            "results": self.results
+            "results": self.results,
         }
 
     def get_results(self) -> list:

@@ -14,7 +14,6 @@ Usage:
 
 import base64
 import json
-import logging
 import os
 import sqlite3
 from typing import Any, Dict
@@ -22,8 +21,6 @@ from typing import Any, Dict
 import pymysql
 
 from server_core.command_executor import execute_command
-
-logger = logging.getLogger(__name__)
 
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:

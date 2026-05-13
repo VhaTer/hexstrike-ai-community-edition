@@ -1463,11 +1463,11 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         typed_tools_registered += 1
 
     logger.info(
-        f"🚀 Phase 3: {len(DIRECT_TOOLS)} direct routes, {typed_tools_registered} typed MCP tools, + skill bundle helper — no Flask"
+        f"🚀 {len(DIRECT_TOOLS)} direct routes, {typed_tools_registered} typed MCP tools, + skill bundle helper"
     )
 
     # ========================================================================
-    # Resources MCP — health + scan results
+    # Resources MCP — health + scan results + CLI feedback
     # ========================================================================
 
     @mcp.resource("health://server")
@@ -1567,7 +1567,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         from server_core.singletons import error_handler as _eh
         return json.dumps(_eh.get_error_statistics(), indent=2)
 
-    logger.info("📦 Resources MCP registered: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics")
+    logger.info("📦 Resources: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics")
 
     # ========================================================================
     # server_health MCP tool — wraps the health resource for tool-based access
@@ -1605,8 +1605,5 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     register_cve_tools(mcp)
     register_bugbounty_tools(mcp)
     logger.info("🎯 Workflow prompts registered: bug_bounty_recon, wifi_attack_chain, ctf_web_challenge, smb_lateral_movement, cloud_security_audit")
-    logger.info("🏴 CTF Engine registered: ctf_analyze, ctf_tools, ctf_solve, ctf_team")
-    logger.info("🔍 CVE Engine registered: cve_fetch, cve_analyze, cve_exploits, cve_intel")
-    logger.info("🎯 Bug Bounty Engine registered: bb_recon, bb_hunt, bb_business, bb_osint, bb_full")
 
     return mcp
