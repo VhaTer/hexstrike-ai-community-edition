@@ -1,18 +1,842 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon-D_bVPi1p.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HexStrike - CE</title>
-    <script type="module" crossorigin src="/assets/index-BXe8XJN9.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dw2cE7zH.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-lucide-DrX2ypsP.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-9K1nhUhk.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-recharts-C6Nruxf2.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-TWFUMp0w.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HexStrike Pulse</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+ --bg:#0d0f14;
+ --bg-card:#13161e;
+ --bg-card2:#191c26;
+ --border:#252836;
+ --text:#8b95a8;
+ --text-h:#e2e8f0;
+ --text-dim:#4a5568;
+ --crimson:#dc143c;
+ --red:#ff2a2a;
+ --rose:#e63946;
+ --dark-red:#8b0000;
+ --green:#00e676;
+ --amber:#ffc107;
+ --accent:#dc143c;
+ --font:sans-serif;
+ --mono:"SF Mono","Fira Code","Cascadia Code",monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;line-height:1.5;min-height:100vh}
+.mono{font-family:var(--mono);font-size:12px}
+.topbar{display:flex;align-items:center;gap:12px;padding:6px 16px;background:var(--bg-card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.topbar-brand{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--text-h);white-space:nowrap}
+.brand-text{font-size:13px;color:var(--crimson)}
+.brand-version{color:var(--text-dim);font-size:11px;font-family:var(--mono)}
+.topbar-nav{display:flex;gap:2px;flex:1}
+.nav-tab{padding:4px 12px;border:none;background:none;color:var(--text-dim);font-size:12px;cursor:pointer;border-radius:4px;white-space:nowrap;font-family:var(--font)}
+.nav-tab:hover{background:var(--bg-card2);color:var(--text-h)}
+.nav-tab.active{background:var(--bg-card2);color:var(--crimson)}
+.topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}
+.status-indicator{display:flex;align-items:center;gap:4px;font-size:11px}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.online{background:var(--green);box-shadow:0 0 6px var(--green)}
+.status-dot.degraded{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.status-dot.error{background:var(--red);box-shadow:0 0 6px var(--red)}
+.status-dot.loading{background:var(--crimson);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes pulse-glow{0%,100%{opacity:1}50%{opacity:.6}}
+.status-label{color:var(--text-dim);font-size:11px;font-family:var(--mono)}
+.topbar-meta{color:var(--text-dim);font-size:10px;font-family:var(--mono);padding:0 4px}
+.main{padding:16px;max-width:1100px;margin:0 auto;width:100%}
+.section{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:16px}
+.section-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.section-header h3{font-size:13px;font-weight:600;color:var(--text-h)}
+.section-meta{font-size:11px;color:var(--text-dim);font-family:var(--mono)}
+.section-body{padding:14px}
+/* Status Bar */
+.status-bar{display:flex;gap:0;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
+.status-item{flex:1;padding:12px 14px;text-align:center;border-right:1px solid var(--border);min-width:0}
+.status-item:last-child{border-right:none}
+.status-item-value{font-size:18px;font-weight:700;font-family:var(--mono);line-height:1.2}
+.status-item-label{font-size:10px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.status-item-sub{font-size:9px;color:var(--text-dim);margin-top:1px;font-family:var(--mono)}
+.status-item .clr-online{color:var(--green)}
+.status-item .clr-error{color:var(--red)}
+.status-item .clr-crimson{color:var(--crimson)}
+.status-item .clr-amber{color:var(--amber)}
+.status-item .clr-text{color:var(--text-h)}
+/* Resource Gauges */
+.resource-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.gauge-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px}
+.gauge-card.network{grid-column:1/-1}
+.gauge-label{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+.gauge-label-name{color:var(--text-h);font-weight:500}
+.gauge-label-value{color:var(--text-dim);font-family:var(--mono)}
+.gauge-track{height:6px;background:var(--bg-card2);border-radius:3px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.network-stats{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;font-family:var(--mono);margin-top:6px}
+.network-stat{display:flex;align-items:center;gap:4px}
+.network-stat .arrow{color:var(--text-dim)}
+.network-stat .value{color:var(--text-h)}
+/* Activity Table */
+.activity-table{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+.activity-table th{padding:6px 10px;text-align:left;color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);font-family:var(--font)}
+.activity-table td{padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.activity-table tr:last-child td{border-bottom:none}
+.activity-table .col-tool{color:var(--crimson)}
+.activity-table .col-target{color:var(--text-h);max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.activity-table .col-time{color:var(--text-dim);font-size:10px}
+.activity-table .col-dur{color:var(--text-dim);text-align:right}
+.activity-empty{text-align:center;padding:24px;color:var(--text-dim);font-size:12px}
+.activity-pulse{animation:pulse-glow 1s infinite}
+.activity-row-running td{color:var(--crimson)}
+.activity-row-ok td{color:var(--text)}
+.activity-row-err td{color:var(--red)}
+.activity-row-timeout td{color:var(--amber)}
+/* Charts Row */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+@media(max-width:768px){.charts-row{grid-template-columns:1fr}}
+.chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px}
+.chart-card h4{font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.sparkline-canvas{width:100%;height:60px;display:block}
+.metrics-list{list-style:none;padding:0}
+.metrics-list li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono)}
+.metrics-list li:last-child{border-bottom:none}
+.metrics-list .m-label{color:var(--text-dim)}
+.metrics-list .m-value{color:var(--text-h)}
+.metrics-list .m-value.ok{color:var(--green)}
+.metrics-list .m-value.err{color:var(--red)}
+.metrics-list .m-value.warn{color:var(--amber)}
+/* Stats Row */
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+@media(max-width:768px){.stats-row{grid-template-columns:1fr}}
+.stat-detail-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px}
+.stat-detail-card h4{font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.stat-chips{display:flex;flex-wrap:wrap;gap:4px}
+.stat-chip{padding:2px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);background:var(--bg-card2);border:1px solid var(--border);color:var(--text-dim)}
+.stat-chip.cache-hit{border-color:color-mix(in srgb,var(--crimson) 20%,transparent);color:var(--text)}
+.stat-chip.cache-miss{border-color:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber)}
+.stat-chip.cache-evict{border-color:color-mix(in srgb,var(--red) 20%,transparent);color:var(--red)}
+.error-item{padding:3px 0;font-size:10px;font-family:var(--mono);color:var(--red)}
+.error-empty{font-size:10px;color:var(--text-dim);padding:4px 0}
+/* Tools Categories */
+.categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.cat-card{background:var(--bg-card2);border:1px solid var(--border);border-radius:6px;padding:10px}
+.cat-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.cat-card-name{font-size:12px;font-weight:500;color:var(--text-h);text-transform:capitalize}
+.cat-card-count{font-size:11px;color:var(--text-dim);font-family:var(--mono)}
+.cat-tools{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.tool-chip{padding:2px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);background:var(--bg-card);border:1px solid var(--border);color:var(--text-dim)}
+.tool-chip.avail{border-color:color-mix(in srgb,var(--green) 20%,transparent);color:var(--text)}
+/* Section collapse */
+.collapse-toggle{cursor:pointer;user-select:none}
+.collapse-toggle:hover{color:var(--accent)}
+/* Logs tab */
+.log-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--border)}
+.log-search{flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none}
+.log-search:focus{border-color:var(--accent)}
+.log-search::placeholder{color:var(--text-dim)}
+.log-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card2);color:var(--text-dim);font-size:11px;cursor:pointer;font-family:var(--font);white-space:nowrap}
+.log-btn:hover{border-color:var(--text-dim);color:var(--text-h)}
+.log-btn.active{background:color-mix(in srgb,var(--accent) 15%,var(--bg-card2));border-color:var(--accent);color:var(--accent)}
+.log-btn--pause.active{background:color-mix(in srgb,var(--amber) 15%,var(--bg-card2));border-color:var(--amber);color:var(--amber)}
+.log-btn--all.active{background:color-mix(in srgb,var(--accent) 15%,var(--bg-card2));border-color:var(--accent);color:var(--accent)}
+.log-btn--error.active{background:color-mix(in srgb,var(--red) 15%,var(--bg-card2));border-color:var(--red);color:var(--red)}
+.log-btn--warn.active{background:color-mix(in srgb,var(--amber) 15%,var(--bg-card2));border-color:var(--amber);color:var(--amber)}
+.log-btn--info.active{background:color-mix(in srgb,var(--green) 15%,var(--bg-card2));border-color:var(--green);color:var(--green)}
+.log-btn--debug.active{background:color-mix(in srgb,var(--text) 15%,var(--bg-card2));border-color:var(--text-dim);color:var(--text)}
+.log-btn-label{color:var(--text-dim);font-size:10px;font-family:var(--mono);padding:0 2px}
+.log-viewer{height:60vh;overflow-y:auto;padding:8px 14px;font-family:var(--mono);font-size:11px;line-height:1.6;background:var(--bg)}
+.log-viewer.word-wrap .log-line{white-space:pre-wrap;word-break:break-all}
+.log-viewer:not(.word-wrap) .log-line{white-space:pre}
+.log-empty{color:var(--text-dim);padding:20px;text-align:center;font-size:12px}
+.log-line{padding:0 4px}
+.log-line.error{color:var(--red)}
+.log-line.warn{color:var(--amber)}
+.log-line.info{color:var(--text)}
+.log-line.debug{color:var(--text-dim)}
+/* Help tab */
+.help-page{padding:0}
+.help-path-row{display:flex;align-items:center;gap:8px;padding:10px 14px}
+.help-path-label{font-size:11px;color:var(--text-dim);white-space:nowrap}
+.help-path-input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none}
+.help-path-input:focus{border-color:var(--accent)}
+.ide-tabs{display:flex;gap:4px;padding:0 14px 8px;flex-wrap:wrap}
+.ide-tab{padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card2);color:var(--text-dim);font-size:11px;cursor:pointer;font-family:var(--font);white-space:nowrap}
+.ide-tab:hover{background:var(--border);color:var(--text-h)}
+.ide-tab.active{background:color-mix(in srgb,var(--accent) 15%,var(--bg-card2));border-color:var(--accent);color:var(--accent)}
+.ide-panel{padding:0 14px 14px}
+.ide-config-path{display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:6px 10px;background:var(--bg-card2);border-radius:4px;font-size:11px;color:var(--text-dim)}
+.ide-note{font-size:11px;color:var(--text-dim);margin-bottom:8px;padding:0 2px}
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.code-block-header{display:flex;justify-content:space-between;align-items:center;padding:4px 10px;background:var(--bg-card2);border-bottom:1px solid var(--border)}
+.code-block-header span{font-size:10px;color:var(--text-dim);font-family:var(--mono)}
+.copy-btn{padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-dim);font-size:10px;cursor:pointer;font-family:var(--font)}
+.copy-btn:hover{color:var(--text-h);border-color:var(--text-dim)}
+.code-block pre{margin:0;padding:10px;overflow-x:auto;font-size:11px;line-height:1.5;color:var(--text);font-family:var(--mono)}
+.flags-table{font-size:11px;line-height:1.6}
+.flag-row{display:grid;grid-template-columns:160px 1fr 100px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--border);align-items:start}
+.flag-row:last-child{border-bottom:none}
+.flag-name{color:var(--amber);font-family:var(--mono);font-size:10px}
+.flag-desc{color:var(--text)}
+.flag-default{color:var(--text-dim);font-family:var(--mono);font-size:10px;text-align:right}
+.help-body{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--text)}
+.help-body code{padding:1px 4px;background:var(--bg-card2);border-radius:3px;font-size:11px;font-family:var(--mono);color:var(--amber)}
+.help-about{padding:14px;text-align:center}
+.help-about-desc{font-size:12px;color:var(--text-dim);margin-bottom:10px;max-width:400px;margin-left:auto;margin-right:auto}
+.help-demo-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border:1px solid var(--amber);border-radius:6px;background:none;color:var(--amber);font-size:12px;cursor:pointer;font-family:var(--font)}
+.help-demo-btn:hover{background:color-mix(in srgb,var(--amber) 10%,transparent)}
+.loading-state{text-align:center;padding:40px;color:var(--text-dim)}
+.error-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;background:color-mix(in srgb,var(--red) 10%,var(--bg-card));border:1px solid color-mix(in srgb,var(--red) 25%,transparent);border-radius:8px;color:var(--red);font-size:12px;margin-bottom:16px}
+.tab-page{display:none}
+.tab-page.active{display:block}
+.auth-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);z-index:200}
+.auth-box{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:24px;width:320px;text-align:center}
+.auth-box h2{color:var(--text-h);font-size:14px;margin-bottom:8px}
+.auth-box p{color:var(--text-dim);font-size:11px;margin-bottom:12px}
+.auth-box input{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none;margin-bottom:8px}
+.auth-box input:focus{border-color:var(--accent)}
+.auth-box button{padding:6px 20px;border:none;border-radius:4px;background:var(--accent);color:#fff;font-size:12px;cursor:pointer;font-weight:600}
+.auth-box .auth-error{color:var(--red);font-size:11px;margin-top:6px}
+@media(max-width:640px){
+ .status-bar{flex-wrap:wrap}
+ .status-item{flex:1 1 50%;border-bottom:1px solid var(--border)}
+ .resource-row{grid-template-columns:1fr}
+ .categories-grid{grid-template-columns:1fr 1fr}
+ .log-toolbar{gap:4px}
+ .log-search{min-width:80px}
+ .topbar{flex-wrap:wrap;gap:6px}
+ .flag-row{grid-template-columns:1fr}
+ .activity-table{font-size:10px}
+ .activity-table td,.activity-table th{padding:4px 6px}
+}
+</style>
+</head>
+<body>
+
+<div id="auth-overlay" class="auth-overlay" style="display:none">
+ <div class="auth-box">
+  <h2>HexStrike Pulse</h2>
+  <p>Server requires authentication.</p>
+  <input type="password" id="auth-input" placeholder="token..." autocomplete="off"/>
+  <button onclick="submitAuth()">Unlock</button>
+  <div id="auth-error" class="auth-error"></div>
+ </div>
+</div>
+
+<header class="topbar">
+ <div class="topbar-brand">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+   <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5Z" stroke="#dc143c" stroke-width="1.5" fill="#dc143c" fill-opacity="0.12"/>
+   <polyline points="4.5,13 8.5,13 10.5,8 12.5,16 14.5,10 16.5,13 19.5,13" stroke="#dc143c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span class="brand-text">HexStrike Pulse</span>
+  <span class="brand-version" id="header-version">…</span>
+ </div>
+ <nav class="topbar-nav">
+  <button class="nav-tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+  <button class="nav-tab" onclick="switchTab('logs')">📋 Logs</button>
+  <button class="nav-tab" onclick="switchTab('help')">❓ Help</button>
+ </nav>
+ <div class="topbar-right">
+  <span class="topbar-meta" id="header-time"></span>
+  <div class="status-indicator">
+   <span class="status-dot loading" id="header-dot"></span>
+   <span class="status-label" id="header-status">connecting…</span>
+  </div>
+  <a class="icon-btn" href="https://github.com/CommonHuman-Lab/hexstrike-ai-community-edition" target="_blank" style="color:var(--text-dim);text-decoration:none;font-size:16px" title="GitHub">⌂</a>
+ </div>
+</header>
+
+<main class="main">
+ <div id="tab-dashboard" class="tab-page active">
+  <div class="loading-state" id="dash-loading">Connecting to server…</div>
+  <div id="dash-content" style="display:none">
+
+   <!-- Status Bar -->
+   <div class="status-bar" id="status-bar"></div>
+
+   <!-- Resource Gauges -->
+   <div class="resource-row" id="res-row"></div>
+
+   <!-- Execution Activity -->
+   <div class="section">
+    <div class="section-header"><h3>⚡ Execution Activity</h3><span class="section-meta" id="activity-meta">live</span></div>
+    <div class="section-body" style="padding:0">
+     <table class="activity-table" id="activity-table">
+      <thead><tr><th>Status</th><th>Tool</th><th>Target</th><th>Time</th><th style="text-align:right">Duration</th></tr></thead>
+      <tbody id="activity-body"><tr><td colspan="5" class="activity-empty">Waiting for tool executions…</td></tr></tbody>
+     </table>
+    </div>
+   </div>
+
+   <!-- Charts + Metrics -->
+   <div class="charts-row">
+    <div class="chart-card">
+     <h4>CPU &amp; Memory (last 30s)</h4>
+     <canvas id="sparkline-canvas" class="sparkline-canvas" height="60"></canvas>
+    </div>
+    <div class="chart-card">
+     <h4>Slowest Tools</h4>
+     <ul class="metrics-list" id="slowest-list"><li style="color:var(--text-dim);font-size:11px;font-family:var(--mono)">no data yet</li></ul>
+    </div>
+   </div>
+
+   <!-- Cache + Error Stats -->
+   <div class="stats-row">
+    <div class="stat-detail-card">
+     <h4>💾 Cache</h4>
+     <div class="stat-chips" id="cache-chips"></div>
+    </div>
+    <div class="stat-detail-card">
+     <h4>⚠️ Errors</h4>
+     <div id="error-detail"></div>
+    </div>
+   </div>
+
+   <!-- Tools Category Grid -->
+   <div class="section">
+    <div class="section-header">
+     <h3 class="collapse-toggle" onclick="toggleCats()">🧰 Tools Availability <span id="cat-arrow">▾</span></h3>
+     <span class="section-meta" id="cat-meta"></span>
+    </div>
+    <div class="section-body" id="cat-body"><div class="categories-grid" id="cat-grid"></div></div>
+   </div>
+
+  </div>
+ </div>
+
+ <div id="tab-logs" class="tab-page">
+  <div class="section">
+   <div class="log-toolbar">
+    <input class="log-search" id="log-search" type="text" placeholder="search…" oninput="applyLogFilters()"/>
+    <button class="log-btn log-btn--all active" data-level="ALL" onclick="setLogLevel('ALL')">ALL</button>
+    <button class="log-btn log-btn--error" data-level="ERROR" onclick="setLogLevel('ERROR')">ERROR</button>
+    <button class="log-btn log-btn--warn" data-level="WARN" onclick="setLogLevel('WARN')">WARN</button>
+    <button class="log-btn log-btn--info" data-level="INFO" onclick="setLogLevel('INFO')">INFO</button>
+    <button class="log-btn log-btn--debug" data-level="DEBUG" onclick="setLogLevel('DEBUG')">DEBUG</button>
+    <button class="log-btn log-btn--pause" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
+    <button class="log-btn" onclick="clearLogs()">🗑 Clear</button>
+    <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
+     <input type="checkbox" checked onchange="toggleAutoScroll(this.checked)"/> Auto
+    </label>
+    <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
+     <input type="checkbox" onchange="toggleWordWrap(this.checked)"/> Wrap
+    </label>
+    <select id="log-limit" onchange="applyLogFilters()" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text-dim);font-size:10px;font-family:var(--mono)">
+     <option value="50">50</option>
+     <option value="100">100</option>
+     <option value="200">200</option>
+     <option value="500" selected>500</option>
+    </select>
+    <span class="log-btn-label" id="log-count">0 lines</span>
+   </div>
+   <div class="log-viewer" id="log-viewer">
+    <div class="log-empty">Waiting for log data…</div>
+   </div>
+  </div>
+ </div>
+
+ <div id="tab-help" class="tab-page">
+  <div class="section">
+   <div class="section-header"><h3>🤖 IDE / Agent Configuration</h3></div>
+   <div class="help-path-row">
+    <label class="help-path-label">Installation path</label>
+    <input class="help-path-input mono" id="help-path" value="/path/to/hexstrike-ai-community-edition" oninput="updateIdeConfig()" placeholder="/path/to/hexstrike-ai-community-edition"/>
+   </div>
+   <div class="ide-tabs" id="ide-tabs"></div>
+   <div class="ide-panel" id="ide-panel"></div>
+  </div>
+  <div class="section">
+   <div class="section-header"><h3>🚩 MCP Client Flags</h3></div>
+   <div class="flags-table" id="flags-table"></div>
+  </div>
+  <div class="section">
+   <div class="section-header"><h3>🔐 Authentication</h3></div>
+   <p class="help-body">
+    If you set <code>HEXSTRIKE_API_TOKEN</code> on the server, every request must carry a Bearer token.
+    Pass it to the MCP client with <code>--auth-token</code>, or set it in the IDE config under <code>args</code>.
+    The dashboard will prompt for it automatically when the server returns 401.
+   </p>
+   <pre class="code-block" style="margin:0 14px 14px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow-x:auto;font-size:11px;line-height:1.5;color:var(--text);font-family:var(--mono)"># Server side
+export HEXSTRIKE_API_TOKEN=your-secret-token
+python3 hexstrike_server.py
+
+# MCP client side
+hexstrike-env/bin/python3 hexstrike_mcp.py \
+  --server http://localhost:8888 \
+  --auth-token your-secret-token \
+  --profile full</pre>
+  </div>
+  <div class="section">
+   <div class="section-header"><h3>🧪 Demo Mode</h3></div>
+   <div class="help-about">
+    <p class="help-about-desc">Activate demo mode to explore the dashboard. All data is synthetic but designed to feel realistic. Ideal for learning or demos.</p>
+    <button class="help-demo-btn" onclick="location.href=location.pathname+'?demo=1'+location.hash">🧪 Try demo mode</button>
+   </div>
+  </div>
+ </div>
+</main>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const S = {
+  health: null,
+  history: [],
+  logLines: [],
+  logFiltered: [],
+  logLevel: 'ALL',
+  logSearch: '',
+  logPaused: false,
+  logAutoScroll: true,
+  logWordWrap: false,
+  logLimit: 500,
+  activeTab: 'dashboard',
+  authToken: sessionStorage.getItem('hexstrike_token') || null,
+  esDashboard: null,
+  esLogs: null,
+  catCollapsed: false,
+  activity: [],
+  toolNames: [],
+  ideConfigs: [
+   {id:'claude',label:'🤖 Claude Desktop',path:'~/.config/Claude/claude_desktop_config.json',note:'Also works for Cursor — same config format.',
+    cfg:p=>({mcpServers:{"hexstrike-ai":{command:p+'/hexstrike-env/bin/python3',args:[p+'/hexstrike_mcp.py','--server','http://localhost:8888','--profile','full'],description:'HexStrike AI Community Edition',timeout:300,disabled:false}}})},
+   {id:'vscode',label:'🔷 VS Code',path:'.vscode/settings.json (workspace) or User settings',note:'Place in your workspace .vscode/settings.json or open User Settings JSON.',
+    cfg:p=>({servers:{hexstrike:{type:'stdio',command:p+'/hexstrike-env/bin/python3',args:[p+'/hexstrike_mcp.py','--server','http://localhost:8888','--profile','full']}},inputs:[]})},
+   {id:'opencode',label:'⚡ OpenCode',path:'~/.config/opencode/opencode.json',note:'OpenCode reads this on startup.',
+    cfg:p=>({$schema:'https://opencode.ai/config.json',mcp:{"hexstrike-ai":{type:'local',timeout:300,command:[p+'/hexstrike-env/bin/python3',p+'/hexstrike_mcp.py','--server','http://localhost:8888','--profile','full'],enabled:true}}})},
+   {id:'roo',label:'🦘 Roo Code',path:'MCP Servers panel → Edit Config',note:'Open Roo Code → MCP Servers → Edit Config and paste the block below.',
+    cfg:p=>({mcpServers:{"hexstrike-ai":{command:p+'/hexstrike-env/bin/python3',args:[p+'/hexstrike_mcp.py','--server','http://localhost:8888','--profile','full'],timeout:300}}})},
+  ],
+};
+
+const FLAGS = [
+  ['--server URL','HexStrike server URL','http://127.0.0.1:8888'],
+  ['--profile PROFILE','Tool profile(s) to load','full | web_recon | exploit_framework | …'],
+  ['--compact','Load only classify_task + run_tool','—'],
+  ['--auth-token TOKEN','Bearer token if HEXSTRIKE_API_TOKEN is set','—'],
+  ['--timeout SECS','Request timeout in seconds','300'],
+  ['--debug','Enable verbose debug logging','—'],
+  ['--disable-ssl-verify','Skip SSL verification (reverse proxy)','—'],
+];
+
+const LEVEL_RE = /\[(ERROR|WARN(?:ING)?|INFO|DEBUG)\]/;
+const TOOL_LOG_RE = /\[INFO\] .*?(\w+)\s+(?:completed|finished|started|running|failed)/i;
+const HEX_LOGO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5Z" stroke="#dc143c" stroke-width="1.5" fill="#dc143c" fill-opacity="0.12"/><polyline points="4.5,13 8.5,13 10.5,8 12.5,16 14.5,10 16.5,13 19.5,13" stroke="#dc143c" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function stripAnsi(s){return s.replace(/\x1B[@-_][0-?]*[ -/]*[@-~]/g,'')}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmtPct(v){return (v*100).toFixed(1)+'%'}
+function fmtDur(s){if(!s||s===0)return'—';return s<60?s.toFixed(1)+'s':Math.floor(s/60)+'m'+(s%60).toFixed(0)+'s'}
+function fmtTime(ts){const d=new Date(ts*1000);return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function fmtBytes(b){if(!b)return'0B';const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++}return b.toFixed(1)+u[i]}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+function hasAuth(){return !!S.authToken}
+function setAuth(t){S.authToken=t;sessionStorage.setItem('hexstrike_token',t)}
+function clearAuth(){S.authToken=null;sessionStorage.removeItem('hexstrike_token')}
+
+async function apiFetch(path,opts){
+  const h={'Content-Type':'application/json'};
+  if(S.authToken)h['Authorization']='Bearer '+S.authToken;
+  const r=await fetch(path,{...opts,headers:h});
+  if(r.status===401){clearAuth();showAuth();throw new Error('UNAUTHORIZED')}
+  if(!r.ok)throw new Error('HTTP '+r.status+': '+await r.text());
+  return r.json();
+}
+
+function showAuth(){
+  document.getElementById('auth-overlay').style.display='flex';
+  document.getElementById('auth-input').focus();
+}
+function hideAuth(){document.getElementById('auth-overlay').style.display='none'}
+function submitAuth(){
+  const t=document.getElementById('auth-input').value.trim();
+  if(!t){document.getElementById('auth-error').textContent='Token required';return}
+  setAuth(t);
+  apiFetch('/web-dashboard').then(h=>{hideAuth();initDashboard(h);connectDashboard()})
+  .catch(e=>{document.getElementById('auth-error').textContent='Invalid token';clearAuth()});
+}
+
+// ─── Tab Switching ───────────────────────────────────────────────────────────
+function switchTab(tab){
+  S.activeTab=tab;
+  document.querySelectorAll('.tab-page').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    el.classList.toggle('active',['dashboard','logs','help'][i]===tab);
+  });
+  if(tab==='logs')connectLogs();
+  else disconnectLogs();
+}
+
+// ─── Dashboard SSE ───────────────────────────────────────────────────────────
+function connectDashboard(){
+  if(S.esDashboard)return;
+  const es=new EventSource('/web-dashboard/stream');
+  S.esDashboard=es;
+  es.onmessage=e=>{
+    try{initDashboard(JSON.parse(e.data))}catch(_){}
+  };
+  es.onerror=()=>{
+    if(S.esDashboard)setTimeout(connectDashboard,3000);
+  };
+}
+
+function initDashboard(h){
+  S.health=h;
+  S.toolNames=Object.keys(h.tools_status||{});
+  document.getElementById('dash-loading').style.display='none';
+  document.getElementById('dash-content').style.display='block';
+  updateHeader(h);
+  renderStatusBar(h);
+  renderResources(h);
+  renderActivity(h);
+  appendHistory(h);
+  renderSparkline();
+  renderSlowest(h);
+  renderCacheStats(h);
+  renderErrors(h);
+  renderCategories(h);
+}
+
+function updateHeader(h){
+  document.getElementById('header-version').textContent=h.version||'…';
+  const dot=document.getElementById('header-dot');
+  const st=document.getElementById('header-status');
+  if(h.status==='healthy'||h.status==='ready'){
+    dot.className='status-dot online';
+    st.textContent='Live';
+  }else if(h.status==='degraded'){
+    dot.className='status-dot degraded';
+    st.textContent='Degraded';
+  }else{
+    dot.className='status-dot loading';
+    st.textContent='Connecting…';
+  }
+  document.getElementById('header-time').textContent=new Date().toLocaleTimeString('en-GB');
+}
+
+function renderStatusBar(h){
+  const tel=h.telemetry||{};
+  const cs=h.cache_stats||{};
+  const om=h.op_metrics||{};
+  const es=h.error_stats||{};
+  const toolsAvail=h.total_tools_available||0;
+  const toolsTotal=h.total_tools_count||0;
+  const successRate=om.global_success_rate!==undefined?fmtPct(om.global_success_rate):tel.success_rate||'0%';
+  const cmdCount=om.total_runs||tel.commands_executed||0;
+  const statusIcon=h.status==='healthy'||h.status==='ready'?'🟢':'🟡';
+  document.getElementById('status-bar').innerHTML=
+   `<div class="status-item"><div class="status-item-value clr-online">${statusIcon} ${h.status||'?'}</div><div class="status-item-label">Status</div><div class="status-item-sub">v${h.version||'?'}</div></div>`+
+   `<div class="status-item"><div class="status-item-value clr-crimson">${fmtUptime(h.uptime)}</div><div class="status-item-label">Uptime</div><div class="status-item-sub">since startup</div></div>`+
+   `<div class="status-item"><div class="status-item-value clr-text">${cmdCount}</div><div class="status-item-label">Commands</div><div class="status-item-sub">${successRate} success</div></div>`+
+   `<div class="status-item"><div class="status-item-value clr-text">${toolsAvail}/${toolsTotal}</div><div class="status-item-label">Tools</div><div class="status-item-sub">${h.all_essential_tools_available?'✅ all essential':'⚠️ some missing'}</div></div>`+
+   `<div class="status-item"><div class="status-item-value clr-crimson">${cs.size||0}</div><div class="status-item-label">Cache</div><div class="status-item-sub">${cs.hit_rate||'0%'} hit</div></div>`+
+   `<div class="status-item"><div class="status-item-value ${es.total_errors>0?'clr-error':'clr-text'}">${es.total_errors||0}</div><div class="status-item-label">Errors</div><div class="status-item-sub">${es.recent_errors_count||0} recent</div></div>`;
+}
+
+function renderResources(h){
+  const r=h.resources||{};
+  const gauge=(label,pct,color)=>`<div class="gauge-card"><div class="gauge-label"><span class="gauge-label-name">${label}</span><span class="gauge-label-value">${(pct||0).toFixed(1)}%</span></div><div class="gauge-track"><div class="gauge-fill" style="width:${Math.min(pct||0,100)}%;background:${color}"></div></div></div>`;
+  const netSent=fmtBytes(r.network_bytes_sent);
+  const netRecv=fmtBytes(r.network_bytes_recv);
+  document.getElementById('res-row').innerHTML=
+   gauge('CPU',r.cpu_percent,'var(--crimson)')+
+   gauge('Memory',r.memory_percent,'var(--amber)')+
+   gauge('Disk',r.disk_percent,'var(--red)')+
+   `<div class="gauge-card network"><div class="gauge-label"><span class="gauge-label-name">System</span><span class="gauge-label-value">${(r.memory_available_gb||0).toFixed(1)} GB free</span></div><div class="network-stats"><span class="network-stat"><span class="arrow">↑</span><span class="value">${netSent}</span></span><span class="network-stat"><span class="arrow">↓</span><span class="value">${netRecv}</span></span><span class="network-stat" style="color:var(--text-dim)">disk ${(r.disk_free_gb||0).toFixed(1)} GB free</span></div></div>`;
+}
+
+function renderActivity(h){
+  const scans=h.recent_scans||[];
+  if(!scans.length){
+    document.getElementById('activity-body').innerHTML='<tr><td colspan="5" class="activity-empty">Waiting for tool executions…</td></tr>';
+    document.getElementById('activity-meta').textContent='0 runs';
+    return;
+  }
+  // Merge with existing activity: keep newest, dedupe by tool+target+timestamp
+  const existing=new Map();
+  for(const a of S.activity){
+    existing.set(a.tool+':'+a.target+':'+a.timestamp,a);
+  }
+  for(const s of scans){
+    const key=s.tool+':'+s.target+':'+s.timestamp;
+    if(!existing.has(key))existing.set(key,s);
+  }
+  // Keep last 20, sorted by timestamp desc
+  S.activity=Array.from(existing.values()).sort((a,b)=>b.timestamp-a.timestamp).slice(0,20);
+  const rows=S.activity.map(s=>{
+    const ago=Date.now()/1000-s.timestamp;
+    const isRecent=ago<5;
+    const statusIcon=s.success?'✅':'❌';
+    const rowCls=isRecent?'activity-row-running':(s.success?'activity-row-ok':'activity-row-err');
+    const pulsing=isRecent?' activity-pulse':'';
+    return `<tr class="${rowCls}"><td class="${pulsing}">${statusIcon}</td><td class="col-tool">${s.tool}</td><td class="col-target">${escapeHtml(s.target)}</td><td class="col-time">${fmtTime(s.timestamp)}</td><td class="col-dur">${fmtDur(s.execution_time)}</td></tr>`;
+  }).join('');
+  document.getElementById('activity-body').innerHTML=rows;
+  document.getElementById('activity-meta').textContent=scans.length+' runs';
+}
+
+function appendHistory(h){
+  const r=h.resources||{};
+  S.history.push({t:Date.now(),cpu:r.cpu_percent||0,mem:r.memory_percent||0});
+  if(S.history.length>30)S.history=S.history.slice(-30);
+}
+
+function renderSparkline(){
+  const canvas=document.getElementById('sparkline-canvas');
+  const dpr=window.devicePixelRatio||1;
+  const rect=canvas.parentElement.getBoundingClientRect();
+  canvas.width=rect.width*dpr;
+  canvas.height=60*dpr;
+  canvas.style.width=rect.width+'px';
+  canvas.style.height='60px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  const w=rect.width,h=60,data=S.history;
+  if(data.length<2)return;
+  ctx.clearRect(0,0,w,h);
+  const pad=4;
+  const draw=(key,color)=>{
+    const vals=data.map(d=>d[key]);
+    const mn=Math.min(...vals),mx=Math.max(...vals);
+    const range=mx-mn||1;
+    ctx.beginPath();
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.5;
+    data.forEach((d,i)=>{
+      const x=pad+(w-pad*2)*i/(data.length-1);
+      const y=h-pad-(h-pad*2)*(d[key]-mn)/range;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  };
+  draw('cpu','#dc143c');
+  draw('mem','#ffc107');
+  // Legend
+  ctx.font='10px monospace';
+  ctx.fillStyle='#4a5568';
+  ctx.fillText('CPU crimson',pad+2,h-4);
+  ctx.fillStyle='#ffc107';
+  ctx.fillText('Mem amber',pad+2+90,h-4);
+}
+
+function renderSlowest(h){
+  const om=h.op_metrics||{};
+  const slow=om.slowest_tools||[];
+  const list=document.getElementById('slowest-list');
+  if(!slow.length){
+    list.innerHTML='<li style="color:var(--text-dim);font-size:11px;font-family:var(--mono)">no data yet</li>';
+    return;
+  }
+  list.innerHTML=slow.slice(0,5).map(t=>
+   `<li><span class="m-label">${t.tool}</span><span class="m-value warn">${t.avg_duration?t.avg_duration.toFixed(1)+'s':'—'}</span></li>`
+  ).join('');
+}
+
+function renderCacheStats(h){
+  const cs=h.cache_stats||{};
+  const chips=document.getElementById('cache-chips');
+  chips.innerHTML=
+   `<span class="stat-chip cache-hit">Hits: ${cs.hits||0}</span>`+
+   `<span class="stat-chip cache-miss">Misses: ${cs.misses||0}</span>`+
+   `<span class="stat-chip cache-evict">Evictions: ${cs.evictions||0}</span>`+
+   `<span class="stat-chip" style="border-color:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)">Hit Rate: ${cs.hit_rate||'0%'}</span>`+
+   `<span class="stat-chip">Size: ${cs.size||0}/${cs.max_size||'?'}</span>`;
+}
+
+function renderErrors(h){
+  const es=h.error_stats||{};
+  const el=document.getElementById('error-detail');
+  if(!es.total_errors){
+    el.innerHTML='<div class="error-empty">No errors recorded</div>';
+    return;
+  }
+  let html='<div class="stat-chips">';
+  if(es.error_counts_by_type){
+    for(const[type,count]of Object.entries(es.error_counts_by_type)){
+      html+=`<span class="stat-chip" style="border-color:color-mix(in srgb,var(--red) 20%,transparent);color:var(--red)">${type}: ${count}</span>`;
+    }
+  }
+  html+=`<span class="stat-chip" style="border-color:color-mix(in srgb,var(--crimson) 20%,transparent);color:var(--crimson)">Total: ${es.total_errors}</span>`;
+  html+='</div>';
+  if(es.recent_errors&&es.recent_errors.length){
+    html+='<div style="margin-top:8px;font-size:10px;color:var(--text-dim)">Recent errors:</div>';
+    for(const e of es.recent_errors.slice(0,3)){
+      html+=`<div class="error-item">${escapeHtml(e.tool)}: ${e.error_type}</div>`;
+    }
+  }
+  el.innerHTML=html;
+}
+
+function renderCategories(h){
+  const cs=h.category_stats||{};
+  const ts=h.tools_status||{};
+  const ct=h.category_tools||{};
+  let html='';
+  for(const[cat,stats]of Object.entries(cs)){
+    const catTools=(ct[cat]||[]).map(n=>[n,ts[n]]).filter(([n])=>n);
+    const chips=catTools.slice(0,8).map(([name,avail])=>{
+      const cls=avail?'tool-chip avail':'tool-chip';
+      return `<span class="${cls}">${name}${avail?' ✓':''}</span>`;
+    }).join('');
+    html+=`<div class="cat-card"><div class="cat-card-header"><span class="cat-card-name">${cat}</span><span class="cat-card-count">${stats.available}/${stats.total}</span></div><div class="cat-tools">${chips||'<span style="font-size:10px;color:var(--text-dim)">—</span>'}</div></div>`;
+  }
+  document.getElementById('cat-grid').innerHTML=html;
+  document.getElementById('cat-meta').textContent=h.total_tools_available+'/'+h.total_tools_count+' available';
+}
+
+function toggleCats(){
+  S.catCollapsed=!S.catCollapsed;
+  document.getElementById('cat-body').style.display=S.catCollapsed?'none':'block';
+  document.getElementById('cat-arrow').textContent=S.catCollapsed?'▸':'▾';
+}
+
+// ─── Logs SSE ────────────────────────────────────────────────────────────────
+function connectLogs(){
+  if(S.esLogs)return;
+  const es=new EventSource('/api/logs/stream?lines=150');
+  S.esLogs=es;
+  es.onmessage=e=>{
+    if(S.logPaused)return;
+    S.logLines.push(e.data);
+    if(S.logLines.length>2000)S.logLines=S.logLines.slice(-2000);
+    applyLogFilters();
+  };
+  es.onerror=()=>{};
+}
+
+function disconnectLogs(){
+  if(S.esLogs){S.esLogs.close();S.esLogs=null}
+}
+
+function setLogLevel(level){
+  S.logLevel=level;
+  document.querySelectorAll('.log-btn[data-level]').forEach(b=>{
+    b.classList.toggle('active',b.dataset.level===level);
+  });
+  applyLogFilters();
+}
+
+function togglePause(){
+  S.logPaused=!S.logPaused;
+  document.getElementById('btn-pause').classList.toggle('active');
+  document.getElementById('btn-pause').textContent=S.logPaused?'▶ Resume':'⏸ Pause';
+}
+
+function toggleAutoScroll(v){S.logAutoScroll=v}
+function toggleWordWrap(v){
+  S.logWordWrap=v;
+  document.getElementById('log-viewer').classList.toggle('word-wrap',v);
+}
+function clearLogs(){S.logLines=[];applyLogFilters()}
+
+function applyLogFilters(){
+  const search=document.getElementById('log-search').value.toLowerCase();
+  const limit=parseInt(document.getElementById('log-limit').value)||500;
+  S.logSearch=search;
+  S.logLimit=limit;
+  let lines=S.logLines;
+  if(S.logLevel!=='ALL')lines=lines.filter(l=>{
+    const m=l.match(LEVEL_RE);
+    return m&&m[1]===S.logLevel;
+  });
+  if(search)lines=lines.filter(l=>l.toLowerCase().includes(search));
+  S.logFiltered=lines;
+  renderLogs();
+}
+
+function renderLogs(){
+  const viewer=document.getElementById('log-viewer');
+  const limit=S.logLimit;
+  let lines=S.logFiltered;
+  lines=lines.slice(-limit);
+  document.getElementById('log-count').textContent=`${lines.length}/${S.logLines.length} lines`;
+  if(!lines.length){
+    viewer.innerHTML='<div class="log-empty">Waiting for log data…</div>';
+    return;
+  }
+  viewer.innerHTML=lines.map(l=>{
+    const stripped=stripAnsi(l);
+    const escaped=escapeHtml(stripped);
+    let cls='';
+    if(/\[ERROR\]/.test(stripped))cls='error';
+    else if(/\[WARN(?:ING)?\]/.test(stripped))cls='warn';
+    else if(/\[INFO\]/.test(stripped))cls='info';
+    else if(/\[DEBUG\]/.test(stripped))cls='debug';
+    return `<div class="log-line ${cls}">${escaped}</div>`;
+  }).join('');
+  if(S.logAutoScroll)viewer.scrollTop=viewer.scrollHeight;
+}
+
+// ─── Help Tab ────────────────────────────────────────────────────────────────
+let activeIde='claude';
+
+function initHelp(){
+  const tabs=document.getElementById('ide-tabs');
+  tabs.innerHTML=S.ideConfigs.map(c=>
+    `<button class="ide-tab ${c.id===activeIde?'active':''}" onclick="selectIde('${c.id}')">${c.label}</button>`
+  ).join('');
+  renderIde(activeIde);
+  const ft=document.getElementById('flags-table');
+  ft.innerHTML=FLAGS.map(f=>
+    `<div class="flag-row"><code class="flag-name mono">${f[0]}</code><span class="flag-desc">${f[1]}</span>${f[2]!=='—'?`<code class="flag-default mono">${f[2]}</code>`:'<span class="flag-default">—</span>'}</div>`
+  ).join('');
+}
+
+function selectIde(id){activeIde=id;renderIde(id);document.querySelectorAll('.ide-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id))}
+
+function renderIde(id){
+  const ide=S.ideConfigs.find(c=>c.id===id);
+  if(!ide)return;
+  const path=document.getElementById('help-path').value;
+  const json=JSON.stringify(ide.cfg(path),null,2);
+  document.getElementById('ide-panel').innerHTML=
+    `<div class="ide-config-path"><span style="font-size:11px">📁</span><span class="mono">${ide.path}</span></div>`+
+    (ide.note?`<p class="ide-note">${ide.note}</p>`:'')+
+    `<div class="code-block"><div class="code-block-header"><span>${id}.json</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div><pre><code>${escapeHtml(json)}</code></pre></div>`;
+}
+
+function updateIdeConfig(){renderIde(activeIde)}
+
+function copyCode(btn){
+  const pre=btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(()=>{
+    btn.textContent='✅ Copied';
+    setTimeout(()=>btn.textContent='📋 Copy',2000);
+  }).catch(()=>{});
+}
+
+function fmtUptime(s){
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  if(h>0)return h+'h '+m+'m';
+  return m+'m';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(function init(){
+  if(hasAuth()){
+    apiFetch('/web-dashboard').then(h=>{initDashboard(h);connectDashboard()}).catch(e=>{
+      if(e.message==='UNAUTHORIZED')showAuth();
+      else{document.getElementById('dash-loading').textContent='Server unreachable'}
+      connectDashboard();
+    });
+  }else{
+    apiFetch('/web-dashboard').then(h=>{initDashboard(h);connectDashboard()}).catch(e=>{
+      if(e.message==='UNAUTHORIZED')showAuth();
+      else{document.getElementById('dash-loading').textContent='Server unreachable'}
+      connectDashboard();
+    });
+  }
+  initHelp();
+  if(location.hash==='#/help')switchTab('help');
+  if(location.hash==='#/logs')switchTab('logs');
+  let resizeTimer;
+  window.addEventListener('resize',()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(()=>{if(S.health)renderSparkline()},200);
+  });
+})();
+</script>
+</body>
 </html>

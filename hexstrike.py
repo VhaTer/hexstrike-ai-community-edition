@@ -31,7 +31,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("hexstrike")
 
-VERSION = "0.7.5"
+VERSION = "0.8.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8888
 
@@ -197,25 +197,39 @@ def _resolve_tool(tool_name: str):
     return exec_func, tool_key
 
 
-def _format_result(result: dict) -> str:
-    """Pretty-print a tool result dict."""
+def _format_scan_result(tool_name: str, target: str, result: dict) -> str:
+    """Format scan result with a compact summary box + raw output."""
+    C = _cli_colors()
+    b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
     out = result.get("output", "") or result.get("stdout", "")
     err = result.get("error", "") or result.get("stderr", "")
     success = result.get("success", False)
-    lines = []
+    timed_out = result.get("timed_out", False)
+    exec_time = result.get("execution_time", 0)
     if success:
-        lines.append(f"✅ Success ({result.get('execution_time', 0):.1f}s)")
+        icon, sl = "✅", f"Success ({exec_time:.1f}s)"
+    elif timed_out:
+        icon, sl = "⏰", f"Timed out ({exec_time:.1f}s)"
     else:
-        timed_out = result.get("timed_out", False)
-        if timed_out:
-            lines.append(f"⏰ Timed out ({result.get('execution_time', 0):.1f}s)")
-        else:
-            lines.append(f"❌ Failed")
-    if out:
-        lines.append(out.strip()[:2000])
+        icon, sl = "❌", f"Failed"
+    rows = [
+        f"  {w}Tool:{R}    {tool_name}",
+        f"  {w}Target:{R}  {target or '(none)'}",
+        f"  {w}Status:{R}  {icon} {sl}",
+    ]
+    inner = max(_dw(r) for r in rows)
+    def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
+    buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
+    for r in rows:
+        buf.append(p(r))
+    buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
+    body = out.strip() if out else ""
     if err:
-        lines.append(f"Error: {err.strip()[:500]}")
-    return "\n".join(lines)
+        body += f"\n{g}Error: {err.strip()[:500]}{R}" if body else f"{g}Error: {err.strip()[:500]}{R}"
+    if body:
+        buf.append("")
+        buf.append(body)
+    return '\n'.join(buf) + '\n'
 
 
 # ============================================================================
@@ -265,10 +279,8 @@ def cmd_scan(args):
 
     exec_func, tool_key = resolved
 
-    # Build params from CLI args
     params = {}
     if target:
-        # Most tools use target; some use domain, url, etc.
         params["target"] = target
         params["url"] = target
     if args.param:
@@ -277,26 +289,17 @@ def cmd_scan(args):
                 k, v = p.split("=", 1)
                 params[k] = v
 
-    logger.info(f"🔍 Running {tool_name} against {target or '...'}")
-
-    if args.json:
-        _stdout_buf = io.StringIO()
-        with redirect_stdout(_stdout_buf):
-            result = exec_func(tool_key, params)
-        _stdout_buf.close()
-    else:
-        result = exec_func(tool_key, params)
+    result = exec_func(tool_key, params)
 
     if args.json:
         output = json.dumps(result, indent=2, default=str)
     else:
-        output = _format_result(result)
+        output = _format_scan_result(tool_name, target, result)
 
     if args.output:
         Path(args.output).write_text(output)
-        logger.info(f"📝 Output written to {args.output}")
 
-    print(output)
+    print(output, end="")
 
 
 # ============================================================================

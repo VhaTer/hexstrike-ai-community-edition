@@ -11,23 +11,8 @@
 # ============================================================================
 requests>=2.31.0,<3.0.0         # HTTP library (requests import)
 psutil>=5.9.0,<6.0.0            # System utilities (psutil import)
-fastmcp[tasks]>=3.1.1               # MCP framework (3.1.1 installed, 3.2.x available) 
-# ============================================================================
-# WEB SCRAPING & AUTOMATION (ACTUALLY USED)
-# ============================================================================
-beautifulsoup4>=4.12.0,<5.0.0   # HTML parsing (from bs4 import BeautifulSoup)
-selenium>=4.15.0,<5.0.0         # Browser automation (selenium imports)
-webdriver-manager>=4.0.0,<5.0.0 # ChromeDriver management (referenced in code)
-
-# ============================================================================
-# ASYNC & NETWORKING (ACTUALLY USED)
-# ============================================================================
-aiohttp>=3.8.0,<4.0.0           # Async HTTP (aiohttp import)
-
-# ============================================================================
-# PROXY & TESTING (ACTUALLY USED)
-# ============================================================================
-mitmproxy>=12.1.2        # HTTP proxy (mitmproxy imports)
+fastmcp[apps]>=3.1.1               # MCP framework + Prefab UI support
+prefab-ui>=0.14.0,<0.15.0          # Prefab UI components (pinned to 0.14.x for API stability)
 
 # ============================================================================
 # CONDITIONALLY USED
@@ -99,6 +84,6 @@ social-analyzer>=0.45.0      # Social media OSINT tool
 # 2. Ubuntu/Debian users should install tools from official repositories
 # 3. Some tools require compilation from source or additional setup
 # 4. Cloud tools require API keys and authentication configuration
-# 5. Browser Agent requires Chrome/Chromium and ChromeDriver installation
+# 5. Cloud tools require API keys and authentication configuration
 #
 # For complete installation instructions and setup guides, see README.md

@@ -139,7 +139,7 @@ def test_build_dashboard_healthy():
     from contextlib import ExitStack
 
     cfg = MagicMock()
-    cfg.get.return_value = "0.7.5"
+    cfg.get.return_value = "0.8.0"
 
     with ExitStack() as stack:
         stack.enter_context(patch("hexstrike_server._get_tool_availability",
@@ -154,7 +154,7 @@ def test_build_dashboard_healthy():
 
     assert result["status"] == "healthy"
     assert result["all_essential_tools_available"] is True
-    assert result["version"] == "0.7.5"
+    assert result["version"] == "0.8.0"
     assert result["total_tools_available"] == 17
     assert result["total_tools_count"] == 17
     assert result["category_stats"]["essential"]["available"] == 3
@@ -170,7 +170,7 @@ def test_build_dashboard_degraded():
     from contextlib import ExitStack
 
     cfg = MagicMock()
-    cfg.get.return_value = "0.7.5"
+    cfg.get.return_value = "0.8.0"
 
     with ExitStack() as stack:
         stack.enter_context(patch("hexstrike_server._get_tool_availability",
@@ -197,7 +197,7 @@ def test_build_dashboard_with_age():
     hexstrike_server._tool_availability_last_refresh = 1000.0
 
     cfg = MagicMock()
-    cfg.get.return_value = "0.7.5"
+    cfg.get.return_value = "0.8.0"
 
     with ExitStack() as stack:
         stack.enter_context(patch("hexstrike_server._get_tool_availability",

@@ -19,9 +19,9 @@ from datetime import datetime
 from starlette.responses import FileResponse, Response, StreamingResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 
-from mcp_core.server_setup import setup_mcp_server_standalone
+from mcp_core.server_setup import setup_mcp_server_standalone, _op_metrics, _scan_cache
 from server_core.modern_visual_engine import ModernVisualEngine
-from server_core.singletons import cache, telemetry, enhanced_process_manager
+from server_core.singletons import cache, telemetry, enhanced_process_manager, error_handler
 import server_core.config_core as config_core
 
 # ---------------------------------------------------------------------------
@@ -97,6 +97,7 @@ def _build_dashboard_response():
             "total_tools_available": sum(1 for v in tools_status.values() if v),
             "total_tools_count": len(tools_status),
             "category_stats": category_stats,
+            "category_tools": _HEALTH_TOOL_CATEGORIES,
             "tool_availability_age_seconds": round(time.time() - _tool_availability_last_refresh, 1) if _tool_availability_last_refresh > 0 else None,
 
             # System resources
@@ -105,6 +106,24 @@ def _build_dashboard_response():
 
             # Cache stats
             "cache_stats": cache.get_stats(),
+
+            # Operational metrics (success rates, slowest tools, etc.)
+            "op_metrics": _op_metrics.summary(),
+
+            # Error statistics
+            "error_stats": error_handler.get_error_statistics(),
+
+            # Recent scan cache entries (last 10)
+            "recent_scans": [
+                {
+                    "tool": v["tool"],
+                    "target": v["target"],
+                    "timestamp": v["timestamp"],
+                    "success": v["result"].get("success", False),
+                    "execution_time": v["result"].get("execution_time", 0),
+                }
+                for k, v in (list(_scan_cache.items())[-10:])
+            ],
         }
     except Exception as e:
         logger.error(f"Error building web dashboard response: {e}")
@@ -222,11 +241,51 @@ def register_http_routes(mcp, logger, static_dir=None):
                         yield f"data: {js}\n\n".encode()
                         last_json = js
                     else:
-                        # Keepalive if nothing new
                         yield b": keepalive\n\n"
                 except Exception as e:
                     yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
                 await asyncio.sleep(2)
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
+        )
+
+    @mcp.custom_route("/api/logs/stream", methods=["GET"])
+    async def stream_logs(request):
+        """SSE endpoint — streams server logs to the dashboard Logs tab.
+
+        Query params:
+            lines (int): Number of recent lines to send initially (default 150).
+        """
+        from server_core.setup_logging import get_log_buffer
+        buffer = get_log_buffer()
+
+        try:
+            n = int(request.query_params.get("lines", "150"))
+        except (ValueError, TypeError):
+            n = 150
+        n = max(10, min(n, 1000))
+
+        async def generate():
+            q = buffer.subscribe()
+            try:
+                for line in buffer.get_recent(n):
+                    yield f"data: {line}\n\n".encode()
+                while True:
+                    try:
+                        line = await asyncio.wait_for(q.get(), timeout=5)
+                        yield f"data: {line}\n\n".encode()
+                    except asyncio.TimeoutError:
+                        yield b": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                buffer.unsubscribe(q)
 
         return StreamingResponse(
             generate(),
@@ -255,7 +314,7 @@ if __name__ == "__main__":
         prog="python3 hexstrike_server.py",
         description="HexStrike AI-PULSE — FastMCP Standalone Server",
     )
-    parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.7.5')}")
+    parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.8.0')}")
     parser.add_argument("--host", default=None, help=f"Bind address (default: {API_HOST})")
     parser.add_argument("--port", type=int, default=None, help=f"Bind port (default: {API_PORT})")
     args = parser.parse_args()
@@ -266,7 +325,7 @@ if __name__ == "__main__":
     logging.getLogger("fastmcp").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
-    ver = config_core.get("VERSION", "0.7.5")
+    ver = config_core.get("VERSION", "0.8.0")
     print()
     print(ModernVisualEngine.create_banner(
         host=host, port=port, version=ver,

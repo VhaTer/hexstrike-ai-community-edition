@@ -161,8 +161,9 @@ def sample_target_profile():
 @pytest.fixture
 def mock_tool_stats():
     """Mock ToolStatsStore for testing effectiveness scoring"""
-    with patch('server_core.intelligence.intelligent_decision_engine._tool_stats') as mock:
-        mock.blended_effectiveness.return_value = 0.8
+    from server_core.singletons import get_tool_stats_store
+    store = get_tool_stats_store()
+    with patch.object(store, "blended_effectiveness", return_value=0.8) as mock:
         yield mock
 
 
@@ -628,7 +629,7 @@ class TestAdvancedOptimization:
         tools = decision_engine.select_optimal_tools(profile, objective="comprehensive")
         
         # Should have called blended_effectiveness
-        assert mock_tool_stats.blended_effectiveness.called
+        assert mock_tool_stats.called
 
 
 # ============================================================================
