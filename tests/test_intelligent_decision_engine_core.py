@@ -5,9 +5,9 @@ import os
 
 from server_core.intelligence.intelligent_decision_engine import (
     IntelligentDecisionEngine,
-    _tool_stats,
     parameter_optimizer,
 )
+from server_core.singletons import get_tool_stats_store
 from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain
@@ -848,11 +848,12 @@ class TestOptimizeParametersDispatch:
 
 class TestEffectiveScore:
     def test_baseline_score(self, engine):
-        score = engine._effective_score("nmap", TargetType.WEB_APPLICATION.value)
+        with patch.object(get_tool_stats_store(), "blended_effectiveness", return_value=0.8):
+            score = engine._effective_score("nmap", TargetType.WEB_APPLICATION.value)
         assert score == pytest.approx(0.8, abs=0.01)
 
     def test_blended_with_stats(self, engine):
-        with patch.object(_tool_stats, "blended_effectiveness", return_value=0.95):
+        with patch.object(get_tool_stats_store(), "blended_effectiveness", return_value=0.95):
             score = engine._effective_score("nmap", TargetType.WEB_APPLICATION.value)
         assert score == 0.95
 

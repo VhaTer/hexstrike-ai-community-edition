@@ -7,10 +7,9 @@ from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain, AttackStep
 from server_core.parameter_optimizer import ParameterOptimizer
-from server_core.tool_stats_store import ToolStatsStore
+from server_core.singletons import get_tool_stats_store
 
 parameter_optimizer = ParameterOptimizer()
-_tool_stats = ToolStatsStore()
 
 class IntelligentDecisionEngine:
     """AI-powered tool selection and parameter optimization engine"""
@@ -425,7 +424,7 @@ class IntelligentDecisionEngine:
             float in [0.0, 1.0]
         """
         baseline = self.tool_effectiveness.get(target_type_value, {}).get(tool, 0.5)
-        return _tool_stats.blended_effectiveness(tool, baseline)
+        return get_tool_stats_store().blended_effectiveness(tool, baseline)
 
     def select_optimal_tools(self, profile: TargetProfile, objective: str = "comprehensive") -> List[str]:
         """Select optimal tools based on target profile and objective"""

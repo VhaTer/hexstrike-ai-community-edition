@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "hexstrike-pulse": {
+      "command": "wsl.exe",
+      "args": [
+        "-d", "kali-linux",
+        "/home/vhater/hexstrike-ai-community-edition/hexstrike-env/bin/python3",
+        "/home/vhater/hexstrike-ai-community-edition/hexstrike_mcp.py"
+      ],
+      "env": {
+        "HEXSTRIKE_LOG_LEVEL": "warning"
+      }
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import asyncio
+import collections
 import logging
 import os
 import re
@@ -139,4 +141,56 @@ def setup_logging(log_file: str = 'hexstrike.log') -> logging.Logger:
 
     logging.getLogger('werkzeug').addFilter(_SuppressWerkzeugBanner())
 
+    get_log_buffer()
+
     return root
+
+
+class _LogBufferHandler(logging.Handler):
+    """In-memory log buffer for SSE streaming to the dashboard Logs tab."""
+
+    def __init__(self, maxlen: int = 1000):
+        super().__init__()
+        self.maxlen = maxlen
+        self._buffer: collections.deque[str] = collections.deque(maxlen=maxlen)
+        self._queues: list[asyncio.Queue] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        line = self.format(record)
+        self._buffer.append(line)
+        dead = []
+        for q in self._queues:
+            try:
+                q.put_nowait(line)
+            except (asyncio.QueueFull, RuntimeError):
+                dead.append(q)
+        for q in dead:
+            self._queues.remove(q)
+
+    def get_recent(self, n: int = 150) -> list[str]:
+        return list(self._buffer)[-n:]
+
+    def subscribe(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=500)
+        self._queues.append(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue) -> None:
+        if q in self._queues:
+            self._queues.remove(q)
+
+
+_LOG_BUFFER: _LogBufferHandler | None = None
+
+
+def get_log_buffer() -> _LogBufferHandler:
+    """Return the global log buffer handler, creating it if needed."""
+    global _LOG_BUFFER
+    if _LOG_BUFFER is None:
+        _LOG_BUFFER = _LogBufferHandler()
+        fmt = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        _LOG_BUFFER.setFormatter(fmt)
+    root = logging.getLogger()
+    if _LOG_BUFFER not in root.handlers:
+        root.addHandler(_LOG_BUFFER)
+    return _LOG_BUFFER

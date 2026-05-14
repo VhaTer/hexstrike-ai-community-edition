@@ -22,6 +22,8 @@ def run_mcp(args, logger):
 
     try:
         mcp = setup_mcp_server_standalone(logger)
+        from pulse_app import app as pulse_app
+        mcp.add_provider(pulse_app)
         logger.info("✅ HexStrike AI-PULSE MCP server ready")
 
         # stdio transport for Claude Desktop / MCP clients

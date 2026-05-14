@@ -54,6 +54,16 @@ _ctf_manager          = None
 _ctf_tools            = None
 _ctf_automator        = None
 _ctf_coordinator      = None
+_tool_stats_store     = None
+
+
+def get_tool_stats_store():
+    """ToolStatsStore — per-tool effectiveness tracker (persisted to JSON)."""
+    global _tool_stats_store
+    if _tool_stats_store is None:
+        from .tool_stats_store import ToolStatsStore
+        _tool_stats_store = ToolStatsStore()
+    return _tool_stats_store
 
 
 def get_session_store():
@@ -176,6 +186,7 @@ _LAZY_ALIASES = {
     "ctf_tools":              get_ctf_tools,
     "ctf_automator":          get_ctf_automator,
     "ctf_coordinator":        get_ctf_coordinator,
+    "tool_stats_store":       get_tool_stats_store,
 }
 
 

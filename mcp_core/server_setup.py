@@ -12,6 +12,7 @@ from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
 from server_core.operational_metrics import _op_metrics
+from server_core.singletons import get_tool_stats_store
 from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
@@ -809,6 +810,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             _telemetry["duration"] = round(time.time() - _t_start, 3)
             logger.info("[telemetry] %s", json.dumps(_telemetry))
             _op_metrics.record(_telemetry)
+            get_tool_stats_store().record(
+                tool_name,
+                success=_telemetry["success"],
+            )
             return normalized
 
         try:
