@@ -587,7 +587,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     transforms = [BM25SearchTransform(
         max_results=15,
         search_result_serializer=serialize_tools_for_output_markdown,
-        always_visible=["nmap", "whatweb", "sqlmap"],
+        always_visible=["nmap", "whatweb", "sqlmap", "pulse_dashboard", "get_pulse_data"],
     )] if BM25SearchTransform else []
     mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
 

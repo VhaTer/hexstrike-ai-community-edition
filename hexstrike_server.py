@@ -116,11 +116,11 @@ def _build_dashboard_response():
             # Recent scan cache entries (last 10)
             "recent_scans": [
                 {
-                    "tool": v["tool"],
-                    "target": v["target"],
-                    "timestamp": v["timestamp"],
-                    "success": v["result"].get("success", False),
-                    "execution_time": v["result"].get("execution_time", 0),
+                    "tool":           v.get("tool", "?"),
+                    "target":         v.get("target", "?"),
+                    "timestamp":      v.get("timestamp", 0),
+                    "success":        v.get("result", {}).get("success", False),
+                    "execution_time": v.get("result", {}).get("execution_time", 0),
                 }
                 for k, v in (list(_scan_cache.items())[-10:])
             ],

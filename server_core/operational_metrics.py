@@ -209,6 +209,7 @@ class OperationalMetricsStore:
                 "cpu_percent": cpu,
                 "memory_percent": mem.percent,
                 "memory_available_gb": round(mem.available / (1024**3), 1),
+                "memory_total_gb": round(mem.total / (1024**3), 1),
                 "disk_usage_percent": round(disk.used / disk.total * 100, 1),
                 "disk_free_gb": round(disk.free / (1024**3), 1),
             }

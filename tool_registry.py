@@ -70,17 +70,6 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.90,
     },
 
-    # "cve-monitor": {
-    #     "desc": "Monitor CVE databases for new vulnerabilities with AI analysis.",
-    #     "endpoint": "/api/vuln-intel/cve-monitor",
-    #     "method": "POST",
-    #     "category": "vulnerability_intelligence",
-    #     "params": {},
-    #     "optional": {
-    #         "keywords": ""
-    #     },
-    #     "effectiveness": 0.90,
-    # },
     
     # ---- Network Recon ----
     "nmap": {
@@ -148,15 +137,6 @@ TOOLS: Dict[str, dict] = {
         "params": {"target": {"required": True}},
         "optional": {"additional_args": ""},
         "effectiveness": 0.85,
-    },
-    "nbtscan": {
-        "desc": "NetBIOS name scanner",
-        "endpoint": "/api/tools/nbtscan",
-        "method": "POST",
-        "category": "network_recon",
-        "params": {"target": {"required": True}},
-        "optional": {"additional_args": ""},
-        "effectiveness": 0.75,
     },
     "netexec": {
         "desc": "NetExec protocol-aware authentication and enumeration wrapper",
@@ -572,7 +552,7 @@ TOOLS: Dict[str, dict] = {
     },
     "impacket-scripts": {
         "desc": "Execute Impacket scripts with dynamic arguments (e.g. GetADUsers, secretsdump, smbclient, psexec)",
-        "endpoint": "/api/tool/active_directory/impacket",
+        "endpoint": "/api/tools/active_directory/impacket",
         "method": "POST",
         "category": "active_directory",
         "params": {
@@ -586,7 +566,7 @@ TOOLS: Dict[str, dict] = {
     },
     "impacket-spec": {
         "desc": "Retrieve argument specification and usage for a given Impacket script",
-        "endpoint": "/api/tool/active_directory/impacket/spec",
+        "endpoint": "/api/tools/active_directory/impacket/spec",
         "method": "POST",
         "category": "active_directory",
         "params": {
@@ -598,7 +578,7 @@ TOOLS: Dict[str, dict] = {
     },
     "impacket-ad-enum": {
         "desc": "Convenience wrapper for Active Directory enumeration Impacket scripts such as GetADUsers, GetNPUsers, GetUserSPNs, lookupsid, and findDelegation",
-        "endpoint": "/api/tool/active_directory/impacket",
+        "endpoint": "/api/tools/active_directory/impacket",
         "method": "POST",
         "category": "active_directory",
         "params": {
@@ -622,7 +602,7 @@ TOOLS: Dict[str, dict] = {
     },
     "impacket-remote-exec": {
         "desc": "Convenience wrapper for remote execution Impacket scripts such as psexec, wmiexec, smbexec, dcomexec, and atexec",
-        "endpoint": "/api/tool/active_directory/impacket",
+        "endpoint": "/api/tools/active_directory/impacket",
         "method": "POST",
         "category": "lateral_movement",
         "params": {
@@ -687,7 +667,7 @@ TOOLS: Dict[str, dict] = {
     },
     "sublist3r": {
         "desc": "Subdomain enumeration using OSINT sources",
-        "endpoint": "/api/osint/tools/sublist3r",
+        "endpoint": "/api/tools/osint/sublist3r",
         "method": "POST",
         "category": "osint",
         "params": {"domain": {"required": True}},
@@ -748,18 +728,6 @@ TOOLS: Dict[str, dict] = {
         "params": {"interface": {"required": True}, "essid": {"required": True}},
         "optional": {"channel": 6, "auth_mode": "", "attack_type": "", "negotiate": "", "cert_path": ""},
         "effectiveness": 0.88,
-    },
-    "aircrack-ng": {
-        "desc": "Crack WPA/WPA2 PSK from captured handshake files using a wordlist.",
-        "endpoint": "/api/tools/wifi_pentest/aircrack_ng",
-        "method": "POST",
-        "category": "wifi_pentest",
-        "params": {
-            "capture_files": {"required": True, "type": "list"},
-            "wordlist":      {"required": True},
-        },
-        "optional": {"bssid": ""},
-        "effectiveness": 0.91,
     },
     "airmon-ng": {
         "desc": "Enable or disable monitor mode on a wireless interface.",
@@ -905,24 +873,7 @@ TOOLS: Dict[str, dict] = {
         "optional": {"targets": "", "version": "", "config_dir": "", "output_format": "json", "additional_args": ""},
         "effectiveness": 0.84,
     },
-    "checkov": {
-        "desc": "Infrastructure-as-code misconfiguration scanner",
-        "endpoint": "/api/tools/checkov",
-        "method": "POST",
-        "category": "cloud",
-        "params": {},
-        "optional": {"directory": ".", "framework": "", "check": "", "skip_check": "", "output_format": "json", "additional_args": ""},
-        "effectiveness": 0.86,
-    },
-    "terrascan": {
-        "desc": "Terraform and IaC policy scanner",
-        "endpoint": "/api/tools/terrascan",
-        "method": "POST",
-        "category": "cloud",
-        "params": {},
-        "optional": {"scan_type": "all", "iac_dir": ".", "policy_type": "", "output_format": "json", "severity": "", "additional_args": ""},
-        "effectiveness": 0.84,
-    },
+
     # ---- Bots and AI-driven tools ----
     "bbot": {
         "desc": "Reconnaissance and enumeration with BBot",
@@ -1011,7 +962,7 @@ TOOLS: Dict[str, dict] = {
     # ---- OPS ----
     "auto_install_missing_apt_tools": {
         "desc": "REQUIRES root! - Automatically install missing tools",
-        "endpoint": "api/tools/auto-install-missing-apt",
+        "endpoint": "/api/tools/auto-install-missing-apt",
         "method": "POST",
         "category": "ops",
         "params": {},
@@ -1422,33 +1373,6 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.75,
         "parent_tool": "curl",
     },
-    # "httpie": {
-    #     "desc": "Human-friendly HTTP client for API testing and inspection",
-    #     "endpoint": "/api/tools/http-framework",
-    #     "method": "POST",
-    #     "category": "api",
-    #     "params": {"url": {"required": True}},
-    #     "optional": {"method": "GET", "data": "", "headers": ""},
-    #     "effectiveness": 0.75,
-    # },
-    # "postman": {
-    #     "desc": "API platform for building and testing HTTP requests",
-    #     "endpoint": "/api/tools/http-framework",
-    #     "method": "POST",
-    #     "category": "api",
-    #     "params": {"url": {"required": True}},
-    #     "optional": {"method": "GET", "data": "", "headers": ""},
-    #     "effectiveness": 0.78,
-    # },
-    # "insomnia": {
-    #     "desc": "REST/GraphQL API client for design and testing",
-    #     "endpoint": "/api/tools/http-framework",
-    #     "method": "POST",
-    #     "category": "api",
-    #     "params": {"url": {"required": True}},
-    #     "optional": {"method": "GET", "data": "", "headers": ""},
-    #     "effectiveness": 0.76,
-    # },
     "api_fuzzer": {
         "desc": "Custom API fuzzer for parameter and endpoint fuzzing.",
         "endpoint": "/api/tools/api_fuzzer",
@@ -1470,15 +1394,6 @@ TOOLS: Dict[str, dict] = {
         "optional": {},
         "effectiveness": 0.85,
     },
-    # "social-analyzer": {
-    #     "desc": "Social media presence analysis and OSINT gathering",
-    #     "endpoint": "/api/tools/osint/social_analyzer",
-    #     "method": "POST",
-    #     "category": "osint",
-    #     "params": {"username": {"required": True}},
-    #     "optional": {"additional_args": ""},
-    #     "effectiveness": 0.80,
-    # },
     "recon-ng": {
         "desc": "Web reconnaissance framework with modular architecture",
         "endpoint": "/api/tools/recon_ng",
@@ -1506,34 +1421,7 @@ TOOLS: Dict[str, dict] = {
         "optional": {},
         "effectiveness": 0.85,
     },
-    # "shodan-cli": {
-    #     "desc": "Shodan CLI — search internet-connected devices and services",
-    #     "endpoint": "/api/tools/shodan",
-    #     "method": "POST",
-    #     "category": "osint",
-    #     "params": {"query": {"required": True}},
-    #     "optional": {"additional_args": ""},
-    #     "effectiveness": 0.88,
-    # },
-    # "censys-cli": {
-    #     "desc": "Censys CLI — internet asset discovery and certificate analysis",
-    #     "endpoint": "/api/tools/censys",
-    #     "method": "POST",
-    #     "category": "osint",
-    #     "params": {"query": {"required": True}},
-    #     "optional": {"additional_args": ""},
-    #     "effectiveness": 0.85,
-    # },
-    # "have-i-been-pwned": {
-    #     "desc": "Check if credentials or domains appear in breach data",
-    #     "endpoint": "/api/tools/hibp",
-    #     "method": "POST",
-    #     "category": "osint",
-    #     "params": {"query": {"required": True}},
-    #     "optional": {"additional_args": ""},
-    #     "effectiveness": 0.80,
-    # },
-
+    
     # ---- Password ----
     "hashcat-utils": {
         "desc": "Hashcat utility tools — cap2hccapx, combinator, expander, etc.",

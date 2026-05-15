@@ -582,7 +582,7 @@ class CTFWorkflowManager:
             "unknown": 1.3
         }
 
-        multiplier = difficulty_multipliers[challenge.difficulty]
+        multiplier = difficulty_multipliers.get(challenge.difficulty, difficulty_multipliers["unknown"])
         base_requirements["cpu_cores"] = int(base_requirements["cpu_cores"] * multiplier)
         base_requirements["memory_mb"] = int(base_requirements["memory_mb"] * multiplier)
         base_requirements["disk_space_mb"] = int(base_requirements["disk_space_mb"] * multiplier)

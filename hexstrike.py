@@ -9,7 +9,7 @@ Usage:
   hexstrike status    Check server health
   hexstrike validate  Validate environment (binary availability)
   hexstrike mcp       Run MCP stdio bridge (Claude Desktop)
-  hexstrike ctf       CTF workflow analysis
+   hexstrike ctf       CTF challenge analysis with live nmap scan
 
 Flags:
   --version     Show version
@@ -28,33 +28,28 @@ import urllib.error
 from contextlib import redirect_stdout
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 logger = logging.getLogger("hexstrike")
 
 VERSION = "0.8.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8888
 
-# ---------------------------------------------------------------------------
-# Direct tool routing (same pattern as DIRECT_TOOLS in server_setup.py)
-# ---------------------------------------------------------------------------
 DIRECT_ROUTES = {
-    # wifi
-    "airmon_ng":         ("mcp_core.wifi_direct", "wifi_exec", "airmon_ng"),
-    "airodump_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airodump_ng"),
-    "aireplay_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aireplay_ng"),
-    "aircrack_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aircrack_ng"),
+    "airmon_ng":         ("mcp_core.wifi_direct", "wifi_exec", "airmon-ng"),
+    "airodump_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airodump-ng"),
+    "aireplay_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aireplay-ng"),
+    "aircrack_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aircrack-ng"),
     "hcxdumptool":       ("mcp_core.wifi_direct", "wifi_exec", "hcxdumptool"),
     "hcxpcapngtool":     ("mcp_core.wifi_direct", "wifi_exec", "hcxpcapngtool"),
     "eaphammer":         ("mcp_core.wifi_direct", "wifi_exec", "eaphammer"),
     "wifite":            ("mcp_core.wifi_direct", "wifi_exec", "wifite2"),
-    "airbase_ng":        ("mcp_core.wifi_direct", "wifi_exec", "airbase_ng"),
-    "airdecap_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airdecap_ng"),
+    "airbase_ng":        ("mcp_core.wifi_direct", "wifi_exec", "airbase-ng"),
+    "airdecap_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airdecap-ng"),
     "bettercap":         ("mcp_core.wifi_direct", "wifi_exec", "bettercap_wifi"),
     "tcpdump":           ("mcp_core.wifi_direct", "wifi_exec", "tcpdump"),
     "tshark":            ("mcp_core.wifi_direct", "wifi_exec", "tshark"),
     "mdk4":              ("mcp_core.wifi_direct", "wifi_exec", "mdk4"),
-    # recon
     "amass":             ("mcp_core.recon_direct", "recon_exec", "amass"),
     "subfinder":         ("mcp_core.recon_direct", "recon_exec", "subfinder"),
     "autorecon":         ("mcp_core.recon_direct", "recon_exec", "autorecon"),
@@ -62,13 +57,11 @@ DIRECT_ROUTES = {
     "dnsenum":           ("mcp_core.recon_direct", "recon_exec", "dnsenum"),
     "fierce":            ("mcp_core.recon_direct", "recon_exec", "fierce"),
     "whois":             ("mcp_core.recon_direct", "recon_exec", "whois"),
-    # net_scan
     "nmap":              ("mcp_core.net_scan_direct", "net_scan_exec", "nmap"),
     "nmap_advanced":     ("mcp_core.net_scan_direct", "net_scan_exec", "nmap-advanced"),
     "masscan":           ("mcp_core.net_scan_direct", "net_scan_exec", "masscan"),
     "rustscan":          ("mcp_core.net_scan_direct", "net_scan_exec", "rustscan"),
     "arp_scan":          ("mcp_core.net_scan_direct", "net_scan_exec", "arp-scan"),
-    # web_scan
     "nikto":             ("mcp_core.web_scan_direct", "web_scan_exec", "nikto"),
     "sqlmap":            ("mcp_core.web_scan_direct", "web_scan_exec", "sqlmap"),
     "wpscan":            ("mcp_core.web_scan_direct", "web_scan_exec", "wpscan"),
@@ -76,7 +69,6 @@ DIRECT_ROUTES = {
     "jaeles":            ("mcp_core.web_scan_direct", "web_scan_exec", "jaeles"),
     "xsser":             ("mcp_core.web_scan_direct", "web_scan_exec", "xsser"),
     "zap":               ("mcp_core.web_scan_direct", "web_scan_exec", "zap"),
-    # web_fuzz
     "gobuster":          ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "gobuster"),
     "ffuf":              ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "ffuf"),
     "feroxbuster":       ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "feroxbuster"),
@@ -84,7 +76,6 @@ DIRECT_ROUTES = {
     "dirb":              ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "dirb"),
     "wfuzz":             ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "wfuzz"),
     "dotdotpwn":         ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "dotdotpwn"),
-    # password_cracking
     "hydra":             ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hydra"),
     "hashcat":           ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hashcat"),
     "john":              ("mcp_core.password_cracking_direct", "pwdcrack_exec", "john"),
@@ -92,7 +83,6 @@ DIRECT_ROUTES = {
     "patator":           ("mcp_core.password_cracking_direct", "pwdcrack_exec", "patator"),
     "hashid":            ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hashid"),
     "ophcrack":          ("mcp_core.password_cracking_direct", "pwdcrack_exec", "ophcrack"),
-    # smb_enum
     "enum4linux":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "enum4linux"),
     "enum4linux-ng":     ("mcp_core.smb_enum_direct", "smb_enum_exec", "enum4linux-ng"),
     "netexec":           ("mcp_core.smb_enum_direct", "smb_enum_exec", "netexec"),
@@ -100,14 +90,12 @@ DIRECT_ROUTES = {
     "smbmap":            ("mcp_core.smb_enum_direct", "smb_enum_exec", "smbmap"),
     "nbtscan":           ("mcp_core.smb_enum_direct", "smb_enum_exec", "nbtscan"),
     "nxc":               ("mcp_core.smb_enum_direct", "smb_enum_exec", "nxc"),
-    "evil_winrm":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "evil_winrm"),
-    # exploit
+    "evil_winrm":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "evil-winrm"),
     "metasploit":        ("mcp_core.exploit_framework_direct", "exploit_exec", "metasploit"),
     "msfvenom":          ("mcp_core.exploit_framework_direct", "exploit_exec", "msfvenom"),
     "searchsploit":      ("mcp_core.exploit_framework_direct", "exploit_exec", "exploit_db"),
     "exploit_db":        ("mcp_core.exploit_framework_direct", "exploit_exec", "exploit_db"),
     "pwntools":          ("mcp_core.exploit_framework_direct", "exploit_exec", "pwntools"),
-    # web_recon
     "katana":            ("mcp_core.web_recon_direct", "web_recon_exec", "katana"),
     "hakrawler":         ("mcp_core.web_recon_direct", "web_recon_exec", "hakrawler"),
     "gau":               ("mcp_core.web_recon_direct", "web_recon_exec", "gau"),
@@ -117,14 +105,12 @@ DIRECT_ROUTES = {
     "arjun":             ("mcp_core.web_recon_direct", "web_recon_exec", "arjun"),
     "paramspider":       ("mcp_core.web_recon_direct", "web_recon_exec", "paramspider"),
     "x8":                ("mcp_core.web_recon_direct", "web_recon_exec", "x8"),
-    # security
     "prowler":           ("mcp_core.security_direct", "security_exec", "prowler"),
     "trivy":             ("mcp_core.security_direct", "security_exec", "trivy"),
     "kube_hunter":       ("mcp_core.security_direct", "security_exec", "kube-hunter"),
     "kube_bench":        ("mcp_core.security_direct", "security_exec", "kube-bench"),
     "checkov":           ("mcp_core.security_direct", "security_exec", "checkov"),
     "terrascan":         ("mcp_core.security_direct", "security_exec", "terrascan"),
-    # misc
     "ropgadget":         ("mcp_core.misc_direct", "misc_exec", "ropgadget"),
     "ropper":            ("mcp_core.misc_direct", "misc_exec", "ropper"),
     "one_gadget":        ("mcp_core.misc_direct", "misc_exec", "one_gadget"),
@@ -160,20 +146,15 @@ DIRECT_ROUTES = {
     "scalpel":           ("mcp_core.misc_direct", "misc_exec", "scalpel"),
     "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
     "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
-    # web_probe
     "whatweb":           ("mcp_core.web_probe_direct", "web_probe_exec", "whatweb"),
     "commix":            ("mcp_core.web_probe_direct", "web_probe_exec", "commix"),
     "joomscan":          ("mcp_core.web_probe_direct", "web_probe_exec", "joomscan"),
-    # testssl
     "testssl":           ("mcp_core.testssl_direct", "testssl_exec", "testssl"),
-    # vuln_intel
     "vulnx":             ("mcp_core.vuln_intel_direct", "vuln_intel_exec", "vulnx"),
-    # osint
     "sherlock":          ("mcp_core.osint_direct", "osint_exec", "sherlock"),
     "spiderfoot":        ("mcp_core.osint_direct", "osint_exec", "spiderfoot"),
     "sublist3r":         ("mcp_core.osint_direct", "osint_exec", "sublist3r"),
     "parsero":           ("mcp_core.osint_direct", "osint_exec", "parsero"),
-    # active_directory
     "impacket":          ("mcp_core.active_directory_direct", "ad_exec", "impacket"),
     "ldapdomaindump":    ("mcp_core.active_directory_direct", "ad_exec", "ldapdomaindump"),
     "adidnsdump":        ("mcp_core.active_directory_direct", "ad_exec", "adidnsdump"),
@@ -187,7 +168,6 @@ DIRECT_ROUTES = {
 
 
 def _resolve_tool(tool_name: str):
-    """Lazy-import and resolve a tool exec function."""
     route = DIRECT_ROUTES.get(tool_name)
     if not route:
         return None
@@ -197,39 +177,36 @@ def _resolve_tool(tool_name: str):
     return exec_func, tool_key
 
 
-def _format_scan_result(tool_name: str, target: str, result: dict) -> str:
-    """Format scan result with a compact summary box + raw output."""
-    C = _cli_colors()
-    b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
-    out = result.get("output", "") or result.get("stdout", "")
-    err = result.get("error", "") or result.get("stderr", "")
-    success = result.get("success", False)
-    timed_out = result.get("timed_out", False)
-    exec_time = result.get("execution_time", 0)
-    if success:
-        icon, sl = "✅", f"Success ({exec_time:.1f}s)"
-    elif timed_out:
-        icon, sl = "⏰", f"Timed out ({exec_time:.1f}s)"
-    else:
-        icon, sl = "❌", f"Failed"
-    rows = [
-        f"  {w}Tool:{R}    {tool_name}",
-        f"  {w}Target:{R}  {target or '(none)'}",
-        f"  {w}Status:{R}  {icon} {sl}",
-    ]
-    inner = max(_dw(r) for r in rows)
-    def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
-    buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
-    for r in rows:
-        buf.append(p(r))
-    buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
-    body = out.strip() if out else ""
-    if err:
-        body += f"\n{g}Error: {err.strip()[:500]}{R}" if body else f"{g}Error: {err.strip()[:500]}{R}"
-    if body:
-        buf.append("")
-        buf.append(body)
-    return '\n'.join(buf) + '\n'
+def _call_with_stdout_suppressed(enabled: bool, func, *args, **kwargs):
+    if not enabled:
+        return func(*args, **kwargs)
+    with redirect_stdout(io.StringIO()):
+        return func(*args, **kwargs)
+
+
+def _cli_colors():
+    from server_core.modern_visual_engine import ModernVisualEngine as _MVE
+    return _MVE.COLORS
+
+
+_ansi_strip = __import__('re').compile(r'\x1b\[[0-9;]*m').sub
+_wcwidth = None
+def _dw(s: str) -> int:
+    global _wcwidth
+    if _wcwidth is None:
+        from wcwidth import wcswidth as _wcwidth
+    return _wcwidth(_ansi_strip('', s))
+
+
+def _print_output(output: str, args):
+    print(output, end="")
+    if hasattr(args, 'output') and args.output:
+        Path(args.output).write_text(output)
+
+
+def _emit_json(data, args):
+    output = json.dumps(data, indent=2, default=str)
+    _print_output(output, args)
 
 
 # ============================================================================
@@ -246,8 +223,8 @@ def cmd_serve(args):
     port = args.port or int(os.environ.get("HEXSTRIKE_PORT", DEFAULT_PORT))
 
     print(ModernVisualEngine.create_banner())
-    logger.info(f"🚀 Starting HexStrike Pulse Server")
-    logger.info(f"📡 Server: http://{host}:{port}")
+    logger.info(f"Starting HexStrike Pulse Server")
+    logger.info(f"Server: http://{host}:{port}")
 
     mcp = setup_mcp_server_standalone(logger)
     server_setup.register_http_routes(mcp, logger)
@@ -264,42 +241,78 @@ def cmd_serve(args):
 # Subcommand: scan
 # ============================================================================
 
+def _unknown_tool_json(tool_name):
+    similar = [t for t in DIRECT_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
+    return {"error": f"Unknown tool: {tool_name}", "similar": similar[:5], "success": False}
+
 def cmd_scan(args):
     """Run a security tool directly (no server required)."""
     tool_name = args.tool
-    target = args.target
 
-    resolved = _resolve_tool(tool_name)
+    resolved = _call_with_stdout_suppressed(args.json, _resolve_tool, tool_name)
     if not resolved:
-        logger.error(f"❌ Unknown tool: {tool_name}")
-        similar = [t for t in DIRECT_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
-        if similar:
-            logger.info(f"   Did you mean: {', '.join(similar[:5])}?")
+        if args.json:
+            _emit_json(_unknown_tool_json(tool_name), args)
+        else:
+            logger.error(f"Unknown tool: {tool_name}")
+            similar = [t for t in DIRECT_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
+            if similar:
+                logger.info(f"   Did you mean: {', '.join(similar[:5])}?")
         sys.exit(1)
 
     exec_func, tool_key = resolved
 
     params = {}
+    target = args.target
     if target:
         params["target"] = target
         params["url"] = target
-    if args.param:
-        for p in args.param:
-            if "=" in p:
-                k, v = p.split("=", 1)
-                params[k] = v
+    for p in args.param:
+        if "=" in p:
+            k, v = p.split("=", 1)
+            params[k] = v
 
-    result = exec_func(tool_key, params)
+    result = _call_with_stdout_suppressed(args.json, exec_func, tool_key, params)
 
     if args.json:
-        output = json.dumps(result, indent=2, default=str)
+        _emit_json(result, args)
     else:
         output = _format_scan_result(tool_name, target, result)
+        _print_output(output, args)
 
-    if args.output:
-        Path(args.output).write_text(output)
 
-    print(output, end="")
+def _format_scan_result(tool_name: str, target: str, result: dict) -> str:
+    C = _cli_colors()
+    b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
+    out = result.get("output", "") or result.get("stdout", "")
+    err = result.get("error", "") or result.get("stderr", "")
+    success = result.get("success", False)
+    timed_out = result.get("timed_out", False)
+    exec_time = result.get("execution_time", 0)
+    if success:
+        icon, sl = "\u2705", f"Success ({exec_time:.1f}s)"
+    elif timed_out:
+        icon, sl = "\u23f0", f"Timed out ({exec_time:.1f}s)"
+    else:
+        icon, sl = "\u274c", "Failed"
+    rows = [
+        f"  {w}Tool:{R}    {tool_name}",
+        f"  {w}Target:{R}  {target or '(none)'}",
+        f"  {w}Status:{R}  {icon} {sl}",
+    ]
+    inner = max(_dw(r) for r in rows)
+    def p(s): return f"  {b}\u2502{R}  {s}{' ' * (inner - _dw(s))}  {b}\u2502{R}"
+    buf = [f"  {b}\u250c{'\u2500' * (inner + 4)}\u2510{R}"]
+    for r in rows:
+        buf.append(p(r))
+    buf.append(f"  {b}\u2514{'\u2500' * (inner + 4)}\u2518{R}")
+    body = out.strip() if out else ""
+    if err:
+        body += f"\n{g}Error: {err.strip()[:500]}{R}" if body else f"{g}Error: {err.strip()[:500]}{R}"
+    if body:
+        buf.append("")
+        buf.append(body)
+    return '\n'.join(buf) + '\n'
 
 
 # ============================================================================
@@ -313,10 +326,12 @@ def cmd_tools(args):
     if args.filter:
         matching = {k: v for k, v in TOOLS.items() if args.filter.lower() in k.lower()}
         if not matching:
-            msg = f"No tools matching '{args.filter}'"
-            print(msg)
-            if args.output:
-                Path(args.output).write_text(msg + "\n")
+            if args.json:
+                _emit_json({}, args)
+            else:
+                print(f"No tools matching '{args.filter}'")
+                if args.output:
+                    Path(args.output).write_text(f"No tools matching '{args.filter}'\n")
             return
         source = matching
     else:
@@ -324,10 +339,6 @@ def cmd_tools(args):
 
     cat_order = ["essential", "recon", "web_vuln", "web_fuzz", "password",
                  "smb", "exploit", "osint", "cloud", "binary", "wifi", "misc"]
-
-    def _cat_key(item):
-        cat = item[1].get("category", "zzz")
-        return (cat_order.index(cat) if cat in cat_order else 99, item[0])
 
     by_cat: dict[str, list] = {}
     for name, defn in sorted(source.items()):
@@ -352,51 +363,32 @@ def cmd_tools(args):
                     "description": defn.get("desc", ""),
                     "effectiveness": defn.get("effectiveness", None),
                 }
-        output = json.dumps(data, indent=2)
+        _emit_json(data, args)
     else:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            idx = 0
-            for cat in cat_order:
-                if cat not in by_cat:
-                    continue
-                print(f"\n── {cat} ──")
-                for name, defn in sorted(by_cat[cat]):
-                    idx += 1
-                    desc = defn.get("desc", "")
-                    eff = defn.get("effectiveness", "")
-                    eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
-                    print(f"({idx:2d}) {name:22s} {desc}{eff_str}")
-
-            for cat in sorted(set(by_cat) - set(cat_order)):
-                print(f"\n── {cat} ──")
-                for name, defn in sorted(by_cat[cat]):
-                    idx += 1
-                    print(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
-        output = buf.getvalue()
-
-    print(output, end="")
-    if args.output:
-        Path(args.output).write_text(output)
+        buf = []
+        idx = 0
+        for cat in cat_order:
+            if cat not in by_cat:
+                continue
+            buf.append(f"\n\u2500\u2500 {cat} \u2500\u2500")
+            for name, defn in sorted(by_cat[cat]):
+                idx += 1
+                desc = defn.get("desc", "")
+                eff = defn.get("effectiveness", "")
+                eff_str = f" [{eff:.0%}]" if isinstance(eff, (int, float)) else ""
+                buf.append(f"({idx:2d}) {name:22s} {desc}{eff_str}")
+        for cat in sorted(set(by_cat) - set(cat_order)):
+            buf.append(f"\n\u2500\u2500 {cat} \u2500\u2500")
+            for name, defn in sorted(by_cat[cat]):
+                idx += 1
+                buf.append(f"({idx:2d}) {name:22s} {defn.get('desc', '')}")
+        output = '\n'.join(buf) + '\n'
+        _print_output(output, args)
 
 
 # ============================================================================
 # Subcommand: status
 # ============================================================================
-
-def _cli_colors():
-    from server_core.modern_visual_engine import ModernVisualEngine as _MVE
-    return _MVE.COLORS
-
-
-_ansi_strip = __import__('re').compile(r'\x1b\[[0-9;]*m').sub
-_wcwidth = None
-def _dw(s: str) -> int:
-    global _wcwidth
-    if _wcwidth is None:
-        from wcwidth import wcswidth as _wcwidth
-    return _wcwidth(_ansi_strip('', s))
-
 
 def cmd_status(args):
     """Check Pulse server health."""
@@ -412,14 +404,14 @@ def cmd_status(args):
         checks = data.get("checks", {})
 
         if args.json:
-            output = json.dumps({
+            _emit_json({
                 "status": status, "uptime_seconds": uptime,
                 "host": host, "port": port, "checks": checks,
-            }, indent=2)
+            }, args)
         else:
             C = _cli_colors()
             b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
-            icon = "🟢" if status == "ready" else "🟡" if status == "degraded" else "🔴"
+            icon = "\U0001f7e2" if status == "ready" else "\U0001f7e1" if status == "degraded" else "\U0001f534"
             tools = checks.get("essential_tools", {})
             disk = checks.get("disk", {})
             rows = [
@@ -431,28 +423,24 @@ def cmd_status(args):
                 rows.append(f"  {w}Disk:{R}     {disk.get('free_gb', '?')} GB free ({disk.get('usage_pct', '?')}% used)")
             rows.append(f"  {g}{url}{R}")
             inner = max(_dw(r) for r in rows)
-            def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
-            buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
+            def p(s): return f"  {b}\u2502{R}  {s}{' ' * (inner - _dw(s))}  {b}\u2502{R}"
+            buf = [f"  {b}\u250c{'\u2500' * (inner + 4)}\u2510{R}"]
             buf.append(p(rows[0]))
             buf.extend(p(r) for r in rows[1:-1])
-            buf.append(f"  {b}│{R}  {g}{url}{R}{' ' * (inner - len(url))}  {b}│{R}")
-            buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
-            output = '\n'.join(buf) + '\n'
-
-        print(output, end="")
-        if args.output:
-            Path(args.output).write_text(output)
+            buf.append(f"  {b}\u2502{R}  {g}{url}{R}{' ' * (inner - len(url))}  {b}\u2502{R}")
+            buf.append(f"  {b}\u2514{'\u2500' * (inner + 4)}\u2518{R}")
+            _print_output('\n'.join(buf) + '\n', args)
     except urllib.error.URLError:
-        msg = f"🔴 Pulse server not responding at {url}\n"
-        print(msg, end="")
-        if args.output:
-            Path(args.output).write_text(msg)
+        if args.json:
+            _emit_json({"error": f"Server not responding at {url}", "success": False}, args)
+        else:
+            _print_output(f"\U0001f534 Pulse server not responding at {url}\n", args)
         sys.exit(1)
     except Exception as e:
-        msg = f"🔴 Error: {e}\n"
-        print(msg, end="")
-        if args.output:
-            Path(args.output).write_text(msg)
+        if args.json:
+            _emit_json({"error": str(e), "success": False}, args)
+        else:
+            _print_output(f"\U0001f534 Error: {e}\n", args)
         sys.exit(1)
 
 
@@ -479,13 +467,13 @@ def cmd_validate(args):
             missing.append(tool_name)
 
     if args.json:
-        output = json.dumps({
+        _emit_json({
             "total": len(tools_to_check),
             "present_count": len(present),
             "missing_count": len(missing),
             "present": [{"tool": t, "binary": DIRECT_ROUTES[t][2], "path": shutil.which(DIRECT_ROUTES[t][2])} for t in present],
             "missing": [{"tool": t, "binary": DIRECT_ROUTES[t][2]} for t in missing],
-        }, indent=2)
+        }, args)
     else:
         C = _cli_colors()
         b, g, w, R = C['ACCENT_LINE'], C['TERMINAL_GRAY'], C['BRIGHT_WHITE'], C['RESET']
@@ -493,25 +481,21 @@ def cmd_validate(args):
         widest = max(len(m) for m in missing) if missing else 0
         rows = []
         if missing:
-            rows.append(f"  {w}❌ Missing ({len(missing)}):{R}")
+            rows.append(f"  {w}Missing ({len(missing)}):{R}")
             for m in missing:
-                rows.append(f"     {m:{widest}}  →  {g}{DIRECT_ROUTES[m][2]}{R}")
+                rows.append(f"     {m:{widest}}  \u2192  {g}{DIRECT_ROUTES[m][2]}{R}")
         if args.verbose and present:
-            rows.append(f"  {w}✅ Present ({len(present)}):{R}")
+            rows.append(f"  {w}Present ({len(present)}):{R}")
             for p in present:
-                rows.append(f"     {p:{widest}}  →  {g}{shutil.which(DIRECT_ROUTES[p][2])}{R}")
+                rows.append(f"     {p:{widest}}  \u2192  {g}{shutil.which(DIRECT_ROUTES[p][2])}{R}")
         inner = max(_dw(r) for r in rows) if rows else 30
-        def p(s): return f"  {b}│{R}  {s}{' ' * (inner - _dw(s))}  {b}│{R}"
-        buf = [f"  {b}╭{'─' * (inner + 4)}╮{R}"]
+        def p(s): return f"  {b}\u2502{R}  {s}{' ' * (inner - _dw(s))}  {b}\u2502{R}"
+        buf = [f"  {b}\u250c{'\u2500' * (inner + 4)}\u2510{R}"]
         buf.append(p(f"  {w}Validate:{R} {len(present)}/{total} tools available"))
         for r in rows:
             buf.append(p(r))
-        buf.append(f"  {b}╰{'─' * (inner + 4)}╯{R}")
-        output = '\n'.join(buf) + '\n'
-
-    print(output, end="")
-    if args.output:
-        Path(args.output).write_text(output)
+        buf.append(f"  {b}\u2514{'\u2500' * (inner + 4)}\u2518{R}")
+        _print_output('\n'.join(buf) + '\n', args)
 
 
 # ============================================================================
@@ -539,49 +523,121 @@ def cmd_mcp(args):
 # ============================================================================
 
 def cmd_ctf(args):
-    """CTF challenge workflow analysis."""
-    from server_core.workflows.ctf.CTFChallenge import CTFChallenge
-    from server_core.workflows.ctf.automator import CTFWorkflowManager
-    from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+    """CTF challenge workflow analysis with real scans when target is provided."""
+    category = args.category
+    name = args.name or f"{category.upper()} Challenge"
+    description = args.description or f"{category} CTF challenge"
+    difficulty = args.difficulty
+    points = args.points
+    target = args.target
 
-    challenge = CTFChallenge(
-        name=name,
-        category=category,
-        description=description,
-        difficulty=difficulty,
-        points=points,
-        target=target,
-    )
+    # Build static workflow plan
+    def build_workflow():
+        from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+        from server_core.workflows.ctf.workflowManager import CTFWorkflowManager
+        challenge = CTFChallenge(
+            name=name, category=category, description=description,
+            difficulty=difficulty, points=points, target=target or None,
+        )
+        wm = CTFWorkflowManager()
+        return wm.create_ctf_challenge_workflow(challenge)
 
-    wm = CTFWorkflowManager()
-    result = wm.create_ctf_challenge_workflow(challenge)
+    result = _call_with_stdout_suppressed(args.json, build_workflow)
     steps = result.get("workflow_steps", [])
 
-    if args.json:
-        output = json.dumps({
-            "name": name,
-            "category": category,
-            "difficulty": difficulty,
-            "points": points,
-            "target": target,
-            "total_steps": len(steps),
-            "steps": steps,
-        }, indent=2)
-    else:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            print(f"🏴 CTF: {name} [{category}, {difficulty}]")
-            print(f"   Points: {points} | Target: {target or '(unknown)'}")
-            print(f"\nWorkflow ({len(steps)} steps):")
-            for i, step in enumerate(steps, 1):
-                tool = step.get("action", step.get("step", "?"))
-                desc = step.get("description", "")
-                print(f"  {i:2d}. {tool:20s} {desc[:80]}")
-        output = buf.getvalue()
+    # Real scans when target provided (fast tools only, 30s timeout each)
+    scan_results = []
+    if target:
+        for scan_tool, scan_params, scan_label in _ctf_scans_for(category, target):
+            resolved = _resolve_tool(scan_tool)
+            if not resolved:
+                continue
+            exec_func, tool_key = resolved
+            try:
+                with redirect_stdout(io.StringIO()):
+                    scan_out = exec_func(tool_key, scan_params)
+                scan_results.append({"tool": scan_label, "result": scan_out})
+            except Exception as e:
+                scan_results.append({"tool": scan_label, "result": {"success": False, "error": str(e)}})
 
-    print(output, end="")
-    if args.output:
-        Path(args.output).write_text(output)
+    if args.json:
+        output = {
+            "name": name, "category": category, "difficulty": difficulty,
+            "points": points, "target": target or "",
+            "total_steps": len(steps), "steps": steps,
+            "tools": result.get("tools", []),
+            "estimated_time": result.get("estimated_time", 0),
+            "success_probability": result.get("success_probability", 0),
+        }
+        if scan_results:
+            output["scans"] = scan_results
+        _emit_json(output, args)
+    else:
+        buf = [f"CTF: {name} [{category}, {difficulty}]",
+               f"   Points: {points} | Target: {target or '(unknown)'}"]
+        tools = result.get("tools", [])
+        if tools:
+            buf.append(f"\nRecommended tools ({len(tools)}):")
+            for t in tools:
+                buf.append(f"  - {t}")
+        est = result.get("estimated_time", 0)
+        prob = result.get("success_probability", 0)
+        buf.append(f"\nEst. time: {est//60}m | Success rate: {prob:.0%}")
+        buf.append(f"\nWorkflow ({len(steps)} steps):")
+        for i, step in enumerate(steps, 1):
+            action = step.get("action", step.get("step", "?"))
+            desc = step.get("description", "")
+            buf.append(f"  {i:2d}. {action:20s} {desc[:80]}")
+
+        if scan_results:
+            buf.append(f"\nLive scans ({len(scan_results)}):")
+            for s in scan_results:
+                out = s["result"]
+                success = out.get("success", False)
+                err = out.get("error", "") or ""
+                scan_out = (out.get("output", "") or out.get("stdout", "") or "").strip()
+                lines = scan_out.splitlines() if scan_out else []
+                if not lines and err:
+                    lines = [f"error: {err[:120]}"]
+                buf.append(f"  [{s['tool']}] {'OK' if success else 'FAIL'}")
+                for line in lines[:5]:
+                    buf.append(f"    {line}")
+                if len(lines) > 5:
+                    buf.append(f"    ... ({len(lines) - 5} more lines)")
+        buf.append("")
+        _print_output('\n'.join(buf), args)
+
+
+def _ctf_scans_for(category: str, target: str) -> list[tuple[str, dict, str]]:
+    """Return (tool, params, label) tuples for quick CTF target scans.
+
+    Fast scans only (seconds, not minutes). Heavy scans (nuclei, whatweb)
+    are left to 'hexstrike scan <tool> <target>'.
+    """
+    from urllib.parse import urlparse
+
+    scans: list[tuple[str, dict, str]] = []
+
+    # Extract hostname from URL for nmap
+    if target.startswith(("http://", "https://")):
+        host = urlparse(target).hostname
+        if not host:
+            return scans
+        nmap_target = host
+    else:
+        nmap_target = target
+
+    if category in ("web", "misc"):
+        scans.append(("nmap", {"target": nmap_target, "scan_type": "-sT -Pn -T4", "ports": "22,80,443,8080"}, "nmap"))
+    elif category in ("pwn", "rev"):
+        scans.append(("nmap", {"target": nmap_target, "scan_type": "-sT -Pn -T4 -sV", "ports": "22,80,443,4444,1337,31337"}, "nmap"))
+    else:
+        scans.append(("nmap", {"target": nmap_target, "scan_type": "-sT -Pn -T4", "ports": "22,80,443"}, "nmap"))
+
+    return scans
+
+
+
 
 
 # ============================================================================
@@ -590,21 +646,21 @@ def cmd_ctf(args):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python3 hexstrike.py",
-        description="HexStrike AI-PULSE CLI — Cybersecurity automation toolkit",
+        prog="hexstrike",
+        description="HexStrike AI-PULSE CLI \u2014 Cybersecurity automation toolkit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 hexstrike.py serve                         Start server on :8888
-  python3 hexstrike.py serve --host 0.0.0.0 --port 8080
-  python3 hexstrike.py scan nmap target=scanme.nmap.org scan_type=-sV
-  python3 hexstrike.py scan nmap target=scanme.nmap.org scan_type=-sV --json -o result.json
-  python3 hexstrike.py scan nuclei target=http://scanme.nmap.org severity=critical
-  python3 hexstrike.py tools --filter nmap
-  python3 hexstrike.py status --host 192.168.1.10
-  python3 hexstrike.py validate --verbose
-  python3 hexstrike.py mcp --debug
-  python3 hexstrike.py ctf --category pwn --difficulty hard
+  hexstrike serve                         Start server on :8888
+  hexstrike serve --host 0.0.0.0 --port 8080
+  hexstrike scan nmap scanme.nmap.org -p scan_type=-sV
+  hexstrike scan nmap scanme.nmap.org --json -o result.json
+  hexstrike scan nuclei http://scanme.nmap.org -p severity=critical
+  hexstrike tools --filter nmap
+  hexstrike status --host 192.168.1.10
+  hexstrike validate --verbose
+  hexstrike mcp --debug
+  hexstrike ctf --category pwn --difficulty hard
         """,
     )
     parser.add_argument("--version", action="version", version=f"hexstrike {VERSION}")
@@ -644,7 +700,7 @@ Examples:
     p_val.add_argument("--json", action="store_true", help="Output raw JSON")
     p_val.add_argument("-o", "--output", default="", help="Write output to file")
 
-    # mcp (stdio bridge)
+    # mcp
     p_mcp = sub.add_parser("mcp", help="Run MCP stdio bridge (Claude Desktop)")
     p_mcp.add_argument("--server", default="http://127.0.0.1:8888", help="Pulse server URL")
     p_mcp.add_argument("--timeout", type=int, default=300, help="Request timeout (s)")
@@ -672,20 +728,26 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "serve":
-        cmd_serve(args)
-    elif args.command == "scan":
-        cmd_scan(args)
-    elif args.command == "tools":
-        cmd_tools(args)
-    elif args.command == "status":
-        cmd_status(args)
-    elif args.command == "validate":
-        cmd_validate(args)
-    elif args.command == "mcp":
-        cmd_mcp(args)
-    elif args.command == "ctf":
-        cmd_ctf(args)
+    commands = {
+        "serve":    cmd_serve,
+        "scan":     cmd_scan,
+        "tools":    cmd_tools,
+        "status":   cmd_status,
+        "validate": cmd_validate,
+        "mcp":      cmd_mcp,
+        "ctf":      cmd_ctf,
+    }
+
+    cmd = commands.get(args.command)
+    if cmd:
+        try:
+            cmd(args)
+        except Exception as e:
+            if getattr(args, 'json', False):
+                _emit_json({"error": f"{args.command} failed: {e}", "success": False}, args)
+            else:
+                logger.error(f"{args.command} failed: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

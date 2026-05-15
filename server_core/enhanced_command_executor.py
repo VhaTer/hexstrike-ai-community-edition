@@ -262,7 +262,7 @@ class EnhancedCommandExecutor:
                 _box_row(f" {status_color}📈 Status:{C['RESET']} {'SUCCESS' if success else 'FAILED'} | Cached: Yes"),
                 f"{C['MATRIX_GREEN']}{C['BOLD']}╰{_hr}╯{C['RESET']}",
             ]
-            print('\n'.join(box_lines), flush=True)
+            logger.info('\n'.join(box_lines))
 
             return {
                 "stdout": self.stdout_data,

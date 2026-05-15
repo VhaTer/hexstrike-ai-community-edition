@@ -52,3 +52,6 @@ opencode.json
 hexstrike.log.*
 *.bak
 output/
+debug_app.py
+tests/test_hexstrike_cli.py
+tests/test_pulse_app.py
