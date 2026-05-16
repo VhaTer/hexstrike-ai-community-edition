@@ -23,6 +23,7 @@ Usage:
 """
 
 import asyncio
+import logging
 import re
 import time
 
@@ -42,6 +43,8 @@ from mcp_core.server_setup import _scan_cache
 from server_core.operational_metrics import _op_metrics
 from server_core.singletons import enhanced_process_manager, get_decision_engine, get_tool_stats_store
 from tool_registry import TOOLS
+
+logger = logging.getLogger(__name__)
 
 app = FastMCPApp("Pulse Dashboard")
 
@@ -500,9 +503,16 @@ def get_history(target: str | None = None, limit: int = 50) -> list[dict]:
 
 async def _safe_call(fn, fallback):
     """Execute a sync function in a thread, return fallback on any exception."""
+    label = getattr(fn, "__name__", str(fn))[:30]
+    t0 = time.perf_counter()
     try:
-        return await asyncio.to_thread(fn)
+        result = await asyncio.to_thread(fn)
+        elapsed = (time.perf_counter() - t0) * 1000
+        logger.debug("⚡ %s: %.0fms ", label, elapsed)
+        return result
     except Exception:
+        elapsed = (time.perf_counter() - t0) * 1000
+        logger.debug("⚡ %s: %.0fms (FAILED)", label, elapsed)
         return fallback
 
 @app.tool(model=True)
@@ -514,13 +524,13 @@ async def get_pulse_data(target: str | None = None) -> dict:
     Heavy sub-calls run in parallel via asyncio.gather to avoid
     sequential blocking (~300ms -> ~100ms).
     """
-    overview = get_overview()
     scope = get_scope(target)
     if not target:
         target = scope.get("active_target")
 
-    # Launch heavy sub-calls in parallel
+    # Launch heavy sub-calls in parallel (including overview which has a blocking cpu_percent call)
     coros: dict[str, asyncio.Task] = {}
+    coros["overview"] = _safe_call(get_overview, {})
     if target:
         coros["surface"]  = _safe_call(lambda: get_surface(target), {"target": None})
         coros["findings"] = _safe_call(lambda: get_findings(target), [])
@@ -539,8 +549,9 @@ async def get_pulse_data(target: str | None = None) -> dict:
     values = await asyncio.gather(*coros.values())
     parallel = dict(zip(keys, values))
 
-    total_runs = overview["total_runs"]
-    total_errors = overview["total_errors"]
+    overview = parallel.get("overview", {})
+    total_runs = overview.get("total_runs", 0)
+    total_errors = overview.get("total_errors", 0)
     success_rate = total_runs / (total_runs + total_errors) if (total_runs + total_errors) > 0 else 0
     return {
         "overview":      overview,
@@ -552,7 +563,7 @@ async def get_pulse_data(target: str | None = None) -> dict:
         "history":       parallel.get("history", []),
         "intelligence":  parallel.get("intelligence", []),
         "footer": {
-            "version_display":       overview["version_display"],
+            "version_display":       overview.get("version_display", "N/A"),
             "total_runs_display":    f"{total_runs} runs",
             "success_rate_display":  f"{int(success_rate * 100)}%" if total_runs > 0 else "\u2014",
             "cache_hit_display":     "\u2014",

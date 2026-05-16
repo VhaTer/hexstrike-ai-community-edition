@@ -81,7 +81,8 @@ def _prewarm_singletons(logger):
         logger.debug("🔍 Pre-warming lazy singletons...")
         try:
             from server_core.singletons import get_decision_engine, get_tool_stats_store
-            get_decision_engine()
+            eng = get_decision_engine()
+            eng._get_parameter_optimizer()
             get_tool_stats_store()
             logger.debug("✅ Pre-warming complete")
         except Exception as exc:
