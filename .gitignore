@@ -45,6 +45,12 @@ results.xml
 .vscode/
 .coverage
 LOW_COVERAGE_ANALYSIS_REPORT.md
+COVERAGE_ANALYSIS.md
+EXECUTIVE_SUMMARY.md
+README_TESTS.md
+
+# Logs — never commit
+*.log
 
 # Agent configs & VPN creds — never commit
 opencode.json
