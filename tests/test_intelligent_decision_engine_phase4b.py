@@ -336,14 +336,13 @@ class TestParameterOptimization:
     def test_unknown_tool_uses_advanced_optimizer(self, decision_engine, sample_target_profile):
         """Test unknown tools fall back to advanced optimizer"""
         with patch.object(decision_engine, '_use_advanced_optimizer', True):
-            # Mock the parameter_optimizer
-            with patch('server_core.intelligence.intelligent_decision_engine.parameter_optimizer') as mock_optimizer:
-                mock_optimizer.optimize_parameters_advanced.return_value = {"test": "value"}
+            with patch.object(decision_engine, '_get_parameter_optimizer') as mock_getter:
+                mock_opt = mock_getter.return_value
+                mock_opt.optimize_parameters_advanced.return_value = {"test": "value"}
                 
                 result = decision_engine.optimize_parameters("unknown_tool_xyz", sample_target_profile)
                 
-                # Advanced optimizer should be called
-                assert mock_optimizer.optimize_parameters_advanced.called or isinstance(result, dict)
+                assert mock_opt.optimize_parameters_advanced.called or isinstance(result, dict)
 
 
 # ============================================================================
@@ -605,11 +604,11 @@ class TestAdvancedOptimization:
         """Test that advanced optimizer is called when enabled"""
         decision_engine.enable_advanced_optimization()
         
-        with patch('server_core.intelligence.intelligent_decision_engine.parameter_optimizer') as mock_opt:
+        with patch.object(decision_engine, '_get_parameter_optimizer') as mock_getter:
+            mock_opt = mock_getter.return_value
             mock_opt.optimize_parameters_advanced.return_value = {"advanced": True}
             
             result = decision_engine.optimize_parameters("unknown_tool", sample_target_profile)
-            # Should use advanced optimizer for unknown tools
             assert mock_opt.optimize_parameters_advanced.called or isinstance(result, dict)
 
     def test_legacy_optimization_when_disabled(self, decision_engine, sample_target_profile):

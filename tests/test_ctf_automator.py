@@ -142,9 +142,10 @@ class TestAutoSolve:
     def test_step_failure_does_not_increase_confidence(self):
         ch = make_challenge("web")
         with patch(
-            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
-            side_effect=Exception("Tool not found"),
-        ):
+            "server_core.singletons.get_ctf_tools",
+        ) as mock_get:
+            mock_tools = mock_get.return_value
+            mock_tools.get_tool_command.side_effect = Exception("Tool not found")
             result = self.automator.auto_solve_challenge(ch)
         # 4 manual/custom steps succeed (don't call get_tool_command): 4 × 0.1 = 0.4
         assert result["confidence"] == 0.4
@@ -152,9 +153,10 @@ class TestAutoSolve:
     def test_early_termination_on_flag_found(self):
         ch = make_challenge("crypto", "flag-test")
         with patch(
-            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
-            return_value="flag{found_early}",
-        ):
+            "server_core.singletons.get_ctf_tools",
+        ) as mock_get:
+            mock_tools = mock_get.return_value
+            mock_tools.get_tool_command.return_value = "flag{found_early}"
             result = self.automator.auto_solve_challenge(ch)
         assert result["status"] == "solved"
         assert result["flag"] == "flag{found_early}"
@@ -162,9 +164,10 @@ class TestAutoSolve:
     def test_exception_within_try_block(self):
         ch = make_challenge("web")
         with patch(
-            "server_core.workflows.ctf.automator.ctf_manager.create_ctf_challenge_workflow",
-            side_effect=RuntimeError("Workflow creation failed"),
-        ):
+            "server_core.singletons.get_ctf_manager",
+        ) as mock_get:
+            mock_mgr = mock_get.return_value
+            mock_mgr.create_ctf_challenge_workflow.side_effect = RuntimeError("Workflow creation failed")
             result = self.automator.auto_solve_challenge(ch)
         assert result["status"] == "error"
         assert "Workflow creation failed" in result["error"]
@@ -210,9 +213,10 @@ class TestParallelStep:
             "tools": ["httpx", "whatweb"],
         }
         with patch(
-            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
-            side_effect=Exception("Tool binary not found"),
-        ):
+            "server_core.singletons.get_ctf_tools",
+        ) as mock_get:
+            mock_tools = mock_get.return_value
+            mock_tools.get_tool_command.side_effect = Exception("Tool binary not found")
             result = self.automator._execute_parallel_step(step, ch)
         assert "[httpx] Error: Tool binary not found" in result["output"]
         assert result["success"] is False
@@ -269,9 +273,10 @@ class TestSequentialStep:
             "tools": ["nmap"],
         }
         with patch(
-            "server_core.workflows.ctf.automator.ctf_tools.get_tool_command",
-            side_effect=Exception("Binary not found"),
-        ):
+            "server_core.singletons.get_ctf_tools",
+        ) as mock_get:
+            mock_tools = mock_get.return_value
+            mock_tools.get_tool_command.side_effect = Exception("Binary not found")
             result = self.automator._execute_sequential_step(step, ch)
         assert "[nmap] Error: Binary not found" in result["output"]
         assert result["success"] is False

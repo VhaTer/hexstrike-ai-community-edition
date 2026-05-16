@@ -5,7 +5,6 @@ import os
 
 from server_core.intelligence.intelligent_decision_engine import (
     IntelligentDecisionEngine,
-    parameter_optimizer,
 )
 from server_core.singletons import get_tool_stats_store
 from shared.target_types import TargetType, TechnologyStack
@@ -837,7 +836,9 @@ class TestOptimizeParametersDispatch:
 
     def test_unknown_tool_with_mocked_advanced(self, engine):
         p = make_profile(target="http://example.com")
-        with patch.object(parameter_optimizer, "optimize_parameters_advanced", return_value={"mocked": True}):
+        with patch.object(engine, '_get_parameter_optimizer') as mock_getter:
+            mock_opt = mock_getter.return_value
+            mock_opt.optimize_parameters_advanced.return_value = {"mocked": True}
             result = engine.optimize_parameters("nonexistent-tool", p)
         assert result == {"mocked": True}
 

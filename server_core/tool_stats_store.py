@@ -37,12 +37,7 @@ logger = logging.getLogger(__name__)
 # Minimum number of recorded runs before we trust the live rate over the baseline.
 MIN_RUNS_FOR_LIVE = 5
 
-DATA_DIR_NAME = config_core.get("DATA_DIR_NAME", ".hexstrike_data")
 STATS_FILE_NAME = "tool_stats.json"
-
-
-def _default_data_dir() -> str:
-    return os.environ.get("HEXSTRIKE_DATA_DIR", os.path.join(os.getcwd(), DATA_DIR_NAME))
 
 
 class ToolStatsStore:
@@ -59,11 +54,11 @@ class ToolStatsStore:
     """
 
     def __init__(self, data_dir: Optional[str] = None) -> None:
-        self._data_dir = data_dir or _default_data_dir()
+        self._data_dir = data_dir or config_core.resolve_data_dir()
         self._stats_path = os.path.join(self._data_dir, STATS_FILE_NAME)
         self._lock = threading.Lock()
         self._stats: Dict[str, Dict[str, int]] = {}
-        self._ensure_dir()
+        config_core.ensure_data_dir()
         self._load()
 
     # ── Public API ────────────────────────────────────────────────────
@@ -131,9 +126,6 @@ class ToolStatsStore:
             self._save_locked()
 
     # ── Internal ──────────────────────────────────────────────────────
-
-    def _ensure_dir(self) -> None:
-        os.makedirs(self._data_dir, exist_ok=True)
 
     def _load(self) -> None:
         if not os.path.exists(self._stats_path):

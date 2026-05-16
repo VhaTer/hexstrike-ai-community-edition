@@ -14,6 +14,7 @@ Functions:
     set_value(key, value): Set a config value by key.
 """
 
+import os
 from typing import Any, Optional
 import logging
 import threading
@@ -23,6 +24,31 @@ logger = logging.getLogger(__name__)
 
 _config = config._config
 _config_lock = threading.Lock()
+
+# ── Shared data directory ──────────────────────────────────────────────────────
+_data_dir_ensured = False
+_data_dir_ensured_lock = threading.Lock()
+
+
+def resolve_data_dir() -> str:
+    """Resolve the standard HexStrike data directory path."""
+    return os.environ.get(
+        "HEXSTRIKE_DATA_DIR",
+        os.path.join(os.getcwd(), get("DATA_DIR_NAME", ".hexstrike_data")),
+    )
+
+
+def ensure_data_dir() -> str:
+    """Create the data directory exactly once (thread-safe, idempotent)."""
+    global _data_dir_ensured
+    if not _data_dir_ensured:
+        with _data_dir_ensured_lock:
+            if not _data_dir_ensured:
+                path = resolve_data_dir()
+                os.makedirs(path, exist_ok=True)
+                _data_dir_ensured = True
+                return path
+    return resolve_data_dir()
 
 def get_word_list(name: str) -> Optional[dict]:
     """

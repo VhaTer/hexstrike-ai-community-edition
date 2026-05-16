@@ -6,10 +6,7 @@ from typing import Dict, List, Any, Optional
 from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain, AttackStep
-from server_core.parameter_optimizer import ParameterOptimizer
 from server_core.singletons import get_tool_stats_store
-
-parameter_optimizer = ParameterOptimizer()
 
 class IntelligentDecisionEngine:
     """AI-powered tool selection and parameter optimization engine"""
@@ -19,6 +16,14 @@ class IntelligentDecisionEngine:
         self.technology_signatures = self._initialize_technology_signatures()
         self.attack_patterns = self._initialize_attack_patterns()
         self._use_advanced_optimizer = True  # Enable advanced optimization by default
+        self._parameter_optimizer = None
+
+    def _get_parameter_optimizer(self):
+        """Lazy initializer for ParameterOptimizer (avoids blocking import time)."""
+        if self._parameter_optimizer is None:
+            from server_core.parameter_optimizer import ParameterOptimizer
+            self._parameter_optimizer = ParameterOptimizer()
+        return self._parameter_optimizer
 
     def _initialize_tool_effectiveness(self) -> Dict[str, Dict[str, float]]:
         """Initialize tool effectiveness ratings for different target types"""
@@ -465,7 +470,7 @@ class IntelligentDecisionEngine:
 
         # Use advanced parameter optimizer if available
         if hasattr(self, '_use_advanced_optimizer') and self._use_advanced_optimizer:
-            return parameter_optimizer.optimize_parameters_advanced(tool, profile, context)
+            return self._get_parameter_optimizer().optimize_parameters_advanced(tool, profile, context)
 
         # Fallback to legacy optimization for compatibility
         optimized_params = {}
@@ -513,7 +518,7 @@ class IntelligentDecisionEngine:
             optimized_params = self._optimize_checkov_params(profile, context)
         else:
             # Use advanced optimizer for unknown tools
-            return parameter_optimizer.optimize_parameters_advanced(tool, profile, context)
+            return self._get_parameter_optimizer().optimize_parameters_advanced(tool, profile, context)
 
         return optimized_params
 

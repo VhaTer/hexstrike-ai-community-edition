@@ -7,11 +7,7 @@ import server_core.config_core as config_core
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR_NAME = config_core.get("DATA_DIR_NAME", ".hexstrike_data")
 WORDLISTS_FILE_NAME = "wordlists.json"
-
-def _default_data_dir() -> str:
-    return os.environ.get("HEXSTRIKE_DATA_DIR", os.path.join(os.getcwd(), DATA_DIR_NAME))
 
 class WordlistStore:
     """
@@ -21,19 +17,16 @@ class WordlistStore:
     """
 
     def __init__(self, data_dir: Optional[str] = None) -> None:
-        self._data_dir = data_dir or _default_data_dir()
+        self._data_dir = data_dir or config_core.resolve_data_dir()
         self._wordlists_file = os.path.join(self._data_dir, WORDLISTS_FILE_NAME)
-        self._ensure_dir_and_file()
+        config_core.ensure_data_dir()
+        if not os.path.exists(self._wordlists_file):
+            with open(self._wordlists_file, "w", encoding="utf-8") as f:
+                json.dump({"WORD_LISTS": {}}, f, indent=2)
 
     @property
     def data_dir(self) -> str:
         return self._data_dir
-
-    def _ensure_dir_and_file(self) -> None:
-        os.makedirs(self._data_dir, exist_ok=True)
-        if not os.path.exists(self._wordlists_file):
-            with open(self._wordlists_file, "w", encoding="utf-8") as f:
-                json.dump({"WORD_LISTS": {}}, f, indent=2)
 
     def delete(self, wordlist_id: str) -> bool:
         """Delete a wordlist entry by its ID."""

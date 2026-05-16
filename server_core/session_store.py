@@ -22,16 +22,10 @@ import server_core.config_core as config_core
 logger = logging.getLogger(__name__)
 
 # Named constants (clean-code: no magic numbers)
-DATA_DIR_NAME = config_core.get("DATA_DIR_NAME", ".hexstrike_data")
 SESSIONS_DIR_NAME = "sessions"
 COMPLETED_DIR_NAME = "completed"
 MAX_COMPLETED_SESSIONS = 200
 SESSION_FILE_SUFFIX = ".json"
-
-
-def _default_data_dir() -> str:
-    """Resolve the data directory path. Uses HEXSTRIKE_DATA_DIR env var or cwd."""
-    return os.environ.get("HEXSTRIKE_DATA_DIR", os.path.join(os.getcwd(), DATA_DIR_NAME))
 
 
 class SessionStore:
@@ -43,19 +37,17 @@ class SessionStore:
     """
 
     def __init__(self, data_dir: Optional[str] = None) -> None:
-        self._data_dir = data_dir or _default_data_dir()
+        self._data_dir = data_dir or config_core.resolve_data_dir()
         self._sessions_dir = os.path.join(self._data_dir, SESSIONS_DIR_NAME)
         self._completed_dir = os.path.join(self._sessions_dir, COMPLETED_DIR_NAME)
-        self._ensure_dirs()
+        config_core.ensure_data_dir()
+        os.makedirs(self._sessions_dir, exist_ok=True)
+        os.makedirs(self._completed_dir, exist_ok=True)
 
     @property
     def data_dir(self) -> str:
         """Public accessor for the root data directory path."""
         return self._data_dir
-
-    def _ensure_dirs(self) -> None:
-        os.makedirs(self._sessions_dir, exist_ok=True)
-        os.makedirs(self._completed_dir, exist_ok=True)
 
     def _session_path(self, session_id: str) -> str:
         return os.path.join(self._sessions_dir, f"{session_id}{SESSION_FILE_SUFFIX}")

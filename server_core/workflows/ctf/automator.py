@@ -3,22 +3,37 @@ import time
 import logging
 from typing import Any, Dict, List
 from .CTFChallenge import CTFChallenge
-from .toolManager import CTFToolManager
-from .workflowManager import CTFWorkflowManager
 
 logger = logging.getLogger(__name__)
 
-ctf_manager = CTFWorkflowManager()
-ctf_tools = CTFToolManager()
-
 class CTFChallengeAutomator:
-    """Advanced automation system for CTF challenge solving"""
+    """Advanced automation system for CTF challenge solving
+
+    Uses lazy accessors for CTFWorkflowManager and CTFToolManager
+    to avoid module-level instantiation (delegates to singletons).
+    """
 
     def __init__(self):
         self.active_challenges = {}
         self.solution_cache = {}
         self.learning_database = {}
         self.success_patterns = {}
+        self._ctf_manager = None
+        self._ctf_tools = None
+
+    @property
+    def _manager(self):
+        if self._ctf_manager is None:
+            from server_core.singletons import get_ctf_manager
+            self._ctf_manager = get_ctf_manager()
+        return self._ctf_manager
+
+    @property
+    def _tools(self):
+        if self._ctf_tools is None:
+            from server_core.singletons import get_ctf_tools
+            self._ctf_tools = get_ctf_tools()
+        return self._ctf_tools
 
     def auto_solve_challenge(self, challenge: CTFChallenge) -> Dict[str, Any]:
         """Attempt to automatically solve a CTF challenge"""
@@ -36,7 +51,7 @@ class CTFChallengeAutomator:
 
         try:
             # Create workflow
-            workflow = ctf_manager.create_ctf_challenge_workflow(challenge)
+            workflow = self._manager.create_ctf_challenge_workflow(challenge)
 
             # Execute automated steps
             for step in workflow["workflow_steps"]:
@@ -94,7 +109,7 @@ class CTFChallengeAutomator:
         for tool in tools:
             try:
                 if tool != "manual":
-                    command = ctf_tools.get_tool_command(tool, challenge.target or challenge.name)
+                    command = self._tools.get_tool_command(tool, challenge.target or challenge.name)
                     # In a real implementation, this would execute the command
                     step_result["tools_used"].append(tool)
                     step_result["output"] += f"[{tool}] Executed successfully\n"
@@ -129,7 +144,7 @@ class CTFChallengeAutomator:
                     step_result["output"] += f"[CUSTOM] Custom implementation required\n"
                     step_result["success"] = True
                 else:
-                    command = ctf_tools.get_tool_command(tool, challenge.target or challenge.name)
+                    command = self._tools.get_tool_command(tool, challenge.target or challenge.name)
                     step_result["tools_used"].append(tool)
                     step_result["output"] += f"[{tool}] Command: {command}\n"
                     step_result["success"] = True
@@ -185,7 +200,7 @@ class CTFChallengeAutomator:
             attempted_tools.extend(step.get("tools_used", []))
 
         # Suggest alternative approaches
-        all_category_tools = ctf_tools.get_category_tools(f"{challenge.category}_recon")
+        all_category_tools = self._tools.get_category_tools(f"{challenge.category}_recon")
         unused_tools = [tool for tool in all_category_tools if tool not in attempted_tools]
 
         if unused_tools:
