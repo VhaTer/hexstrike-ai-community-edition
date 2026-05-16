@@ -22,7 +22,6 @@ Usage:
     prefab serve debug_app.py
 """
 
-import asyncio
 import logging
 import re
 import time
@@ -162,7 +161,6 @@ def get_overview() -> dict:
     }
 
 
-@app.tool()
 def _guess_target_type(target_str: str) -> str:
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}(:\d+)?$", target_str):
         return "ip"
@@ -172,6 +170,7 @@ def _guess_target_type(target_str: str) -> str:
         return "url"
     return "unknown"
 
+@app.tool()
 def get_scope(target: str | None = None) -> dict:
     """Detect current scope from recent scan cache entries or explicit target."""
     now = time.time()
@@ -386,27 +385,6 @@ def get_tool_intelligence() -> list[dict]:
     return result
 
 
-@app.tool()
-def get_recent_scans() -> list[dict]:
-    """Return last 20 scan cache entries."""
-    try:
-        entries = sorted(
-            _scan_cache.values(),
-            key=lambda v: v.get("timestamp", 0),
-            reverse=True,
-        )[:20]
-    except Exception:
-        return []
-    return [
-        {
-            "tool":      e.get("tool", "?"),
-            "target":    e.get("target", "?"),
-            "timestamp": e.get("timestamp", ""),
-            "success":   e.get("result", {}).get("success", False),
-        }
-        for e in entries
-    ]
-
 
 @app.tool()
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
@@ -500,76 +478,6 @@ def get_history(target: str | None = None, limit: int = 50) -> list[dict]:
         })
     return result
 
-
-async def _safe_call(fn, fallback):
-    """Execute a sync function in a thread, return fallback on any exception."""
-    label = getattr(fn, "__name__", str(fn))[:30]
-    t0 = time.perf_counter()
-    try:
-        result = await asyncio.to_thread(fn)
-        elapsed = (time.perf_counter() - t0) * 1000
-        logger.debug("⚡ %s: %.0fms ", label, elapsed)
-        return result
-    except Exception:
-        elapsed = (time.perf_counter() - t0) * 1000
-        logger.debug("⚡ %s: %.0fms (FAILED)", label, elapsed)
-        return fallback
-
-@app.tool(model=True)
-async def get_pulse_data(target: str | None = None) -> dict:
-    """Return all Pulse dashboard data as JSON for client-side rendering.
-
-    Aggregates overview, scope, surface, findings, intelligence,
-    history, active tools, and attack plan into a single dict.
-    Heavy sub-calls run in parallel via asyncio.gather to avoid
-    sequential blocking (~300ms -> ~100ms).
-    """
-    scope = get_scope(target)
-    if not target:
-        target = scope.get("active_target")
-
-    # Launch heavy sub-calls in parallel (including overview which has a blocking cpu_percent call)
-    coros: dict[str, asyncio.Task] = {}
-    coros["overview"] = _safe_call(get_overview, {})
-    if target:
-        coros["surface"]  = _safe_call(lambda: get_surface(target), {"target": None})
-        coros["findings"] = _safe_call(lambda: get_findings(target), [])
-        coros["plan"]     = _safe_call(
-            lambda: get_plan(target),
-            {"target": target, "steps": [], "step_count": 0, "summary": "Plan unavailable"},
-        )
-        coros["history"] = _safe_call(lambda: get_history(target), [])
-    coros["active_tools"] = _safe_call(
-        get_active_tools,
-        {"active_processes": 0, "active_workers": 0, "queue_size": 0, "summary": "Unavailable"},
-    )
-    coros["intelligence"] = _safe_call(get_tool_intelligence, [])
-
-    keys = list(coros.keys())
-    values = await asyncio.gather(*coros.values())
-    parallel = dict(zip(keys, values))
-
-    overview = parallel.get("overview", {})
-    total_runs = overview.get("total_runs", 0)
-    total_errors = overview.get("total_errors", 0)
-    success_rate = total_runs / (total_runs + total_errors) if (total_runs + total_errors) > 0 else 0
-    return {
-        "overview":      overview,
-        "scope":         scope,
-        "surface":       parallel.get("surface", {"target": None}),
-        "findings":      parallel.get("findings", []),
-        "plan":          parallel.get("plan", {"target": target, "steps": [], "step_count": 0, "summary": "No target"}),
-        "active_tools":  parallel.get("active_tools", {"active_processes": 0, "active_workers": 0, "queue_size": 0, "summary": "Unavailable"}),
-        "history":       parallel.get("history", []),
-        "intelligence":  parallel.get("intelligence", []),
-        "footer": {
-            "version_display":       overview.get("version_display", "N/A"),
-            "total_runs_display":    f"{total_runs} runs",
-            "success_rate_display":  f"{int(success_rate * 100)}%" if total_runs > 0 else "\u2014",
-            "cache_hit_display":     "\u2014",
-            "timeout_count_display": str(total_errors),
-        },
-    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -764,8 +672,6 @@ def pulse_dashboard() -> PrefabApp:
             "active_workers":        active.get("active_workers", 0),
             "active_queue":          active.get("queue_size", 0),
             "active_summary":        active.get("summary", "No active tasks"),
-            # Activity
-            "recent_scans":          get_recent_scans(),
             # History
             "history":               history,
             # Intelligence
