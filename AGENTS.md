@@ -67,4 +67,6 @@ python -m pytest tests/test_pulse_app.py -v -q --tb=short
 - `ctf/automator.py`: removed module-level `CTFWorkflowManager()` and `CTFToolManager()` instances (duplicate singletons). Replaced with `self._manager` / `self._tools` lazy properties that delegate to `get_ctf_manager()` / `get_ctf_tools()` from singletons.
 - `config_core.py`: added `resolve_data_dir()` + `ensure_data_dir()` (thread-safe, idempotent). `tool_stats_store.py`, `session_store.py`, `wordlist_store.py` now use it — eliminates 2 redundant `os.makedirs()` syscalls.
 - `mcp_entry.py`: added background `_prewarm_singletons()` thread that pre-initializes `get_decision_engine()` + `get_tool_stats_store()` after server start. First dashboard call no longer blocks ~100-350ms.
+- `pulse_app.py`: `get_pulse_data()` converted to `async def` with `asyncio.gather()` for 6 heavy sub-calls in parallel. Drops latency from ~300ms sequential to ~100ms parallel (limited by slowest sub-call).
+- `_safe_call()` helper: wraps each sync function in `asyncio.to_thread()` with graceful fallback on exception.
 - 2580 passed, 1 skipped, 2 warnings — 0 regressions.
