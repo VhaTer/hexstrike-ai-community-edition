@@ -310,7 +310,7 @@ class IntelligentDecisionEngine:
         return TargetType.UNKNOWN
 
     def _resolve_domain(self, target: str) -> List[str]:
-        """Resolve domain to IP addresses"""
+        """Resolve domain to IP addresses with 3s timeout."""
         try:
             if target.startswith(('http://', 'https://')):
                 hostname = urllib.parse.urlparse(target).hostname
@@ -318,8 +318,13 @@ class IntelligentDecisionEngine:
                 hostname = target
 
             if hostname:
-                ip = socket.gethostbyname(hostname)
-                return [ip]
+                old = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(3.0)
+                try:
+                    ip = socket.gethostbyname(hostname)
+                    return [ip]
+                finally:
+                    socket.setdefaulttimeout(old)
         except Exception:
             pass
         return []
