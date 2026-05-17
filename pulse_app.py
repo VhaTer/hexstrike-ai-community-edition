@@ -225,6 +225,32 @@ rx_trend_cpu_hist = TREND_CPU_HIST
 rx_trend_mem_hist = TREND_MEM_HIST
 rx_trend_disk = TREND_DISK
 
+# Sessions
+SESS_ACTIVE     = Rx("sessions_active").default([])
+SESS_COMPLETED  = Rx("sessions_completed").default([])
+SESS_SUM        = Rx("sessions_summary").default("No sessions")
+rx_sess_active    = SESS_ACTIVE
+rx_sess_completed = SESS_COMPLETED
+rx_sess_sum       = SESS_SUM
+
+# Confirmations
+CONF_ACCEPTED = Rx("conf_accepted").default(0)
+CONF_DENIED   = Rx("conf_denied").default(0)
+CONF_SKIPPED  = Rx("conf_skipped").default(0)
+CONF_SUM      = Rx("conf_summary").default("No confirmation events")
+rx_conf_acc  = CONF_ACCEPTED
+rx_conf_den  = CONF_DENIED
+rx_conf_skip = CONF_SKIPPED
+rx_conf_sum  = CONF_SUM
+
+# Network I/O
+NET_SENT    = Rx("net_sent_display").default("0 B")
+NET_RECV    = Rx("net_recv_display").default("0 B")
+NET_TOTAL   = Rx("net_total_display").default("0 B")
+rx_net_sent  = NET_SENT
+rx_net_recv  = NET_RECV
+rx_net_total = NET_TOTAL
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Backend tools
@@ -232,7 +258,18 @@ rx_trend_disk = TREND_DISK
 
 @app.tool()
 def get_overview() -> dict:
-    """Header data: version, uptime, RAM, server status."""
+    """PULSE dashboard overview: version, uptime, RAM, disk, CPU, tools count, server health.
+
+    Call FIRST when starting a fresh session to discover the HexStrike environment.
+    Returns system resources and server status — no target required.
+
+    Returns: version_display, uptime_display, ram_display (avail/total GB),
+    cpu_percent, cpu_history (for sparklines), disk_percent, tools_count,
+    server_status ('healthy' or 'limited'), total_runs, total_errors.
+
+    Example: get_overview()
+    Next: get_scope() to see active target
+    """
     summary = _op_metrics.summary()
     sys = summary.get("system", {})
     has_psutil = "cpu_percent" in sys
@@ -363,9 +400,19 @@ def get_scope(target: str | None = None) -> dict:
 
 @app.tool()
 def get_surface(target: str | None = None) -> dict:
-    """Return surface data (ports, services, techs, risk) for a target.
+    """Open ports, services, and technology detection for a target.
 
-    Uses the active scope if target is None.
+    Parses cached nmap ports + whatweb tech detections. Auto-uses active
+    scope target if none provided. Risk level: high (>5 ports), medium (>2),
+    low (>0), unknown.
+
+    Returns: target, risk_level, ports (list with port/service/state),
+    port_count, technologies (list), ports_display, risk_variant.
+
+    Use AFTER get_scope() to assess attack surface.
+    Example: get_surface() — uses current scope target
+    Example: get_surface('scanme.nmap.org')
+    Next: get_findings() for vulnerabilities
     """
     if not target:
         scope = get_scope()
@@ -426,9 +473,16 @@ def get_surface(target: str | None = None) -> dict:
 
 @app.tool()
 def get_findings(target: str | None = None) -> list[dict]:
-    """Return vulnerabilities / issues for a target from nuclei and nikto.
+    """Vulnerabilities and issues for a target from nuclei + nikto scan cache.
 
-    Uses the active scope if target is None.
+    Returns findings sorted by severity (critical→high→medium→low→info).
+    Each finding: tool, severity, finding (ID or URL), details.
+    Auto-uses active scope target if none provided.
+
+    Use AFTER get_surface() to find actual vulnerabilities.
+    Example: get_findings()
+    Example: get_findings('scanme.nmap.org')
+    Next: get_plan() for attack chain
     """
     if not target:
         scope = get_scope()
@@ -580,7 +634,18 @@ def get_errors_and_failures() -> dict:
 
 @app.tool()
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
-    """Attack plan for a target via IntelligentDecisionEngine."""
+    """Attack chain for a target from the IntelligentDecisionEngine.
+
+    Generates ordered steps with tool, expected outcome, success probability,
+    and estimated time. Auto-uses active scope target if none provided.
+
+    Returns: target, steps (list with num/tool/outcome/probability/ETA),
+    step_count, estimated_time, risk_level, summary.
+
+    Use AFTER get_findings() to plan the attack workflow.
+    Example: get_plan()
+    Example: get_plan('scanme.nmap.org')
+    """
     if not target:
         scope = get_scope()
         target = scope.get("active_target")
@@ -755,6 +820,118 @@ def get_system_trends() -> dict:
     }
 
 
+@app.tool()
+def get_sessions() -> dict:
+    """Active and completed session summaries from SessionStore.
+
+    Returns counts and lists of recent sessions for the dashboard.
+    No target required — shows all sessions across targets.
+
+    Returns: active_count, completed_count, active (list of session IDs),
+    completed (list with session_id, target, findings, tools_executed, timestamps).
+    """
+    try:
+        from server_core.singletons import get_session_store
+        ss = get_session_store()
+        active = ss.list_active()
+        completed = ss.list_completed()
+    except Exception as e:
+        return {
+            "active_count": 0, "completed_count": 0,
+            "active": [], "completed": [],
+            "summary": f"Unavailable: {str(e)[:60]}",
+        }
+
+    recent = completed[:20]
+    for s in recent:
+        s["tools_str"] = ", ".join(s.get("tools_executed", [])[:5])
+        s["age_display"] = _fmt_duration(time.time() - s.get("updated_at", 0)) if s.get("updated_at") else "\u2014"
+
+    summary = f"{len(active)} active \u00b7 {len(completed)} completed" if completed else f"{len(active)} active"
+    return {
+        "active_count":    len(active),
+        "completed_count": len(completed),
+        "active":          active[-10:],
+        "completed":       recent,
+        "summary":         summary,
+    }
+
+
+@app.tool()
+def get_confirmations() -> dict:
+    """Confirmation event statistics (accepted/denied/skipped).
+
+    Tracks user confirmations for dangerous operations.
+    No target required — global statistics.
+
+    Returns: accepted, denied, skipped, total, summary.
+    """
+    conf = _op_metrics.confirmation_summary()
+    total = sum(conf.values())
+    summary_parts = []
+    if conf.get("accepted"):
+        summary_parts.append(f"{conf['accepted']} accepted")
+    if conf.get("denied"):
+        summary_parts.append(f"{conf['denied']} denied")
+    if conf.get("skipped"):
+        summary_parts.append(f"{conf['skipped']} skipped")
+    summary = " \u00b7 ".join(summary_parts) if summary_parts else "No confirmation events"
+    return {
+        "accepted": conf.get("accepted", 0),
+        "denied":   conf.get("denied", 0),
+        "skipped":  conf.get("skipped", 0),
+        "total":    total,
+        "summary":  summary,
+    }
+
+
+@app.tool()
+def get_network_io() -> dict:
+    """Network I/O statistics (bytes sent/received) from ResourceMonitor.
+
+    Shows current cumulative counters and rate estimation.
+    No target required — system-wide network stats.
+
+    Returns: bytes_sent, bytes_recv, bytes_sent_display, bytes_recv_display,
+    total_display.
+    """
+    try:
+        rm = enhanced_process_manager.resource_monitor
+        history = list(rm.usage_history) if hasattr(rm, "usage_history") else []
+    except Exception:
+        return {
+            "bytes_sent": 0, "bytes_recv": 0,
+            "bytes_sent_display": "0 B", "bytes_recv_display": "0 B",
+            "total_display": "0 B",
+        }
+
+    if not history:
+        return {
+            "bytes_sent": 0, "bytes_recv": 0,
+            "bytes_sent_display": "0 B", "bytes_recv_display": "0 B",
+            "total_display": "0 B",
+        }
+
+    latest = history[-1]
+    sent = latest.get("network_bytes_sent", 0)
+    recv = latest.get("network_bytes_recv", 0)
+
+    def _fmt_bytes(b):
+        for unit in ("B", "KB", "MB", "GB"):
+            if b < 1024:
+                return f"{b:.1f} {unit}"
+            b /= 1024
+        return f"{b:.1f} TB"
+
+    return {
+        "bytes_sent":          sent,
+        "bytes_recv":          recv,
+        "bytes_sent_display":  _fmt_bytes(sent),
+        "bytes_recv_display":  _fmt_bytes(recv),
+        "total_display":       _fmt_bytes(sent + recv),
+    }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # UI entry point
 # ═════════════════════════════════════════════════════════════════════════════
@@ -799,6 +976,9 @@ def pulse_dashboard() -> PrefabApp:
     perf = get_tool_performance()
     cache_status = get_cache_status()
     trends = get_system_trends()
+    sessions = get_sessions()
+    confirmations = get_confirmations()
+    netio = get_network_io()
 
     cache_hit_ratio = cache_status.get("hit_ratio", 0)
     cache_hit_ratio_display = f"{int(cache_hit_ratio * 100)}%" if cache_status.get("total", 0) > 0 else "\u2014"
@@ -1085,6 +1265,50 @@ def pulse_dashboard() -> PrefabApp:
 
         Separator()
 
+        # ── Sessions ────────────────────────────────────────────────────
+        Muted("SESSIONS", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            Muted(f"{rx_sess_sum}", css_class="text-sm text-muted")
+            with Row(gap=4, css_class="items-start flex-wrap"):
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("Completed", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="session_id",   header="Session"),
+                            DataTableColumn(key="target",       header="Target"),
+                            DataTableColumn(key="total_findings", header="Finds"),
+                            DataTableColumn(key="age_display",  header="Age"),
+                        ],
+                        rows=Rx("sessions_completed"),
+                    )
+
+        Separator()
+
+        # ── Confirmations ───────────────────────────────────────────────
+        Muted("CONFIRMATIONS", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Card():
+                with CardContent(css_class="p-3"):
+                    with Row(gap=4):
+                        Metric(label="Accepted", value=Rx("conf_accepted"))
+                        Metric(label="Denied",   value=Rx("conf_denied"))
+                        Metric(label="Skipped",  value=Rx("conf_skipped"))
+            Muted(f"{rx_conf_sum}", css_class="text-sm text-muted pt-1")
+
+        Separator()
+
+        # ── Network I/O ─────────────────────────────────────────────────
+        Muted("NETWORK I/O", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Card():
+                with CardContent(css_class="p-3"):
+                    with Row(gap=4):
+                        Metric(label="Sent",     value=Rx("net_sent_display"))
+                        Metric(label="Received", value=Rx("net_recv_display"))
+                        Metric(label="Total",    value=Rx("net_total_display"))
+
+        Separator()
+
         # ── Intelligence ───────────────────────────────────────────────
         Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
         DataTable(
@@ -1208,6 +1432,19 @@ def pulse_dashboard() -> PrefabApp:
             "trend_cpu_history":     trends.get("cpu_history", []),
             "trend_mem_history":     trends.get("mem_history", []),
             "trend_disk_display":    trends.get("disk_display", "0%"),
+            # Sessions
+            "sessions_active":    sessions.get("active", []),
+            "sessions_completed": sessions.get("completed", []),
+            "sessions_summary":   sessions.get("summary", "No sessions"),
+            # Confirmations
+            "conf_accepted": confirmations.get("accepted", 0),
+            "conf_denied":   confirmations.get("denied", 0),
+            "conf_skipped":  confirmations.get("skipped", 0),
+            "conf_summary":  confirmations.get("summary", "No confirmation events"),
+            # Network I/O
+            "net_sent_display":  netio.get("bytes_sent_display", "0 B"),
+            "net_recv_display":  netio.get("bytes_recv_display", "0 B"),
+            "net_total_display": netio.get("total_display", "0 B"),
             # Intelligence
             "intelligence":          get_tool_intelligence(),
         },
