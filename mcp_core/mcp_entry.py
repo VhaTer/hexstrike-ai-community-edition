@@ -12,7 +12,12 @@ import sys
 import time
 import threading
 import logging
+import fcntl
+import atexit
 from mcp_core.server_setup import setup_mcp_server_standalone, _scan_cache
+
+_LOCK_PATH = "/tmp/hexstrike_mcp.lock"
+_lock_fh = None
 
 
 def _seed_scan_cache(logger):
@@ -91,8 +96,40 @@ def _prewarm_singletons(logger):
     threading.Thread(target=_warm, daemon=True, name="prewarm").start()
 
 
+def _acquire_lock(logger):
+    """Acquire a filesystem lock to prevent duplicate MCP instances.
+
+    Exits with code 1 if another instance is already running.
+    Registers atexit handler to release and clean up the lock file.
+    """
+    global _lock_fh
+    try:
+        _lock_fh = open(_LOCK_PATH, "w")
+        fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        logger.error("💥 Another HexStrike MCP instance is already running. Exiting.")
+        sys.exit(1)
+
+    def _release():
+        global _lock_fh
+        if _lock_fh is not None:
+            try:
+                fcntl.flock(_lock_fh, fcntl.LOCK_UN)
+                _lock_fh.close()
+            except Exception:
+                pass
+        try:
+            os.unlink(_LOCK_PATH)
+        except FileNotFoundError:
+            pass
+
+    atexit.register(_release)
+
+
 def run_mcp(args, logger):
     """Run the HexStrike MCP server in standalone mode (stdio transport)."""
+    _acquire_lock(logger)
+
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("🔍 Debug logging enabled")

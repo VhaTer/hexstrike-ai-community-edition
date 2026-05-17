@@ -31,14 +31,15 @@ from fastmcp import FastMCPApp
 from prefab_ui.app import PrefabApp
 from prefab_ui.components import (
     Badge, Card, CardContent,
-    Column, DataTable, DataTableColumn, ForEach,
-    Heading, Metric, Muted,
-    Progress, Row, Separator, Text,
+    Column, DataTable, DataTableColumn, Div, ForEach,
+    Grid, Heading, Icon, Metric, Muted,
+    Progress, Row, Separator, Text, Tooltip,
 )
+from prefab_ui.components.charts import Sparkline
 from prefab_ui.rx import Rx
 
 from config import _config as app_config
-from mcp_core.server_setup import _scan_cache
+from mcp_core.server_setup import _scan_cache, _rate_limit_events
 from server_core.operational_metrics import _op_metrics
 from server_core.singletons import enhanced_process_manager, get_decision_engine, get_tool_stats_store
 from tool_registry import TOOLS
@@ -63,6 +64,12 @@ RAM              = Rx("ram_display").default("RAM —/— GB")
 TOOL_COUNT       = Rx("tools_display").default("— tools")
 STATUS           = Rx("server_status").default("unknown")
 STATUS_VARIANT   = Rx("server_status_variant").default("default")
+
+# New header icons Rx
+CPU_PCT          = Rx("cpu_display").default("0%")
+RAM_DETAIL       = Rx("ram_detail_display").default("0/0 GB")
+DISK_PCT         = Rx("disk_display").default("0%")
+CPU_SPARK        = Rx("cpu_history").default([])
 SCOPE_TARGET     = Rx("scope_target").default("No target scanned yet")
 SCOPE_TYPE       = Rx("scope_type").default("unknown")
 SCOPE_SUMMARY    = Rx("scope_summary").default("No scans yet")
@@ -83,6 +90,10 @@ rx_ram           = RAM
 rx_tools         = TOOL_COUNT
 rx_status        = STATUS
 rx_status_var    = STATUS_VARIANT
+rx_cpu           = CPU_PCT
+rx_ram_detail    = RAM_DETAIL
+rx_disk          = DISK_PCT
+rx_cpu_spark     = CPU_SPARK
 rx_scope_target  = SCOPE_TARGET
 rx_scope_type    = SCOPE_TYPE
 rx_scope_summary = SCOPE_SUMMARY
@@ -115,6 +126,34 @@ rx_active_sum    = ACTIVE_SUM
 HISTORY = Rx("history").default([])
 rx_history = HISTORY
 
+# Rate Limit
+RL_PROFILE    = Rx("rl_profile").default("normal")
+RL_CONFIDENCE = Rx("rl_confidence").default(0)
+RL_EVENTS     = Rx("rl_events").default([])
+RL_DELAY      = Rx("rl_delay").default(500)
+RL_THREADS    = Rx("rl_threads").default(20)
+RL_TIMEOUT    = Rx("rl_timeout").default(10)
+RL_SUMMARY    = Rx("rl_summary").default("No rate limit events detected")
+
+RL_CONF_DISP  = Rx("rl_confidence_display").default("0%")
+RL_DELAY_DISP = Rx("rl_delay_display").default("Delay 500ms")
+
+rx_rl_profile = RL_PROFILE
+rx_rl_conf    = RL_CONFIDENCE
+rx_rl_events  = RL_EVENTS
+rx_rl_delay   = RL_DELAY
+rx_rl_threads = RL_THREADS
+rx_rl_to      = RL_TIMEOUT
+rx_rl_summary = RL_SUMMARY
+rx_rl_conf_display = RL_CONF_DISP
+rx_rl_delay_display = RL_DELAY_DISP
+
+# Badge variant for RL profile
+_RL_VARIANTS = {"stealth": "destructive", "conservative": "warning", "normal": "default", "aggressive": "secondary"}
+def _rl_variant(profile: str) -> str:
+    return _RL_VARIANTS.get(profile, "default")
+rx_rl_var = Rx("rl_variant").default("default")
+
 # Footer
 TOTAL_RUNS_DISP = Rx("total_runs_display").default("0 runs")
 SUCCESS_RATE    = Rx("success_rate_display").default("\u2014%")
@@ -139,6 +178,17 @@ def get_overview() -> dict:
     avail = sys.get("memory_available_gb", 0)
     total = sys.get("memory_total_gb", 1)
     uptime = summary["uptime_seconds"]
+    cpu = sys.get("cpu_percent", 0)
+    disk = sys.get("disk_usage_percent", 0)
+
+    cpu_history = []
+    try:
+        rm = enhanced_process_manager.resource_monitor
+        recent = rm.usage_history[-10:] if hasattr(rm, "usage_history") else []
+        cpu_history = [u.get("cpu_percent", 0) for u in recent if "cpu_percent" in u]
+    except Exception:
+        pass
+
     return {
         "version":               app_config["VERSION"],
         "uptime_seconds":        uptime,
@@ -146,8 +196,9 @@ def get_overview() -> dict:
         "ram_available_gb":      avail,
         "ram_total_gb":          total,
         "disk_free_gb":          sys.get("disk_free_gb", 0),
-        "disk_percent":          sys.get("disk_usage_percent", 0),
-        "cpu_percent":           sys.get("cpu_percent", 0),
+        "disk_percent":          disk,
+        "cpu_percent":           cpu,
+        "cpu_history":           cpu_history,
         "server_status":         "healthy" if has_psutil else "limited",
         "tools_count":           len(TOOLS),
         "total_runs":            summary["total_runs"],
@@ -157,6 +208,9 @@ def get_overview() -> dict:
         "uptime_display":        f"up {_fmt_duration(uptime)}",
         "ram_display":           f"RAM {avail}/{total} GB",
         "tools_display":         f"{len(TOOLS)} tools",
+        "cpu_display":           f"{cpu:.0f}%",
+        "ram_detail_display":    f"{avail}/{total} GB",
+        "disk_display":          f"{disk:.0f}%",
         "server_status_variant": "success" if has_psutil else "warning",
     }
 
@@ -385,6 +439,31 @@ def get_tool_intelligence() -> list[dict]:
     return result
 
 
+@app.tool()
+def get_rate_limit_status(target: str | None = None) -> dict:
+    """Rate limit detection state per target. Shows current profile, confidence, indicators."""
+    events = list(_rate_limit_events)
+    if target:
+        events = [e for e in events if e.get("target") == target]
+    recent = events[-1] if events else None
+    return {
+        "profile":        recent["profile"] if recent else "normal",
+        "confidence":     recent["confidence"] if recent else 0.0,
+        "indicators":     recent["indicators"] if recent else [],
+        "event_count":    len(events),
+        "events":         events[-5:],
+        "last_detected":  recent["timestamp"] if recent else None,
+        "timing":         _RL_PROFILES.get(recent["profile"] if recent else "normal", {}),
+    }
+
+
+_RL_PROFILES = {
+    "aggressive":   {"delay": 0.1, "threads": 50, "timeout": 5},
+    "normal":       {"delay": 0.5, "threads": 20, "timeout": 10},
+    "conservative": {"delay": 1.0, "threads": 10, "timeout": 15},
+    "stealth":      {"delay": 2.0, "threads": 5,  "timeout": 30},
+}
+
 
 @app.tool()
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
@@ -495,6 +574,16 @@ def pulse_dashboard() -> PrefabApp:
     plan = get_plan(active_target) if active_target else {"target": None, "steps": [], "step_count": 0, "summary": "No target"}
     active = get_active_tools()
     history = get_history(active_target)
+    rl = get_rate_limit_status(active_target)
+    rl_events_table = [
+        {
+            "tool":       e.get("tool", ""),
+            "target":     e.get("target", ""),
+            "profile":    e.get("profile", ""),
+            "indicators": ", ".join(e.get("indicators", []))[:80],
+        }
+        for e in rl.get("events", [])
+    ]
     sys = _op_metrics.summary().get("system", {})
     ops = _op_metrics.summary()
     total_runs_display = f"{ops['total_runs']} runs"
@@ -505,16 +594,30 @@ def pulse_dashboard() -> PrefabApp:
     with Column(gap=0) as view:
 
         # ── Header ─────────────────────────────────────────────────────
-        with Row(gap=2, align="center", css_class="p-3 border-b flex-wrap"):
-            Badge(f"{rx_version}", variant="destructive")
-            Text(" \u2022 ")
-            Text(f"{rx_uptime}")
-            Text(" \u2022 ")
-            Text(f"{rx_ram}")
-            Text(" \u2022 ")
-            Text(f"{rx_tools}")
-            Text(" \u2022 ")
-            Badge(f"{rx_status}", variant=rx_status_var)
+        cpu_has_history = len(overview.get("cpu_history", [])) > 1
+        with Column(gap=0):
+            with Row(gap=2, align="center", css_class="p-2 px-4 border-b flex-wrap"):
+                with Tooltip(content=f"{overview['cpu_display']} CPU", side="bottom"):
+                    with Row(gap=1, align="center"):
+                        Icon(name="cpu", size="sm")
+                        Progress(value=rx_cpu, variant="default", css_class="w-12")
+                Text("\u00b7", css_class="text-xs text-muted")
+                with Tooltip(content=f"RAM {overview['ram_detail_display']}", side="bottom"):
+                    with Row(gap=1, align="center"):
+                        Icon(name="hard-drive", size="sm")
+                        Text(f"{rx_ram_detail}", css_class="text-xs font-mono")
+                Text("\u00b7", css_class="text-xs text-muted")
+                with Tooltip(content=f"Disk {overview['disk_display']}", side="bottom"):
+                    with Row(gap=1, align="center"):
+                        Icon(name="database", size="sm")
+                        Progress(value=rx_disk, variant="default", css_class="w-12")
+                Div(css_class="flex-1")
+                Text(f"{rx_version}", css_class="text-xs font-bold tracking-wider")
+                Div(css_class="flex-1")
+                Badge(f"{rx_tools}", variant="outline")
+            if cpu_has_history:
+                with Row(css_class="px-4 py-0.5 border-b bg-muted/5"):
+                    Sparkline(data=rx_cpu_spark, height=16, variant="info", fill=True, curve="smooth")
 
         # ── Scope bar ──────────────────────────────────────────────────
         with Row(gap=3, align="center", css_class="p-2 px-4 bg-muted/30 border-b flex-wrap"):
@@ -596,6 +699,36 @@ def pulse_dashboard() -> PrefabApp:
 
         Separator()
 
+        # ── Rate Limit ──────────────────────────────────────────────────
+        Muted("RATE LIMIT", css_class="text-xs uppercase tracking-wider p-4")
+        with Row(gap=4, css_class="px-4 pb-4 items-start flex-wrap"):
+            with Card():
+                with CardContent(css_class="p-3"):
+                    with Column(gap=2):
+                        with Row(gap=3, align="center"):
+                            Badge(f"{rx_rl_profile}", variant=rx_rl_var)
+                            Muted(f"{rx_rl_conf_display}")
+                        with Row(gap=2, css_class="flex-wrap"):
+                            Muted(f"{rx_rl_delay_display}")
+                            Muted(f"\u00b7")
+                            Muted(f"{rx_rl_threads} threads")
+                            Muted(f"\u00b7")
+                            Muted(f"timeout {rx_rl_to}s")
+                        Muted(f"{rx_rl_summary}", css_class="text-sm text-muted")
+            with Card(css_class="flex-1"):
+                with CardContent(css_class="p-3"):
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",     header="Tool"),
+                            DataTableColumn(key="target",   header="Target"),
+                            DataTableColumn(key="profile",  header="Profile"),
+                            DataTableColumn(key="indicators", header="Triggers"),
+                        ],
+                        rows=Rx("rl_events"),
+                    )
+
+        Separator()
+
         # ── Intelligence ───────────────────────────────────────────────
         Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
         DataTable(
@@ -633,6 +766,10 @@ def pulse_dashboard() -> PrefabApp:
             "ram_total_gb":          overview["ram_total_gb"],
             "disk_percent":          overview["disk_percent"],
             "cpu_percent":           overview["cpu_percent"],
+            "cpu_history":           overview.get("cpu_history", []),
+            "cpu_display":           overview.get("cpu_display", "0%"),
+            "ram_detail_display":    overview.get("ram_detail_display", "0/0 GB"),
+            "disk_display":          overview.get("disk_display", "0%"),
             "server_status":         overview["server_status"],
             "server_status_variant": overview["server_status_variant"],
             "tools_count":           overview["tools_count"],
@@ -674,6 +811,17 @@ def pulse_dashboard() -> PrefabApp:
             "active_summary":        active.get("summary", "No active tasks"),
             # History
             "history":               history,
+            # Rate Limit
+            "rl_profile":            rl.get("profile", "normal"),
+            "rl_variant":            _rl_variant(rl.get("profile", "normal")),
+            "rl_confidence":         rl.get("confidence", 0),
+            "rl_delay":              rl.get("timing", {}).get("delay", 0.5),
+            "rl_threads":            rl.get("timing", {}).get("threads", 20),
+            "rl_timeout":            rl.get("timing", {}).get("timeout", 10),
+            "rl_summary":            _fmt_rl_summary(rl),
+            "rl_confidence_display": f"{int(rl.get('confidence', 0) * 100)}%",
+            "rl_delay_display":      f"Delay {int(rl.get('timing', {}).get('delay', 0.5) * 1000)}ms",
+            "rl_events":             rl_events_table,
             # Intelligence
             "intelligence":          get_tool_intelligence(),
         },
@@ -702,6 +850,18 @@ def _fmt_duration(seconds: float | int | None) -> str:
     elif m:
         return f"{m}m {s}s"
     return f"{s}s"
+
+
+def _fmt_rl_summary(rl: dict) -> str:
+    """Format rate limit summary line."""
+    n = rl.get("event_count", 0)
+    if n == 0:
+        return "No rate limit events detected"
+    last = rl.get("last_detected")
+    if last:
+        ago = _fmt_duration(time.time() - last)
+        return f"{n} event(s) \u00b7 Last {ago} ago"
+    return f"{n} event(s)"
 
 
 if __name__ == "__main__":

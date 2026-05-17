@@ -59,6 +59,7 @@ _server_start_time = time.time()
 _optimizer    = ParameterOptimizer()
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
+_rate_limit_events: list[dict] = []  # appended by run_security_tool on detection
 
 
 def _cache_key_for(session_id: str, tool_name: str, target: str, params: Dict[str, Any]) -> str:
@@ -77,7 +78,7 @@ def _collect_cached_scans(session_id: str, target: str) -> Dict[str, Any]:
     """Collect all cached scan results for a given target in the current session."""
     scans: Dict[str, Any] = {}
     for k, v in _scan_cache.items():
-        if k.startswith(session_id) and v.get("target") == target:
+        if (k.startswith(session_id) or k.startswith("seed:")) and v.get("target") == target:
             tool = v.get("tool")
             if tool:
                 scans[tool] = v.get("result", {})
@@ -1037,6 +1038,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             if rl["detected"]:
                 recommended = rl["recommended_profile"]
                 _telemetry["rate_limit"] = recommended
+                _rate_limit_events.append({
+                    "target":    target or "",
+                    "tool":      tool_name,
+                    "profile":   recommended,
+                    "confidence": rl["confidence"],
+                    "indicators": rl.get("indicators", []),
+                    "timestamp":  time.time(),
+                })
                 await ctx.info(f"⚠️ Rate limit detected (confidence={rl['confidence']:.0%}) → switching to {recommended}")
                 try:
                     await ctx.set_state(f"ratelimit:{target}", recommended)
@@ -1498,7 +1507,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         session_id = ctx.session_id
         matches = [
             v for k, v in _scan_cache.items()
-            if v.get("target") == target and k.startswith(session_id)
+            if v.get("target") == target and (k.startswith(session_id) or k.startswith("seed:"))
         ]
         if not matches:
             return json.dumps({
@@ -1524,7 +1533,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             (v for k, v in sorted(_scan_cache.items(), reverse=True)
              if v.get("tool") == tool_name
              and v.get("target") == target
-             and k.startswith(session_id)),
+             and (k.startswith(session_id) or k.startswith("seed:"))),
             None,
         )
         if not entry:
@@ -1556,7 +1565,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 "success":   v["result"].get("success", False),
             }
             for k, v in _scan_cache.items()
-            if k.startswith(session_id)
+            if k.startswith(session_id) or k.startswith("seed:")
         ]
         entries.sort(key=lambda x: x["timestamp"], reverse=True)
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)
