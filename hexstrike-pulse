@@ -1,27 +1,27 @@
 #!/bin/bash
-"""
-HexStrike Pulse — single entry point for Claude Desktop
-=======================================================
-Usage:
-  ./hexstrike-pulse           Start MCP stdio server (Claude Desktop)
-  ./hexstrike-pulse --debug   Start with debug logging
-  ./hexstrike-pulse --help    Show help
-
-What this does:
-  1. Auto-activates the hexstrike virtual environment
-  2. Clears stale lock file (/tmp/hexstrike_mcp.lock) if older than 30s
-  3. Runs hexstrike_mcp.py in MCP stdio mode (the ONLY mode Claude Desktop supports)
-
-Claude Desktop config:
-  {
-    "mcpServers": {
-      "hexstrike-pulse": {
-        "command": "/full/path/to/hexstrike-pulse",
-        "args": ["--debug"]
-      }
-    }
-  }
-"""
+# HexStrike Pulse — single entry point for Claude Desktop
+# =======================================================
+# Usage:
+#   ./hexstrike-pulse           Start MCP stdio server (Claude Desktop)
+#   ./hexstrike-pulse --debug   Start with debug logging
+#
+# What this does:
+#   1. Auto-activates the hexstrike virtual environment
+#   2. Clears stale lock file (/tmp/hexstrike_mcp.lock) if older than 30s
+#   3. Runs hexstrike_mcp.py in MCP stdio mode
+#
+# Claude Desktop config (claude_desktop_config.json):
+#   {
+#     "mcpServers": {
+#       "hexstrike-pulse": {
+#         "command": "/ABSOLUTE/PATH/TO/hexstrike-pulse",
+#         "args": ["--debug"]
+#       }
+#     }
+#   }
+#
+# Use pwd to get the absolute path, e.g.:
+#   /home/user/hexstrike-ai-community-edition/hexstrike-pulse
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
@@ -32,7 +32,7 @@ if [ -f hexstrike-env/bin/activate ]; then
     source hexstrike-env/bin/activate
 fi
 
-# Clean stale lock file (>30s old = stale)
+# Clean stale lock file (>30s old = stale = crashed without cleanup)
 LOCK_FILE="/tmp/hexstrike_mcp.lock"
 if [ -f "$LOCK_FILE" ]; then
     if [ "$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))" -gt 30 ]; then
