@@ -480,9 +480,10 @@ class TestBuildTypedToolDoc:
         }
         doc = _build_typed_tool_doc("nmap", "Scan ports on a target", tool_def)
         assert "Scan ports on a target" in doc
-        assert "target: Required parameter" in doc
-        assert "ports: Optional parameter" in doc
-        assert "timeout: Optional parameter" in doc
+        assert "target: Required" in doc
+        assert "Workflow:" in doc
+        assert "ports: Optional. Default: '80,443'" in doc
+        assert "timeout: Optional. Default: 30" in doc
         assert "run_security_tool" in doc
 
     def test_build_doc_no_optional(self):
@@ -492,8 +493,8 @@ class TestBuildTypedToolDoc:
             "optional": {},
         }
         doc = _build_typed_tool_doc("test", "Simple tool", tool_def)
-        assert "input: Required parameter" in doc
-        assert "Optional parameter" not in doc
+        assert "input: Required" in doc
+        assert "Optional" not in doc
 
     def test_build_doc_optional_with_string_defaults(self):
         tool_def = {
@@ -502,8 +503,8 @@ class TestBuildTypedToolDoc:
             "optional": {"method": "GET", "headers": {}},
         }
         doc = _build_typed_tool_doc("test", "Tool with string optional", tool_def)
-        assert "method: Optional parameter" in doc
-        assert "headers: Optional parameter" in doc
+        assert "method: Optional. Default: 'GET'" in doc
+        assert "headers: Optional. Default: {}" in doc
 
 
 # =========================================================================

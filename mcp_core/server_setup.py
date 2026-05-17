@@ -484,24 +484,63 @@ def _resolve_required_param_type(spec: Dict[str, Any]) -> type:
     return str
 
 
+_TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
+    "nmap": {
+        "workflow": "FIRST recon tool on any new target. Run before whatweb.",
+        "example": "nmap(target='scanme.nmap.org') or nmap(target='192.168.1.1', ports='80,443')",
+    },
+    "whatweb": {
+        "workflow": "Web technology detection. Use AFTER nmap when web ports are found.",
+        "example": "whatweb(url='http://scanme.nmap.org')",
+    },
+    "sqlmap": {
+        "workflow": "SQL injection testing. Use AFTER finding SQLi candidates via findings.",
+        "example": "sqlmap(url='http://target/page?id=1') or sqlmap(url='http://target/page?id=1', additional_args='--batch')",
+    },
+    "gobuster": {
+        "workflow": "Directory/file brute force. Use AFTER whatweb when web server is detected.",
+        "example": "gobuster(target='http://target', params='dir -w /usr/share/wordlists/dirb/common.txt')",
+    },
+    "nuclei": {
+        "workflow": "Vulnerability scanning. Use AFTER surface scan for known CVEs.",
+        "example": "nuclei(target='http://target')",
+    },
+    "nikto": {
+        "workflow": "Web server vulnerability scanner. Use AFTER whatweb.",
+        "example": "nikto(target='http://target')",
+    },
+}
+
+
 def _build_typed_tool_doc(tool_name: str, description: str, tool_def: Dict[str, Any]) -> str:
-    """Generate a concise docstring for a typed wrapper tool."""
-    lines = [description, "", "Args:"]
+    """Generate a rich docstring for a typed wrapper tool (Couche 1 plug-and-play)."""
+    lower = tool_name.lower()
+    couche1 = _TOOL_COUCHE1.get(lower, {})
+
+    lines = [description, ""]
+
+    if "workflow" in couche1:
+        lines.append(f"Workflow: {couche1['workflow']}")
+        lines.append("")
+
+    lines.append("Args:")
     for param_name, spec in tool_def.get("params", {}).items():
-        annotation = _resolve_required_param_type(spec)
-        lines.append(f"    {param_name}: Required parameter")
+        lines.append(f"    {param_name}: Required")
     for param_name, default in tool_def.get("optional", {}).items():
-        lines.append(f"    {param_name}: Optional parameter. Default: {default!r}")
-    lines.extend(
-        [
-            "",
-            "Returns:",
-            "    Tool execution results",
-            "",
-            "Notes:",
-            f"    This is a typed wrapper over run_security_tool(tool_name={tool_name!r}, parameters=...).",
-        ]
-    )
+        lines.append(f"    {param_name}: Optional. Default: {default!r}")
+
+    lines.append("")
+    lines.append("Returns:")
+    lines.append("    dict with success (bool), output (str), execution_time (float), error (str)")
+
+    if "example" in couche1:
+        lines.append("")
+        lines.append("Example:")
+        lines.append(f"    {couche1['example']}")
+
+    lines.append("")
+    lines.append("Note:")
+    lines.append(f"    Typed wrapper over run_security_tool(tool_name={tool_name!r})")
     return "\n".join(lines)
 
 
@@ -1594,13 +1633,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     # server_health MCP tool — wraps the health resource for tool-based access
     # ========================================================================
     @mcp.tool(
-        description="Check HexStrike server health, runtime statistics and operational metrics",
+        description="HexStrike server health, runtime stats, op metrics — call FIRST to check if the MCP server is alive and get a summary of system state, tool count, cache stats, and operational metrics. No parameters needed.",
         annotations={"readOnlyHint": True, "openWorldHint": False},
         task=True,
         timeout=None,
     )
     async def server_health() -> Dict[str, Any]:
-        """Get server health status, runtime statistics and operational metrics."""
+        """Server health, runtime statistics, operational metrics. Call first to verify connectivity and get system status summary."""
         uptime = int(time.time() - _server_start_time)
         return {
             "status":         "healthy",
