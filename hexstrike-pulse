@@ -1,16 +1,37 @@
 #!/bin/bash
-# HexStrike Pulse — single entry point for Claude Desktop
-# =======================================================
-# Usage:
-#   ./hexstrike-pulse           Start MCP stdio server (Claude Desktop)
-#   ./hexstrike-pulse --debug   Start with debug logging
+# =============================================================================
+# HexStrike Pulse — MCP stdio server for Claude Desktop
+# =============================================================================
 #
-# What this does:
-#   1. Auto-activates the hexstrike virtual environment
-#   2. Clears stale lock file (/tmp/hexstrike_mcp.lock) if older than 30s
-#   3. Runs hexstrike_mcp.py in MCP stdio mode
+# PREREQUISITES (one-time setup):
 #
-# Claude Desktop config (claude_desktop_config.json):
+#   1. Python 3.11+ with venv support
+#      python3 --version
+#
+#   2. Create and activate virtual environment
+#      python3 -m venv hexstrike-env
+#      source hexstrike-env/bin/activate
+#
+#   3. Install dependencies
+#      pip install -r requirements.txt
+#
+#   4. Verify environment (optional but recommended)
+#      python3 hexstrike.py validate
+#
+# LAUNCH:
+#
+#   ./hexstrike-pulse              MCP stdio (Claude Desktop)
+#   ./hexstrike-pulse --debug      Debug logging
+#
+# ENTRY POINTS (same project, different uses):
+#
+#   ./hexstrike-pulse              Claude Desktop — MCP stdio
+#   python3 hexstrike.py serve     Web dashboard — HTTP/SSE
+#   python3 hexstrike.py scan      Direct scan — CLI
+#   python3 hexstrike.py mcp       MCP dev mode — inspector
+#
+# CLAUDE DESKTOP CONFIG (claude_desktop_config.json):
+#
 #   {
 #     "mcpServers": {
 #       "hexstrike-pulse": {
@@ -20,8 +41,10 @@
 #     }
 #   }
 #
-# Use pwd to get the absolute path, e.g.:
-#   /home/user/hexstrike-ai-community-edition/hexstrike-pulse
+#   Replace /ABSOLUTE/PATH/TO with the output of: pwd
+#   Example: /home/user/hexstrike-ai-community-edition/hexstrike-pulse
+#
+# =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
@@ -32,7 +55,7 @@ if [ -f hexstrike-env/bin/activate ]; then
     source hexstrike-env/bin/activate
 fi
 
-# Clean stale lock file (>30s old = stale = crashed without cleanup)
+# Clean stale lock file (>30s old = crashed without cleanup)
 LOCK_FILE="/tmp/hexstrike_mcp.lock"
 if [ -f "$LOCK_FILE" ]; then
     if [ "$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))" -gt 30 ]; then

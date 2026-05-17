@@ -8,8 +8,8 @@ Usage:
   hexstrike tools     List available tools
   hexstrike status    Check server health
   hexstrike validate  Validate environment (binary availability)
-  hexstrike mcp       Run MCP stdio bridge (Claude Desktop)
-   hexstrike ctf       CTF challenge analysis with live nmap scan
+   hexstrike mcp       Run MCP stdio bridge (Claude Desktop)
+   hexstrike ctf        CTF challenge analysis with live nmap scan
 
 Flags:
   --version     Show version
