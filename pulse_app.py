@@ -41,7 +41,7 @@ from prefab_ui.rx import Rx
 from config import _config as app_config
 from mcp_core.server_setup import _scan_cache, _rate_limit_events
 from server_core.operational_metrics import _op_metrics
-from server_core.singletons import enhanced_process_manager, get_decision_engine, get_tool_stats_store
+from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_tool_stats_store
 from tool_registry import TOOLS
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,25 @@ rx_rl_to      = RL_TIMEOUT
 rx_rl_summary = RL_SUMMARY
 rx_rl_conf_display = RL_CONF_DISP
 rx_rl_delay_display = RL_DELAY_DISP
+
+# Errors & Failures
+ERR_TOTAL    = Rx("error_total").default(0)
+ERR_TOOL     = Rx("error_by_tool").default([])
+ERR_TIMEOUTS = Rx("timeout_by_tool").default([])
+ERR_SLOWEST  = Rx("slowest_tools").default([])
+ERR_TYPE     = Rx("error_by_type").default([])
+ERR_RECENT   = Rx("recent_errors").default([])
+ERR_SR       = Rx("error_success_rate_display").default("0%")
+ERR_SUM      = Rx("error_summary").default("No errors recorded")
+
+rx_err_total   = ERR_TOTAL
+rx_err_tool    = ERR_TOOL
+rx_err_timeout = ERR_TIMEOUTS
+rx_err_slowest = ERR_SLOWEST
+rx_err_type    = ERR_TYPE
+rx_err_recent  = ERR_RECENT
+rx_err_sr      = ERR_SR
+rx_err_sum     = ERR_SUM
 
 # Badge variant for RL profile
 _RL_VARIANTS = {"stealth": "destructive", "conservative": "warning", "normal": "default", "aggressive": "secondary"}
@@ -466,6 +485,58 @@ _RL_PROFILES = {
 
 
 @app.tool()
+def get_errors_and_failures() -> dict:
+    """Error and failure statistics. Per-tool error/timeout counts, slowest tools, error type distribution, recent errors."""
+    ops = _op_metrics.summary()
+    error_by_tool = _op_metrics.error_count_by_tool()
+    timeout_by_tool = _op_metrics.timeout_count_by_tool()
+    slowest = _op_metrics.slowest_tools(10)
+    success_rate = _op_metrics.success_rate_by_tool()
+
+    err_stats = {}
+    try:
+        err_stats = error_handler.get_error_statistics()
+    except Exception:
+        pass
+
+    recent_errors = []
+    for e in err_stats.get("recent_errors", []):
+        recent_errors.append({
+            "tool": e.get("tool", "?"),
+            "type": e.get("error_type", "unknown"),
+            "ts":   str(e.get("timestamp", ""))[:19],
+        })
+
+    error_type_list = [
+        {"type": t.replace("_", " ").title(), "count": c}
+        for t, c in err_stats.get("error_counts_by_type", {}).items()
+    ]
+    error_type_list.sort(key=lambda x: -x["count"])
+
+    for e in error_by_tool:
+        e["display"] = f"{e['errors']}/{e['runs']}"
+    for e in slowest:
+        e["avg_display"] = _fmt_duration(e.get("avg_duration"))
+        e["max_display"] = _fmt_duration(e.get("max_duration"))
+    for e in timeout_by_tool:
+        e["display"] = f"{e['timeouts']}/{e['runs']}"
+    for e in success_rate:
+        e["rate_display"] = f"{int(e['success_rate'] * 100)}%"
+
+    return {
+        "total_errors":         ops.get("total_errors", 0),
+        "total_runs":           ops.get("total_runs", 0),
+        "global_success_rate":  ops.get("global_success_rate", 0),
+        "error_by_tool":        error_by_tool[:10],
+        "timeout_by_tool":      timeout_by_tool[:10],
+        "slowest_tools":        slowest[:10],
+        "success_rate_by_tool": success_rate[:10],
+        "error_by_type":        error_type_list,
+        "recent_errors":        recent_errors[-10:],
+    }
+
+
+@app.tool()
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
     """Attack plan for a target via IntelligentDecisionEngine."""
     if not target:
@@ -590,6 +661,15 @@ def pulse_dashboard() -> PrefabApp:
     success_rate_display = f"{int(ops['global_success_rate'] * 100)}%" if ops['total_runs'] > 0 else "\u2014"
     cache_hit_display = f"{int(ops['cache']['hit_ratio'] * 100)}%" if ops['cache']['total'] > 0 else "\u2014"
     timeout_count_display = str(len(ops.get("timeout_count_by_tool", [])))
+
+    err = get_errors_and_failures()
+    err_sr = err.get("global_success_rate", 0)
+    error_summary = (
+        f"{err.get('total_errors', 0)} errors \u00b7 "
+        f"{len(err.get('timeout_by_tool', []))} tools with timeouts \u00b7 "
+        f"{int(err_sr * 100)}% success"
+    )
+    error_success_rate_display = f"{int(err_sr * 100)}%" if err.get("total_runs", 0) > 0 else "\u2014"
 
     with Column(gap=0) as view:
 
@@ -729,6 +809,65 @@ def pulse_dashboard() -> PrefabApp:
 
         Separator()
 
+        # ── Errors & Failures ────────────────────────────────────────────
+        Muted("ERRORS & FAILURES", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Row(gap=3, align="center"):
+                Badge(f"{rx_err_total} errors", variant="destructive")
+                Muted(f"{rx_err_sr} success")
+                Muted(f"{rx_err_sum}")
+            with Row(gap=4, css_class="items-start flex-wrap"):
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("By tool", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",    header="Tool"),
+                            DataTableColumn(key="display", header="Err/Runs"),
+                        ],
+                        rows=Rx("error_by_tool"),
+                    )
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("Timeouts", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",    header="Tool"),
+                            DataTableColumn(key="display", header="To/Runs"),
+                        ],
+                        rows=Rx("timeout_by_tool"),
+                    )
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("Slowest tools", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",        header="Tool"),
+                            DataTableColumn(key="avg_display", header="Avg"),
+                            DataTableColumn(key="max_display", header="Max"),
+                            DataTableColumn(key="runs",        header="Runs"),
+                        ],
+                        rows=Rx("slowest_tools"),
+                    )
+            with Row(gap=2, css_class="pt-2"):
+                Muted("By error type", css_class="text-xs")
+            DataTable(
+                columns=[
+                    DataTableColumn(key="type",  header="Error Type"),
+                    DataTableColumn(key="count", header="Count"),
+                ],
+                rows=Rx("error_by_type"),
+            )
+            with Row(gap=2, css_class="pt-2"):
+                Muted("Recent errors", css_class="text-xs")
+            DataTable(
+                columns=[
+                    DataTableColumn(key="tool", header="Tool"),
+                    DataTableColumn(key="type", header="Type"),
+                    DataTableColumn(key="ts",   header="Timestamp"),
+                ],
+                rows=Rx("recent_errors"),
+            )
+
+        Separator()
+
         # ── Intelligence ───────────────────────────────────────────────
         Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
         DataTable(
@@ -822,6 +961,15 @@ def pulse_dashboard() -> PrefabApp:
             "rl_confidence_display": f"{int(rl.get('confidence', 0) * 100)}%",
             "rl_delay_display":      f"Delay {int(rl.get('timing', {}).get('delay', 0.5) * 1000)}ms",
             "rl_events":             rl_events_table,
+            # Errors & Failures
+            "error_total":               err.get("total_errors", 0),
+            "error_success_rate_display": error_success_rate_display,
+            "error_summary":             error_summary,
+            "error_by_tool":             err.get("error_by_tool", []),
+            "timeout_by_tool":           err.get("timeout_by_tool", []),
+            "slowest_tools":             err.get("slowest_tools", []),
+            "error_by_type":             err.get("error_by_type", []),
+            "recent_errors":             err.get("recent_errors", []),
             # Intelligence
             "intelligence":          get_tool_intelligence(),
         },
