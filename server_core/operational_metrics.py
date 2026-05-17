@@ -196,6 +196,17 @@ class OperationalMetricsStore:
         with self._lock:
             return dict(self._confirmations)
 
+    def cache_hits_by_tool(self) -> List[Dict[str, Any]]:
+        """Return per-tool cache hit counts. Tools with hits only."""
+        with self._lock:
+            rows = [
+                {"tool": t, "cache_hits": e["cache_hits"], "runs": e["runs"]}
+                for t, e in self._tools.items()
+                if e["cache_hits"] > 0
+            ]
+            rows.sort(key=lambda x: x["cache_hits"], reverse=True)
+            return rows
+
     @staticmethod
     def system_metrics() -> Dict[str, Any]:
         """Snapshot of system resources (CPU, memory, disk)."""

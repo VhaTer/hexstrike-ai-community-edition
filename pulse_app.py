@@ -183,6 +183,48 @@ rx_success   = SUCCESS_RATE
 rx_cache     = CACHE_HIT_RATE
 rx_timeouts  = TIMEOUT_DISP
 
+# Tool Performance
+PERF_DATA     = Rx("tool_performance").default([])
+PERF_TIMEOUTS = Rx("perf_timeouts").default([])
+PERF_SUM      = Rx("perf_summary").default("No data")
+rx_perf       = PERF_DATA
+rx_perf_to    = PERF_TIMEOUTS
+rx_perf_sum   = PERF_SUM
+
+# Cache Status
+CACHE_HITS  = Rx("cache_hits").default(0)
+CACHE_MISS  = Rx("cache_misses").default(0)
+CACHE_RATIO = Rx("cache_hit_ratio_display").default("\u2014%")
+CACHE_SIZE  = Rx("cache_size").default(0)
+CACHE_MAX   = Rx("cache_max_size").default(500)
+CACHE_UTIL  = Rx("cache_util_display").default("0%")
+CACHE_TOOL  = Rx("cache_by_tool").default([])
+CACHE_SUM   = Rx("cache_summary_text").default("No cache data")
+rx_cache_hits  = CACHE_HITS
+rx_cache_miss  = CACHE_MISS
+rx_cache_ratio = CACHE_RATIO
+rx_cache_size  = CACHE_SIZE
+rx_cache_max   = CACHE_MAX
+rx_cache_util  = CACHE_UTIL
+rx_cache_tool  = CACHE_TOOL
+rx_cache_sum   = CACHE_SUM
+
+# System Trends
+TREND_CPU_AVG  = Rx("trend_cpu_avg_display").default("0%")
+TREND_MEM_AVG  = Rx("trend_mem_avg_display").default("0%")
+TREND_PERIOD   = Rx("trend_period_display").default("\u2014")
+TREND_MEASURES = Rx("trend_measurements").default(0)
+TREND_CPU_HIST = Rx("trend_cpu_history").default([])
+TREND_MEM_HIST = Rx("trend_mem_history").default([])
+TREND_DISK     = Rx("trend_disk_display").default("0%")
+rx_trend_cpu  = TREND_CPU_AVG
+rx_trend_mem  = TREND_MEM_AVG
+rx_trend_per  = TREND_PERIOD
+rx_trend_meas = TREND_MEASURES
+rx_trend_cpu_hist = TREND_CPU_HIST
+rx_trend_mem_hist = TREND_MEM_HIST
+rx_trend_disk = TREND_DISK
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Backend tools
@@ -629,6 +671,89 @@ def get_history(target: str | None = None, limit: int = 50) -> list[dict]:
     return result
 
 
+@app.tool()
+def get_tool_performance() -> dict:
+    """Per-tool success rates and timeout counts. Shows worst performers first."""
+    sr = _op_metrics.success_rate_by_tool()
+    to = _op_metrics.timeout_count_by_tool()
+    to_map = {e["tool"]: e["timeouts"] for e in to}
+
+    combined = []
+    for e in sr:
+        combined.append({
+            "tool":      e["tool"],
+            "runs":      e["runs"],
+            "successes": e["successes"],
+            "errors":    e["errors"],
+            "rate_display": f"{int(e['success_rate'] * 100)}%",
+            "timeouts":  to_map.get(e["tool"], 0),
+        })
+    summary = f"{len(sr)} tools \u00b7 best: {sr[-1]['tool'] if sr else '--'} {int(sr[-1]['success_rate'] * 100) if sr else 0}%"
+
+    for e in to:
+        e["display"] = f"{e['timeouts']}/{e['runs']}"
+
+    return {
+        "tools":    combined,
+        "timeouts": to,
+        "summary":  summary,
+    }
+
+
+@app.tool()
+def get_cache_status() -> dict:
+    """Cache hit/miss statistics and per-tool cache hits."""
+    cs = _op_metrics.cache_summary()
+    tool_hits = _op_metrics.cache_hits_by_tool()
+
+    adv_stats = {}
+    try:
+        from server_core.singletons import cache
+        adv_stats = cache.get_stats()
+    except Exception:
+        pass
+
+    return {
+        "hits":        cs.get("hits", 0),
+        "misses":      cs.get("misses", 0),
+        "total":       cs.get("total", 0),
+        "hit_ratio":   cs.get("hit_ratio", 0),
+        "cache_size":  adv_stats.get("size", 0),
+        "max_size":    adv_stats.get("max_size", 500),
+        "hit_rate":    adv_stats.get("hit_rate", "0%"),
+        "utilization": adv_stats.get("utilization", 0),
+        "by_tool":     tool_hits,
+    }
+
+
+@app.tool()
+def get_system_trends() -> dict:
+    """System resource trends over time. CPU/memory averages, history for sparklines."""
+    try:
+        rm = enhanced_process_manager.resource_monitor
+        trends = rm.get_usage_trends() if hasattr(rm, "get_usage_trends") else {}
+        history = list(rm.usage_history) if hasattr(rm, "usage_history") else []
+    except Exception:
+        return {
+            "cpu_avg": 0, "memory_avg": 0, "measurements": 0,
+            "period_minutes": 0, "cpu_history": [], "mem_history": [],
+            "disk_display": "0%",
+        }
+
+    cpu_hist = [h["cpu_percent"] for h in history[-30:] if "cpu_percent" in h]
+    mem_hist = [h["memory_percent"] for h in history[-30:] if "memory_percent" in h]
+    disk = history[-1].get("disk_percent", 0) if history else 0
+
+    return {
+        "cpu_avg":         trends.get("cpu_avg_10", 0),
+        "memory_avg":      trends.get("memory_avg_10", 0),
+        "measurements":    trends.get("measurements", len(history)),
+        "period_minutes":  trends.get("trend_period_minutes", 0),
+        "cpu_history":     cpu_hist,
+        "mem_history":     mem_hist,
+        "disk_display": f"{int(disk)}%",
+    }
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # UI entry point
@@ -670,6 +795,24 @@ def pulse_dashboard() -> PrefabApp:
         f"{int(err_sr * 100)}% success"
     )
     error_success_rate_display = f"{int(err_sr * 100)}%" if err.get("total_runs", 0) > 0 else "\u2014"
+
+    perf = get_tool_performance()
+    cache_status = get_cache_status()
+    trends = get_system_trends()
+
+    cache_hit_ratio = cache_status.get("hit_ratio", 0)
+    cache_hit_ratio_display = f"{int(cache_hit_ratio * 100)}%" if cache_status.get("total", 0) > 0 else "\u2014"
+    cache_util = cache_status.get("utilization", 0)
+    cache_util_display = f"{int(cache_util)}%" if cache_util else "0%"
+    cache_summary_text = (
+        f"{cache_status.get('hits', 0)} hits \u00b7 {cache_status.get('misses', 0)} misses \u00b7 "
+        f"{cache_status.get('cache_size', 0)}/{cache_status.get('max_size', 500)} entries"
+    )
+    trend_cpu_avg = trends.get("cpu_avg", 0)
+    trend_mem_avg = trends.get("memory_avg", 0)
+    trend_cpu_avg_display = f"{int(trend_cpu_avg)}%"
+    trend_mem_avg_display = f"{int(trend_mem_avg)}%"
+    trend_period_display = f"{trends.get('period_minutes', 0):.1f}m" if trends.get("period_minutes", 0) else "\u2014"
 
     with Column(gap=0) as view:
 
@@ -868,6 +1011,80 @@ def pulse_dashboard() -> PrefabApp:
 
         Separator()
 
+        # ── Tool Performance ────────────────────────────────────────────
+        Muted("TOOL PERFORMANCE", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            Muted(f"{rx_perf_sum}", css_class="text-sm text-muted")
+            with Row(gap=4, css_class="items-start flex-wrap"):
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("Success rate", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",        header="Tool"),
+                            DataTableColumn(key="rate_display", header="Rate"),
+                            DataTableColumn(key="runs",        header="Runs"),
+                            DataTableColumn(key="timeouts",    header="To"),
+                        ],
+                        rows=Rx("tool_performance"),
+                    )
+                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                    Muted("Tools with timeouts", css_class="text-xs")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",    header="Tool"),
+                            DataTableColumn(key="display", header="To/Runs"),
+                        ],
+                        rows=Rx("perf_timeouts"),
+                    )
+
+        Separator()
+
+        # ── Cache Status ────────────────────────────────────────────────
+        Muted("CACHE STATUS", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Row(gap=4, css_class="flex-wrap"):
+                with Card():
+                    with CardContent(css_class="p-3"):
+                        with Row(gap=4):
+                            Metric(label="Hits", value=Rx("cache_hits"))
+                            Metric(label="Misses", value=Rx("cache_misses"))
+                            Metric(label="Hit ratio", value=Rx("cache_hit_ratio_display"))
+                            Metric(label="Size", value=Rx("cache_size"))
+                            Metric(label="Max", value=Rx("cache_max_size"))
+                            Metric(label="Util", value=Rx("cache_util_display"))
+            Muted(f"{rx_cache_sum}", css_class="text-sm text-muted pt-1")
+            DataTable(
+                columns=[
+                    DataTableColumn(key="tool",       header="Tool"),
+                    DataTableColumn(key="cache_hits", header="Cache hits"),
+                    DataTableColumn(key="runs",       header="Runs"),
+                ],
+                rows=Rx("cache_by_tool"),
+            )
+
+        Separator()
+
+        # ── System Trends ───────────────────────────────────────────────
+        Muted("SYSTEM TRENDS", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Row(gap=4, css_class="flex-wrap"):
+                with Card():
+                    with CardContent(css_class="p-3"):
+                        with Row(gap=4):
+                            Metric(label="CPU avg", value=Rx("trend_cpu_avg_display"))
+                            Metric(label="MEM avg", value=Rx("trend_mem_avg_display"))
+                            Metric(label="Period", value=Rx("trend_period_display"))
+                            Metric(label="Measures", value=Rx("trend_measurements"))
+            with Row(gap=4, css_class="pt-2 flex-wrap"):
+                with Column(gap=1, css_class="flex-1 min-w-[200px]"):
+                    Muted("CPU", css_class="text-xs")
+                    Sparkline(data=Rx("trend_cpu_history"), height=24, variant="info", fill=True, curve="smooth")
+                with Column(gap=1, css_class="flex-1 min-w-[200px]"):
+                    Muted("Memory", css_class="text-xs")
+                    Sparkline(data=Rx("trend_mem_history"), height=24, variant="warning", fill=True, curve="smooth")
+
+        Separator()
+
         # ── Intelligence ───────────────────────────────────────────────
         Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
         DataTable(
@@ -970,6 +1187,27 @@ def pulse_dashboard() -> PrefabApp:
             "slowest_tools":             err.get("slowest_tools", []),
             "error_by_type":             err.get("error_by_type", []),
             "recent_errors":             err.get("recent_errors", []),
+            # Tool Performance
+            "tool_performance":   perf.get("tools", []),
+            "perf_timeouts":      perf.get("timeouts", []),
+            "perf_summary":       perf.get("summary", "No data"),
+            # Cache Status
+            "cache_hits":              cache_status.get("hits", 0),
+            "cache_misses":            cache_status.get("misses", 0),
+            "cache_hit_ratio_display": cache_hit_ratio_display,
+            "cache_size":              cache_status.get("cache_size", 0),
+            "cache_max_size":          cache_status.get("max_size", 500),
+            "cache_util_display":      cache_util_display,
+            "cache_summary_text":      cache_summary_text,
+            "cache_by_tool":           cache_status.get("by_tool", []),
+            # System Trends
+            "trend_cpu_avg_display": trend_cpu_avg_display,
+            "trend_mem_avg_display": trend_mem_avg_display,
+            "trend_period_display":  trend_period_display,
+            "trend_measurements":    trends.get("measurements", 0),
+            "trend_cpu_history":     trends.get("cpu_history", []),
+            "trend_mem_history":     trends.get("mem_history", []),
+            "trend_disk_display":    trends.get("disk_display", "0%"),
             # Intelligence
             "intelligence":          get_tool_intelligence(),
         },

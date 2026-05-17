@@ -43,7 +43,7 @@ def _seed_scan_cache(logger):
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)),
             },
         }
-        _scan_cache.set(f"seed:{tool}:{seed_target}:{int(now)}", entry, execution_time=exec_time)
+        _scan_cache.set(f"seed:{tool}:{seed_target}", entry, execution_time=exec_time)
         from server_core.operational_metrics import _op_metrics
         _op_metrics.record({"tool": tool, "success": success,
                             "duration": exec_time, "timed_out": False, "cache_hit": False})

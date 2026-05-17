@@ -979,6 +979,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 _telemetry["success"] = True
                 await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
                 return finalize(prior["result"])
+            # Fallback: check seed cache (seed:{tool}:{target})
+            prior = _scan_cache.get(f"seed:{tool_name}:{target}")
+            if prior and prior.get("result", {}).get("success"):
+                _telemetry["cache_hit"] = True
+                _telemetry["success"] = True
+                await ctx.info(f"⚡ {tool_name} seed cache hit for {target}")
+                return finalize(prior["result"])
 
         # Enrich params with optimizer defaults AFTER cache key computation
         params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
