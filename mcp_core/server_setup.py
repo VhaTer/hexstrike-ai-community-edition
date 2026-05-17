@@ -17,6 +17,13 @@ from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStri
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
 
+# Module-level cache for DIRECT_TOOLS — populated by setup_mcp_server_standalone()
+_DIRECT_TOOLS_CACHE: dict = {}
+
+def get_direct_tools() -> dict:
+    """Return DIRECT_TOOLS (tool exec functions) built during server setup."""
+    return _DIRECT_TOOLS_CACHE
+
 try:
     from fastmcp.server.providers.skills import SkillsDirectoryProvider
 except ImportError:
@@ -807,6 +814,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "falco":             (misc_exec, "falco"),
         "qsreplace":         (misc_exec, "qsreplace"),
     }
+
+    # Cache DIRECT_TOOLS so pulse_app can access exec functions
+    global _DIRECT_TOOLS_CACHE
+    _DIRECT_TOOLS_CACHE = DIRECT_TOOLS
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True, timeout=None)
     async def run_security_tool(

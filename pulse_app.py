@@ -22,8 +22,11 @@ Usage:
     prefab serve debug_app.py
 """
 
+import json
 import logging
+import os
 import re
+import threading
 import time
 
 from fastmcp import FastMCPApp
@@ -250,6 +253,14 @@ NET_TOTAL   = Rx("net_total_display").default("0 B")
 rx_net_sent  = NET_SENT
 rx_net_recv  = NET_RECV
 rx_net_total = NET_TOTAL
+
+# Async scans
+AS_RUNNING  = Rx("async_scans_running").default([])
+AS_COMPLETE = Rx("async_scans_complete").default([])
+AS_SUM      = Rx("async_scans_summary").default("No async scans")
+rx_as_run  = AS_RUNNING
+rx_as_done = AS_COMPLETE
+rx_as_sum  = AS_SUM
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -933,14 +944,181 @@ def get_network_io() -> dict:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# UI entry point
+# Async scan execution — Phase 3 (fix timeout 300s)
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.ui()
-def pulse_dashboard() -> PrefabApp:
-    """Open the Pulse dashboard (3+2+1 grid layout)."""
+from mcp_core.server_setup import get_direct_tools
+
+_async_scans: dict = {}
+_async_scans_lock = threading.Lock()
+
+
+def _cleanup_old_scans(max_age: float = 3600):
+    """Remove scans older than max_age seconds."""
+    now = time.time()
+    with _async_scans_lock:
+        stale = [sid for sid, s in _async_scans.items()
+                 if s.get("end_time", now) and now - s.get("end_time", now) > max_age]
+        for sid in stale:
+            del _async_scans[sid]
+
+
+@app.tool()
+def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> dict:
+    """Run a security tool in background. Returns immediately with scan_id.
+
+    Use for long-running tools (sqlmap, nikto, nuclei, nmap full port scans)
+    that would exceed Claude Desktop's stdio timeout (~300s).
+
+    The scan runs on the server in background. Poll status with get_scan_status(scan_id).
+    Completed results also appear in get_history().
+
+    Args:
+        tool: Tool name (nmap, sqlmap, whatweb, nikto, nuclei, gobuster, etc.)
+        target: Target hostname, IP, or URL
+        params: JSON string of tool parameters, e.g. '{"ports":"80,443","scan_type":"-sV"}'
+
+    Returns:
+        dict with scan_id (str), status ("started"), tool, target
+    """
+    scan_id = f"scan_{int(time.time())}_{os.urandom(4).hex()}"
+
+    parsed_params: dict = {}
+    if params:
+        try:
+            parsed_params = json.loads(params)
+        except json.JSONDecodeError:
+            return {"scan_id": None, "status": "error", "error": "Invalid JSON in params"}
+
+    # Ensure target is in params
+    if target:
+        parsed_params["target"] = target
+
+    now = time.time()
+    with _async_scans_lock:
+        _async_scans[scan_id] = {
+            "tool": tool, "target": target, "status": "starting",
+            "start_time": now, "end_time": None,
+            "result": None, "progress": 0, "error": None,
+        }
+
+    def _run():
+        try:
+            entry = get_direct_tools().get(tool)
+            if not entry:
+                raise ValueError(f"Unknown tool: {tool}")
+
+            exec_func, binary_name = entry
+
+            with _async_scans_lock:
+                _async_scans[scan_id]["status"] = "running"
+
+            start = time.time()
+            result = exec_func(tool, parsed_params)
+            elapsed = time.time() - start
+
+            with _async_scans_lock:
+                _async_scans[scan_id].update({
+                    "status": "completed",
+                    "end_time": time.time(),
+                    "result": {
+                        "success": result.get("success", False),
+                        "stdout": (result.get("output", "") or "")[:2000],
+                        "execution_time": elapsed,
+                        "error": (result.get("error", "") or "")[:200],
+                        "returncode": result.get("returncode", -1),
+                    },
+                })
+
+            try:
+                _op_metrics.record({
+                    "tool": tool, "success": result.get("success", False),
+                    "duration": elapsed, "timed_out": False, "cache_hit": False,
+                })
+            except Exception:
+                pass
+
+        except Exception as e:
+            with _async_scans_lock:
+                _async_scans[scan_id].update({
+                    "status": "failed", "end_time": time.time(),
+                    "error": str(e)[:200],
+                })
+
+    threading.Thread(target=_run, daemon=True, name=f"async-{tool}").start()
+    _cleanup_old_scans()
+
+    return {"scan_id": scan_id, "status": "started", "tool": tool, "target": target}
+
+
+@app.tool()
+def get_scan_status(scan_id: str) -> dict:
+    """Poll status of an async scan started by run_async_tool.
+
+    Returns current status, elapsed time, and result when complete.
+    For completed scans, result includes execution_time, returncode, error (no full stdout).
+
+    Args:
+        scan_id: The scan_id returned by run_async_tool()
+
+    Returns:
+        dict with scan_id, status (started/running/completed/failed/not_found),
+        tool, target, elapsed (seconds), result (if completed), error (if failed)
+    """
+    with _async_scans_lock:
+        entry = _async_scans.get(scan_id)
+
+    if not entry:
+        return {"scan_id": scan_id, "status": "not_found"}
+
+    elapsed = round(time.time() - entry["start_time"], 1)
+    if entry.get("end_time"):
+        elapsed = round(entry["end_time"] - entry["start_time"], 1)
+
+    result = {
+        "scan_id": scan_id,
+        "status": entry["status"],
+        "tool": entry["tool"],
+        "target": entry["target"],
+        "elapsed": elapsed,
+        "elapsed_display": _fmt_duration(elapsed),
+    }
+
+    if entry["result"]:
+        r = entry["result"]
+        result["result"] = {
+            "success": r.get("success", False),
+            "execution_time": r.get("execution_time", 0),
+            "error": r.get("error", ""),
+            "returncode": r.get("returncode", -1),
+        }
+        stdout = r.get("stdout", "")
+        if stdout:
+            result["stdout_preview"] = stdout[:500]
+
+    if entry.get("error"):
+        result["error"] = entry["error"]
+
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Dashboard state collector — shared between UI and live dashboard tool
+# ═════════════════════════════════════════════════════════════════════════════
+
+TOOLS_BY_INTENSITY = {
+    "quick":  ["nmap", "whatweb"],
+    "medium": ["nmap", "whatweb", "nuclei", "nikto"],
+    "full":   ["nmap", "whatweb", "nuclei", "nikto", "gobuster"],
+}
+
+def _collect_dashboard_state(target: str | None = None) -> dict:
+    """Collect all dashboard data sources into a flat state dict.
+
+    Shared between pulse_dashboard() (UI) and get_live_dashboard() (tool).
+    """
     overview = get_overview()
-    scope = get_scope()
+    scope = get_scope(target) if target else get_scope()
     active_target = scope.get("active_target")
     surface = get_surface(active_target) if active_target else {"target": None}
     findings = get_findings(active_target) if active_target else []
@@ -980,6 +1158,31 @@ def pulse_dashboard() -> PrefabApp:
     confirmations = get_confirmations()
     netio = get_network_io()
 
+    # Async scans data for panel
+    with _async_scans_lock:
+        now = time.time()
+        running_list = [
+            {"scan_id": sid, "tool": s["tool"], "target": s["target"],
+             "elapsed": _fmt_duration(now - s["start_time"]),
+             "status": s["status"]}
+            for sid, s in _async_scans.items()
+            if s["status"] in ("starting", "running")
+        ][-10:]
+        complete_list = [
+            {"scan_id": sid, "tool": s["tool"], "target": s["target"],
+             "elapsed": _fmt_duration(s.get("end_time", now) - s["start_time"]),
+             "status": s["status"]}
+            for sid, s in _async_scans.items()
+            if s["status"] in ("completed", "failed")
+        ][-20:]
+    async_running_count = len(running_list)
+    async_complete_count = len(complete_list)
+    async_scans_summary = (
+        f"{async_running_count} running \u00b7 {async_complete_count} completed"
+        if async_running_count or async_complete_count
+        else "No async scans"
+    )
+
     cache_hit_ratio = cache_status.get("hit_ratio", 0)
     cache_hit_ratio_display = f"{int(cache_hit_ratio * 100)}%" if cache_status.get("total", 0) > 0 else "\u2014"
     cache_util = cache_status.get("utilization", 0)
@@ -993,6 +1196,203 @@ def pulse_dashboard() -> PrefabApp:
     trend_cpu_avg_display = f"{int(trend_cpu_avg)}%"
     trend_mem_avg_display = f"{int(trend_mem_avg)}%"
     trend_period_display = f"{trends.get('period_minutes', 0):.1f}m" if trends.get("period_minutes", 0) else "\u2014"
+
+    return {
+        # Raw data objects
+        "overview":       overview,
+        "scope":          scope,
+        "active_target":  active_target,
+        "surface":        surface,
+        "findings":       findings,
+        "plan":           plan,
+        "active":         active,
+        "history":        history,
+        "rl":             rl,
+        "rl_events_table": rl_events_table,
+        "sys":            sys,
+        "ops":            ops,
+        "err":            err,
+        "perf":           perf,
+        "cache_status":   cache_status,
+        "trends":         trends,
+        "sessions":       sessions,
+        "confirmations":  confirmations,
+        "netio":          netio,
+        # Display helpers
+        "total_runs_display":    total_runs_display,
+        "success_rate_display":  success_rate_display,
+        "cache_hit_display":     cache_hit_display,
+        "timeout_count_display": timeout_count_display,
+        "error_summary":              error_summary,
+        "error_success_rate_display": error_success_rate_display,
+        "cache_hit_ratio_display": cache_hit_ratio_display,
+        "cache_util_display":      cache_util_display,
+        "cache_summary_text":      cache_summary_text,
+        "trend_cpu_avg_display": trend_cpu_avg_display,
+        "trend_mem_avg_display": trend_mem_avg_display,
+        "trend_period_display":  trend_period_display,
+        "async_scans_running":  running_list,
+        "async_scans_complete": complete_list,
+        "async_scans_summary":  async_scans_summary,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Phase 4 — Live dashboard (single-call for Claude, replaces 15+ get_* calls)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.tool()
+def get_live_dashboard(target: str | None = None) -> dict:
+    """Full Pulse dashboard state in one call. Returns all panels: Overview, Scope, Surface, Findings, Plan, Active Tools, History, Rate Limit, Errors & Failures, Tool Performance, Cache Status, System Trends, Sessions, Confirmations, Network I/O, Async Scans, Intelligence.
+
+    No target needed for system-wide stats. Pass target to filter scope/surface/findings/history/plan to a specific host. Use this INSTEAD of calling 15+ individual get_* tools — one call gives you everything. ~100ms typical response.
+
+    Returns {overview, scope, surface, findings, plan, active_tools, history, rate_limit, errors, tool_performance, cache_status, system_trends, sessions, confirmations, network_io, async_scans, intelligence} with pre-formatted display strings.
+    """
+    st = _collect_dashboard_state(target)
+    return {
+        "overview":         st["overview"],
+        "scope":            st["scope"],
+        "surface":          st["surface"],
+        "findings":         st["findings"],
+        "plan":             st["plan"],
+        "active_tools":     st["active"],
+        "history":          st["history"],
+        "rate_limit":       st["rl"],
+        "errors":           st["err"],
+        "tool_performance": st["perf"],
+        "cache_status":     st["cache_status"],
+        "system_trends":    st["trends"],
+        "sessions":         st["sessions"],
+        "confirmations":    st["confirmations"],
+        "network_io":       st["netio"],
+        "async_scans": {
+            "running":  st["async_scans_running"],
+            "complete": st["async_scans_complete"],
+            "summary":  st["async_scans_summary"],
+        },
+        "intelligence":     get_tool_intelligence(),
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Phase 1 — Unified scan entry point
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.tool()
+def scan(target: str = "", intensity: str = "quick", objective: str = "comprehensive") -> dict:
+    """Full reconnaissance scan on a target. Runs appropriate security tools based on intensity, then returns surface analysis + vulnerability findings + attack plan in one response.
+
+    Intensity levels:
+    - quick (default): nmap + whatweb — open ports and technology detection. ~30s when uncached.
+    - medium: + nuclei + nikto — adds vulnerability scanning. ~2-3 min.
+    - full: + gobuster (web targets) — complete recon. ~5-10 min.
+
+    Uses scan cache — recently scanned targets return instantly. For long-running scans, use run_async_tool() instead.
+
+    Returns {target, intensity, tools, surface, findings, plan, summary}.
+    Pass `objective` to guide the attack planner (default: comprehensive).
+    """
+    # Resolve target
+    scope_data = get_scope(target) if target else get_scope()
+    resolved = scope_data.get("active_target") or target
+    if not resolved:
+        return {"error": "No target specified or found in scope", "target": None, "surface": None, "findings": [], "plan": None}
+
+    intensity = intensity.lower()
+    if intensity not in TOOLS_BY_INTENSITY:
+        intensity = "quick"
+
+    tools_to_run = TOOLS_BY_INTENSITY[intensity]
+    _direct = get_direct_tools()
+    tool_results = {}
+
+    for tool_name in tools_to_run:
+        # Check cache
+        cache_entries = _cache_for_target(resolved)
+        if any(c.get("tool", "").lower() == tool_name for c in cache_entries):
+            tool_results[tool_name] = {"status": "cached", "cached": True}
+            continue
+        entry = _direct.get(tool_name)
+        if not entry:
+            tool_results[tool_name] = {"status": "skipped", "error": f"Unknown tool: {tool_name}"}
+            continue
+        exec_func, binary = entry
+        try:
+            out = exec_func(binary, {"target": resolved})
+            ok = out.get("success", False)
+            tool_results[tool_name] = {
+                "status": "completed" if ok else "failed",
+                "returncode": out.get("returncode"),
+            }
+            if not ok:
+                tool_results[tool_name]["error"] = out.get("error", "Unknown error")
+        except Exception as e:
+            tool_results[tool_name] = {"status": "error", "error": str(e)}
+
+    surface_data = get_surface(resolved)
+    findings_data = get_findings(resolved) if intensity in ("medium", "full") else []
+    plan_data = get_plan(resolved, objective) if intensity == "full" else {"target": resolved, "steps": [], "step_count": 0, "summary": "Skipped — use full intensity for planning"}
+
+    return {
+        "target":    resolved,
+        "intensity": intensity,
+        "tools":     tool_results,
+        "surface":   surface_data,
+        "findings":  findings_data,
+        "plan":      plan_data,
+        "summary": (
+            f"Scan {intensity} on {resolved}: "
+            f"{surface_data.get('ports_count', 0)} ports, "
+            f"{len(findings_data)} findings, "
+            f"{plan_data.get('step_count', 0)} plan steps"
+        ),
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UI entry point
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.ui()
+def pulse_dashboard() -> PrefabApp:
+    """Open the Pulse dashboard (3+2+1 grid layout)."""
+    st = _collect_dashboard_state()
+    overview = st["overview"]
+    scope = st["scope"]
+    active_target = st["active_target"]
+    surface = st["surface"]
+    findings = st["findings"]
+    plan = st["plan"]
+    active = st["active"]
+    history = st["history"]
+    rl = st["rl"]
+    rl_events_table = st["rl_events_table"]
+    sys = st["sys"]
+    ops = st["ops"]
+    err = st["err"]
+    perf = st["perf"]
+    cache_status = st["cache_status"]
+    trends = st["trends"]
+    sessions = st["sessions"]
+    confirmations = st["confirmations"]
+    netio = st["netio"]
+
+    total_runs_display = st["total_runs_display"]
+    success_rate_display = st["success_rate_display"]
+    cache_hit_display = st["cache_hit_display"]
+    timeout_count_display = st["timeout_count_display"]
+    error_summary = st["error_summary"]
+    error_success_rate_display = st["error_success_rate_display"]
+    cache_hit_ratio_display = st["cache_hit_ratio_display"]
+    cache_util_display = st["cache_util_display"]
+    cache_summary_text = st["cache_summary_text"]
+    trend_cpu_avg_display = st["trend_cpu_avg_display"]
+    trend_mem_avg_display = st["trend_mem_avg_display"]
+    trend_period_display = st["trend_period_display"]
+    running_list = st["async_scans_running"]
+    complete_list = st["async_scans_complete"]
+    async_scans_summary = st["async_scans_summary"]
 
     with Column(gap=0) as view:
 
@@ -1099,6 +1499,29 @@ def pulse_dashboard() -> PrefabApp:
                                 Metric(label="Workers",   value=Rx("active_workers"))
                                 Metric(label="Queued",    value=Rx("active_queue"))
                             Text(f"{rx_active_sum}", css_class="text-sm text-muted")
+
+                Separator(css_class="my-1")
+                Muted("ASYNC SCANS", css_class="text-xs")
+                with Column(gap=1, css_class="max-h-[200px] overflow-y-auto"):
+                    Muted(f"{rx_as_sum}", css_class="text-xs text-muted")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",    header="Tool"),
+                            DataTableColumn(key="target",  header="Target"),
+                            DataTableColumn(key="elapsed", header="Time"),
+                            DataTableColumn(key="status",  header="Status"),
+                        ],
+                        rows=Rx("async_scans_running"),
+                    )
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",    header="Tool"),
+                            DataTableColumn(key="target",  header="Target"),
+                            DataTableColumn(key="elapsed", header="Time"),
+                            DataTableColumn(key="status",  header="Status"),
+                        ],
+                        rows=Rx("async_scans_complete"),
+                    )
 
         Separator()
 
@@ -1445,6 +1868,10 @@ def pulse_dashboard() -> PrefabApp:
             "net_sent_display":  netio.get("bytes_sent_display", "0 B"),
             "net_recv_display":  netio.get("bytes_recv_display", "0 B"),
             "net_total_display": netio.get("total_display", "0 B"),
+            # Async scans
+            "async_scans_running":  running_list,
+            "async_scans_complete": complete_list,
+            "async_scans_summary":  async_scans_summary,
             # Intelligence
             "intelligence":          get_tool_intelligence(),
         },
