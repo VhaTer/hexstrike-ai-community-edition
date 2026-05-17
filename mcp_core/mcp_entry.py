@@ -101,8 +101,19 @@ def _acquire_lock(logger):
 
     Exits with code 1 if another instance is already running.
     Registers atexit handler to release and clean up the lock file.
+
+    Stale lock files (older than 30s) are silently removed.
     """
     global _lock_fh
+
+    # Remove stale lock (>30s old = crashed without cleanup)
+    try:
+        age = time.time() - os.path.getmtime(_LOCK_PATH)
+        if age > 30:
+            os.unlink(_LOCK_PATH)
+    except (FileNotFoundError, OSError):
+        pass
+
     try:
         _lock_fh = open(_LOCK_PATH, "w")
         fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)

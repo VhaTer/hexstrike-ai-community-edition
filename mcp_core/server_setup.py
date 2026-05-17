@@ -16,6 +16,7 @@ from server_core.singletons import get_tool_stats_store
 from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
+from mcp_core.tool_routes import TOOL_ROUTES
 
 # Module-level cache for DIRECT_TOOLS — populated by setup_mcp_server_standalone()
 _DIRECT_TOOLS_CACHE: dict = {}
@@ -665,155 +666,22 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.web_probe_direct import web_probe_exec
     from mcp_core.vuln_intel_direct import vuln_intel_exec
 
-    DIRECT_TOOLS = {
-        # wifi
-        "airmon_ng":         (wifi_exec, "airmon_ng"),
-        "airodump_ng":       (wifi_exec, "airodump_ng"),
-        "aireplay_ng":       (wifi_exec, "aireplay_ng"),
-        "aircrack_ng":       (wifi_exec, "aircrack_ng"),
-        "hcxdumptool":       (wifi_exec, "hcxdumptool"),
-        "wifite":            (wifi_exec, "wifite2"),
-        "wifite2":           (wifi_exec, "wifite2"),
-        # wifi — orphelins wirés (+4)
-        "hcxpcapngtool":     (wifi_exec, "hcxpcapngtool"),
-        "eaphammer":         (wifi_exec, "eaphammer"),
-        "bettercap_wifi":    (wifi_exec, "bettercap_wifi"),
-        "airbase_ng":        (wifi_exec, "airbase_ng"),
-        "airdecap_ng":       (wifi_exec, "airdecap_ng"),
-        "bettercap":         (wifi_exec, "bettercap_wifi"),
-        "tcpdump":           (wifi_exec, "tcpdump"),
-        "tshark":            (wifi_exec, "tshark"),
-        "mdk4":              (wifi_exec, "mdk4"),
-        # recon
-        "amass":             (recon_exec, "amass"),
-        "subfinder":         (recon_exec, "subfinder"),
-        "autorecon":         (recon_exec, "autorecon"),
-        "theharvester":      (recon_exec, "theharvester"),
-        "dnsenum":           (recon_exec, "dnsenum"),
-        "fierce":            (recon_exec, "fierce"),
-        "whois":             (recon_exec, "whois"),
-        # net_scan
-        "nmap":              (net_scan_exec, "nmap"),
-        "nmap_advanced":     (net_scan_exec, "nmap-advanced"),
-        "masscan":           (net_scan_exec, "masscan"),
-        "rustscan":          (net_scan_exec, "rustscan"),
-        "arp_scan":          (net_scan_exec, "arp-scan"),
-        # web_scan
-        "nikto":             (web_scan_exec, "nikto"),
-        "sqlmap":            (web_scan_exec, "sqlmap"),
-        "wpscan":            (web_scan_exec, "wpscan"),
-        "dalfox":            (web_scan_exec, "dalfox"),
-        "jaeles":            (web_scan_exec, "jaeles"),
-        "xsser":             (web_scan_exec, "xsser"),
-        "zap":               (web_scan_exec, "zap"),
-        # web_fuzz
-        "gobuster":          (web_fuzz_exec, "gobuster"),
-        "ffuf":              (web_fuzz_exec, "ffuf"),
-        "feroxbuster":       (web_fuzz_exec, "feroxbuster"),
-        "dirsearch":         (web_fuzz_exec, "dirsearch"),
-        "dirb":              (web_fuzz_exec, "dirb"),
-        "wfuzz":             (web_fuzz_exec, "wfuzz"),
-        "dotdotpwn":         (web_fuzz_exec, "dotdotpwn"),
-        # password_cracking
-        "hydra":             (pwdcrack_exec, "hydra"),
-        "hashcat":           (pwdcrack_exec, "hashcat"),
-        "john":              (pwdcrack_exec, "john"),
-        "medusa":            (pwdcrack_exec, "medusa"),
-        "patator":           (pwdcrack_exec, "patator"),
-        "hashid":            (pwdcrack_exec, "hashid"),
-        "ophcrack":          (pwdcrack_exec, "ophcrack"),
-        # smb_enum
-        "enum4linux":        (smb_enum_exec, "enum4linux"),
-        "netexec":           (smb_enum_exec, "netexec"),
-        "rpcclient":         (smb_enum_exec, "rpcclient"),
-        "smbmap":            (smb_enum_exec, "smbmap"),
-        "nbtscan":           (smb_enum_exec, "nbtscan"),
-        "nxc":               (smb_enum_exec, "nxc"),
-        "evil_winrm":        (smb_enum_exec, "evil_winrm"),
-        # exploit
-        "metasploit":        (exploit_exec, "metasploit"),
-        "msfvenom":          (exploit_exec, "msfvenom"),
-        "searchsploit":      (exploit_exec, "exploit_db"),
-        "exploit_db":        (exploit_exec, "exploit_db"),
-        # web_recon
-        "katana":            (web_recon_exec, "katana"),
-        "hakrawler":         (web_recon_exec, "hakrawler"),
-        "gau":               (web_recon_exec, "gau"),
-        "waybackurls":       (web_recon_exec, "waybackurls"),
-        "httpx":             (web_recon_exec, "httpx"),
-        "wafw00f":           (web_recon_exec, "wafw00f"),
-        "arjun":             (web_recon_exec, "arjun"),
-        "paramspider":       (web_recon_exec, "paramspider"),
-        "x8":                (web_recon_exec, "x8"),
-        # security
-        "prowler":           (security_exec, "prowler"),
-        "trivy":             (security_exec, "trivy"),
-        "kube_hunter":       (security_exec, "kube-hunter"),
-        "kube_bench":        (security_exec, "kube-bench"),
-        "checkov":           (security_exec, "checkov"),
-        "terrascan":         (security_exec, "terrascan"),
-        # misc
-        "ropgadget":         (misc_exec, "ropgadget"),
-        "ropper":            (misc_exec, "ropper"),
-        "one_gadget":        (misc_exec, "one_gadget"),
-        "volatility":        (misc_exec, "volatility"),
-        "volatility3":       (misc_exec, "volatility3"),
-        "gdb":               (misc_exec, "gdb"),
-        "radare2":           (misc_exec, "radare2"),
-        "strings":           (misc_exec, "strings"),
-        "objdump":           (misc_exec, "objdump"),
-        "checksec":          (misc_exec, "checksec"),
-        "binwalk":           (misc_exec, "binwalk"),
-        "ghidra":            (misc_exec, "ghidra"),
-        "angr":              (misc_exec, "angr"),
-        "xxd":               (misc_exec, "xxd"),
-        "mysql":             (misc_exec, "mysql"),
-        "sqlite":            (misc_exec, "sqlite"),
-        "exiftool":          (misc_exec, "exiftool"),
-        "foremost":          (misc_exec, "foremost"),
-        "steghide":          (misc_exec, "steghide"),
-        "hashpump":          (misc_exec, "hashpump"),
-        "anew":              (misc_exec, "anew"),
-        "uro":               (misc_exec, "uro"),
-        "nuclei":            (misc_exec, "nuclei"),
-        "responder":         (misc_exec, "responder"),
-        # osint
-        "sherlock":          (osint_exec, "sherlock"),
-        "spiderfoot":        (osint_exec, "spiderfoot"),
-        "sublist3r":         (osint_exec, "sublist3r"),
-        "parsero":           (osint_exec, "parsero"),
-        # web_probe
-        "testssl":           (testssl_exec, "testssl"),
-        "whatweb":           (web_probe_exec, "whatweb"),
-        "commix":            (web_probe_exec, "commix"),
-        "joomscan":          (web_probe_exec, "joomscan"),
-        # vuln_intel
-        "vulnx":             (vuln_intel_exec, "vulnx"),
-        # active_directory
-        "impacket":          (ad_exec, "impacket"),
-        "ldapdomaindump":    (ad_exec, "ldapdomaindump"),
-        "adidnsdump":        (ad_exec, "adidnsdump"),
-        "certipy":           (ad_exec, "certipy_ad"),
-        "certipy_ad":        (ad_exec, "certipy_ad"),
-        "mitm6":             (ad_exec, "mitm6"),
-        "pywerview":         (ad_exec, "pywerview"),
-        "bloodhound":        (ad_exec, "bloodhound"),
-        "bloodhound_python": (ad_exec, "bloodhound"),
-        # orphelins wirés (+4)
-        "enum4linux-ng":     (smb_enum_exec, "enum4linux-ng"),
-        "pwntools":          (exploit_exec, "pwntools"),
-        "jwt_analyzer":      (misc_exec, "jwt_analyzer"),
-        "autopsy":           (misc_exec, "autopsy"),
-        "libc":              (misc_exec, "libc"),
-        "api_schema_analyzer": (misc_exec, "api_schema_analyzer"),
-        "graphql_scanner":   (misc_exec, "graphql_scanner"),
-        "api_fuzzer":        (misc_exec, "api_fuzzer"),
-        "bbot":              (misc_exec, "bbot"),
-        "bulk_extractor":    (misc_exec, "bulk_extractor"),
-        "scalpel":           (misc_exec, "scalpel"),
-        "falco":             (misc_exec, "falco"),
-        "qsreplace":         (misc_exec, "qsreplace"),
+    # Build DIRECT_TOOLS from shared TOOL_ROUTES
+    _exec_by_name = {
+        "wifi_exec": wifi_exec, "recon_exec": recon_exec,
+        "net_scan_exec": net_scan_exec, "web_scan_exec": web_scan_exec,
+        "web_fuzz_exec": web_fuzz_exec, "pwdcrack_exec": pwdcrack_exec,
+        "smb_enum_exec": smb_enum_exec, "exploit_exec": exploit_exec,
+        "web_recon_exec": web_recon_exec, "security_exec": security_exec,
+        "misc_exec": misc_exec, "osint_exec": osint_exec,
+        "ad_exec": ad_exec, "testssl_exec": testssl_exec,
+        "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
     }
+    DIRECT_TOOLS = {}
+    for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
+        ef = _exec_by_name.get(func_name)
+        if ef:
+            DIRECT_TOOLS[tool_name] = (ef, binary)
 
     # Cache DIRECT_TOOLS so pulse_app can access exec functions
     global _DIRECT_TOOLS_CACHE

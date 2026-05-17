@@ -27,148 +27,18 @@ import urllib.request
 import urllib.error
 from contextlib import redirect_stdout
 from pathlib import Path
+from mcp_core.tool_routes import TOOL_ROUTES
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 logger = logging.getLogger("hexstrike")
 
-VERSION = "0.8.0"
+VERSION = "0.10.1"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8888
 
-DIRECT_ROUTES = {
-    "airmon_ng":         ("mcp_core.wifi_direct", "wifi_exec", "airmon-ng"),
-    "airodump_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airodump-ng"),
-    "aireplay_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aireplay-ng"),
-    "aircrack_ng":       ("mcp_core.wifi_direct", "wifi_exec", "aircrack-ng"),
-    "hcxdumptool":       ("mcp_core.wifi_direct", "wifi_exec", "hcxdumptool"),
-    "hcxpcapngtool":     ("mcp_core.wifi_direct", "wifi_exec", "hcxpcapngtool"),
-    "eaphammer":         ("mcp_core.wifi_direct", "wifi_exec", "eaphammer"),
-    "wifite":            ("mcp_core.wifi_direct", "wifi_exec", "wifite2"),
-    "airbase_ng":        ("mcp_core.wifi_direct", "wifi_exec", "airbase-ng"),
-    "airdecap_ng":       ("mcp_core.wifi_direct", "wifi_exec", "airdecap-ng"),
-    "bettercap":         ("mcp_core.wifi_direct", "wifi_exec", "bettercap_wifi"),
-    "tcpdump":           ("mcp_core.wifi_direct", "wifi_exec", "tcpdump"),
-    "tshark":            ("mcp_core.wifi_direct", "wifi_exec", "tshark"),
-    "mdk4":              ("mcp_core.wifi_direct", "wifi_exec", "mdk4"),
-    "amass":             ("mcp_core.recon_direct", "recon_exec", "amass"),
-    "subfinder":         ("mcp_core.recon_direct", "recon_exec", "subfinder"),
-    "autorecon":         ("mcp_core.recon_direct", "recon_exec", "autorecon"),
-    "theharvester":      ("mcp_core.recon_direct", "recon_exec", "theharvester"),
-    "dnsenum":           ("mcp_core.recon_direct", "recon_exec", "dnsenum"),
-    "fierce":            ("mcp_core.recon_direct", "recon_exec", "fierce"),
-    "whois":             ("mcp_core.recon_direct", "recon_exec", "whois"),
-    "nmap":              ("mcp_core.net_scan_direct", "net_scan_exec", "nmap"),
-    "nmap_advanced":     ("mcp_core.net_scan_direct", "net_scan_exec", "nmap-advanced"),
-    "masscan":           ("mcp_core.net_scan_direct", "net_scan_exec", "masscan"),
-    "rustscan":          ("mcp_core.net_scan_direct", "net_scan_exec", "rustscan"),
-    "arp_scan":          ("mcp_core.net_scan_direct", "net_scan_exec", "arp-scan"),
-    "nikto":             ("mcp_core.web_scan_direct", "web_scan_exec", "nikto"),
-    "sqlmap":            ("mcp_core.web_scan_direct", "web_scan_exec", "sqlmap"),
-    "wpscan":            ("mcp_core.web_scan_direct", "web_scan_exec", "wpscan"),
-    "dalfox":            ("mcp_core.web_scan_direct", "web_scan_exec", "dalfox"),
-    "jaeles":            ("mcp_core.web_scan_direct", "web_scan_exec", "jaeles"),
-    "xsser":             ("mcp_core.web_scan_direct", "web_scan_exec", "xsser"),
-    "zap":               ("mcp_core.web_scan_direct", "web_scan_exec", "zap"),
-    "gobuster":          ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "gobuster"),
-    "ffuf":              ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "ffuf"),
-    "feroxbuster":       ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "feroxbuster"),
-    "dirsearch":         ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "dirsearch"),
-    "dirb":              ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "dirb"),
-    "wfuzz":             ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "wfuzz"),
-    "dotdotpwn":         ("mcp_core.web_fuzz_direct", "web_fuzz_exec", "dotdotpwn"),
-    "hydra":             ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hydra"),
-    "hashcat":           ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hashcat"),
-    "john":              ("mcp_core.password_cracking_direct", "pwdcrack_exec", "john"),
-    "medusa":            ("mcp_core.password_cracking_direct", "pwdcrack_exec", "medusa"),
-    "patator":           ("mcp_core.password_cracking_direct", "pwdcrack_exec", "patator"),
-    "hashid":            ("mcp_core.password_cracking_direct", "pwdcrack_exec", "hashid"),
-    "ophcrack":          ("mcp_core.password_cracking_direct", "pwdcrack_exec", "ophcrack"),
-    "enum4linux":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "enum4linux"),
-    "enum4linux-ng":     ("mcp_core.smb_enum_direct", "smb_enum_exec", "enum4linux-ng"),
-    "netexec":           ("mcp_core.smb_enum_direct", "smb_enum_exec", "netexec"),
-    "rpcclient":         ("mcp_core.smb_enum_direct", "smb_enum_exec", "rpcclient"),
-    "smbmap":            ("mcp_core.smb_enum_direct", "smb_enum_exec", "smbmap"),
-    "nbtscan":           ("mcp_core.smb_enum_direct", "smb_enum_exec", "nbtscan"),
-    "nxc":               ("mcp_core.smb_enum_direct", "smb_enum_exec", "nxc"),
-    "evil_winrm":        ("mcp_core.smb_enum_direct", "smb_enum_exec", "evil-winrm"),
-    "metasploit":        ("mcp_core.exploit_framework_direct", "exploit_exec", "metasploit"),
-    "msfvenom":          ("mcp_core.exploit_framework_direct", "exploit_exec", "msfvenom"),
-    "searchsploit":      ("mcp_core.exploit_framework_direct", "exploit_exec", "exploit_db"),
-    "exploit_db":        ("mcp_core.exploit_framework_direct", "exploit_exec", "exploit_db"),
-    "pwntools":          ("mcp_core.exploit_framework_direct", "exploit_exec", "pwntools"),
-    "katana":            ("mcp_core.web_recon_direct", "web_recon_exec", "katana"),
-    "hakrawler":         ("mcp_core.web_recon_direct", "web_recon_exec", "hakrawler"),
-    "gau":               ("mcp_core.web_recon_direct", "web_recon_exec", "gau"),
-    "waybackurls":       ("mcp_core.web_recon_direct", "web_recon_exec", "waybackurls"),
-    "httpx":             ("mcp_core.web_recon_direct", "web_recon_exec", "httpx"),
-    "wafw00f":           ("mcp_core.web_recon_direct", "web_recon_exec", "wafw00f"),
-    "arjun":             ("mcp_core.web_recon_direct", "web_recon_exec", "arjun"),
-    "paramspider":       ("mcp_core.web_recon_direct", "web_recon_exec", "paramspider"),
-    "x8":                ("mcp_core.web_recon_direct", "web_recon_exec", "x8"),
-    "prowler":           ("mcp_core.security_direct", "security_exec", "prowler"),
-    "trivy":             ("mcp_core.security_direct", "security_exec", "trivy"),
-    "kube_hunter":       ("mcp_core.security_direct", "security_exec", "kube-hunter"),
-    "kube_bench":        ("mcp_core.security_direct", "security_exec", "kube-bench"),
-    "checkov":           ("mcp_core.security_direct", "security_exec", "checkov"),
-    "terrascan":         ("mcp_core.security_direct", "security_exec", "terrascan"),
-    "ropgadget":         ("mcp_core.misc_direct", "misc_exec", "ropgadget"),
-    "ropper":            ("mcp_core.misc_direct", "misc_exec", "ropper"),
-    "one_gadget":        ("mcp_core.misc_direct", "misc_exec", "one_gadget"),
-    "volatility":        ("mcp_core.misc_direct", "misc_exec", "volatility"),
-    "volatility3":       ("mcp_core.misc_direct", "misc_exec", "volatility3"),
-    "gdb":               ("mcp_core.misc_direct", "misc_exec", "gdb"),
-    "radare2":           ("mcp_core.misc_direct", "misc_exec", "radare2"),
-    "strings":           ("mcp_core.misc_direct", "misc_exec", "strings"),
-    "objdump":           ("mcp_core.misc_direct", "misc_exec", "objdump"),
-    "checksec":          ("mcp_core.misc_direct", "misc_exec", "checksec"),
-    "binwalk":           ("mcp_core.misc_direct", "misc_exec", "binwalk"),
-    "ghidra":            ("mcp_core.misc_direct", "misc_exec", "ghidra"),
-    "angr":              ("mcp_core.misc_direct", "misc_exec", "angr"),
-    "xxd":               ("mcp_core.misc_direct", "misc_exec", "xxd"),
-    "mysql":             ("mcp_core.misc_direct", "misc_exec", "mysql"),
-    "sqlite":            ("mcp_core.misc_direct", "misc_exec", "sqlite"),
-    "exiftool":          ("mcp_core.misc_direct", "misc_exec", "exiftool"),
-    "foremost":          ("mcp_core.misc_direct", "misc_exec", "foremost"),
-    "steghide":          ("mcp_core.misc_direct", "misc_exec", "steghide"),
-    "hashpump":          ("mcp_core.misc_direct", "misc_exec", "hashpump"),
-    "anew":              ("mcp_core.misc_direct", "misc_exec", "anew"),
-    "uro":               ("mcp_core.misc_direct", "misc_exec", "uro"),
-    "nuclei":            ("mcp_core.misc_direct", "misc_exec", "nuclei"),
-    "responder":         ("mcp_core.misc_direct", "misc_exec", "responder"),
-    "jwt_analyzer":      ("mcp_core.misc_direct", "misc_exec", "jwt_analyzer"),
-    "autopsy":           ("mcp_core.misc_direct", "misc_exec", "autopsy"),
-    "libc":              ("mcp_core.misc_direct", "misc_exec", "libc"),
-    "api_schema_analyzer": ("mcp_core.misc_direct", "misc_exec", "api_schema_analyzer"),
-    "graphql_scanner":   ("mcp_core.misc_direct", "misc_exec", "graphql_scanner"),
-    "api_fuzzer":        ("mcp_core.misc_direct", "misc_exec", "api_fuzzer"),
-    "bbot":              ("mcp_core.misc_direct", "misc_exec", "bbot"),
-    "bulk_extractor":    ("mcp_core.misc_direct", "misc_exec", "bulk_extractor"),
-    "scalpel":           ("mcp_core.misc_direct", "misc_exec", "scalpel"),
-    "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
-    "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
-    "whatweb":           ("mcp_core.web_probe_direct", "web_probe_exec", "whatweb"),
-    "commix":            ("mcp_core.web_probe_direct", "web_probe_exec", "commix"),
-    "joomscan":          ("mcp_core.web_probe_direct", "web_probe_exec", "joomscan"),
-    "testssl":           ("mcp_core.testssl_direct", "testssl_exec", "testssl"),
-    "vulnx":             ("mcp_core.vuln_intel_direct", "vuln_intel_exec", "vulnx"),
-    "sherlock":          ("mcp_core.osint_direct", "osint_exec", "sherlock"),
-    "spiderfoot":        ("mcp_core.osint_direct", "osint_exec", "spiderfoot"),
-    "sublist3r":         ("mcp_core.osint_direct", "osint_exec", "sublist3r"),
-    "parsero":           ("mcp_core.osint_direct", "osint_exec", "parsero"),
-    "impacket":          ("mcp_core.active_directory_direct", "ad_exec", "impacket"),
-    "ldapdomaindump":    ("mcp_core.active_directory_direct", "ad_exec", "ldapdomaindump"),
-    "adidnsdump":        ("mcp_core.active_directory_direct", "ad_exec", "adidnsdump"),
-    "certipy":           ("mcp_core.active_directory_direct", "ad_exec", "certipy_ad"),
-    "certipy_ad":        ("mcp_core.active_directory_direct", "ad_exec", "certipy_ad"),
-    "mitm6":             ("mcp_core.active_directory_direct", "ad_exec", "mitm6"),
-    "pywerview":         ("mcp_core.active_directory_direct", "ad_exec", "pywerview"),
-    "bloodhound":        ("mcp_core.active_directory_direct", "ad_exec", "bloodhound"),
-    "bloodhound_python": ("mcp_core.active_directory_direct", "ad_exec", "bloodhound"),
-}
-
 
 def _resolve_tool(tool_name: str):
-    route = DIRECT_ROUTES.get(tool_name)
+    route = TOOL_ROUTES.get(tool_name)
     if not route:
         return None
     module_path, exec_name, tool_key = route
@@ -242,7 +112,7 @@ def cmd_serve(args):
 # ============================================================================
 
 def _unknown_tool_json(tool_name):
-    similar = [t for t in DIRECT_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
+    similar = [t for t in TOOL_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
     return {"error": f"Unknown tool: {tool_name}", "similar": similar[:5], "success": False}
 
 def cmd_scan(args):
@@ -255,7 +125,7 @@ def cmd_scan(args):
             _emit_json(_unknown_tool_json(tool_name), args)
         else:
             logger.error(f"Unknown tool: {tool_name}")
-            similar = [t for t in DIRECT_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
+            similar = [t for t in TOOL_ROUTES if tool_name in t or t.startswith(tool_name[:3])]
             if similar:
                 logger.info(f"   Did you mean: {', '.join(similar[:5])}?")
         sys.exit(1)
@@ -452,14 +322,14 @@ def cmd_validate(args):
     """Validate which external tools are available."""
     import shutil
 
-    tools_to_check = list(DIRECT_ROUTES.keys())
+    tools_to_check = list(TOOL_ROUTES.keys())
     if args.tool_filter:
         tools_to_check = [t for t in tools_to_check if args.tool_filter.lower() in t.lower()]
 
     present = []
     missing = []
     for tool_name in sorted(tools_to_check):
-        _, _, binary_key = DIRECT_ROUTES[tool_name]
+        _, _, binary_key = TOOL_ROUTES[tool_name]
         path = shutil.which(binary_key)
         if path:
             present.append(tool_name)
@@ -471,8 +341,8 @@ def cmd_validate(args):
             "total": len(tools_to_check),
             "present_count": len(present),
             "missing_count": len(missing),
-            "present": [{"tool": t, "binary": DIRECT_ROUTES[t][2], "path": shutil.which(DIRECT_ROUTES[t][2])} for t in present],
-            "missing": [{"tool": t, "binary": DIRECT_ROUTES[t][2]} for t in missing],
+            "present": [{"tool": t, "binary": TOOL_ROUTES[t][2], "path": shutil.which(TOOL_ROUTES[t][2])} for t in present],
+            "missing": [{"tool": t, "binary": TOOL_ROUTES[t][2]} for t in missing],
         }, args)
     else:
         C = _cli_colors()
@@ -483,11 +353,11 @@ def cmd_validate(args):
         if missing:
             rows.append(f"  {w}Missing ({len(missing)}):{R}")
             for m in missing:
-                rows.append(f"     {m:{widest}}  \u2192  {g}{DIRECT_ROUTES[m][2]}{R}")
+                rows.append(f"     {m:{widest}}  \u2192  {g}{TOOL_ROUTES[m][2]}{R}")
         if args.verbose and present:
             rows.append(f"  {w}Present ({len(present)}):{R}")
             for p in present:
-                rows.append(f"     {p:{widest}}  \u2192  {g}{shutil.which(DIRECT_ROUTES[p][2])}{R}")
+                rows.append(f"     {p:{widest}}  \u2192  {g}{shutil.which(TOOL_ROUTES[p][2])}{R}")
         inner = max(_dw(r) for r in rows) if rows else 30
         def p(s): return f"  {b}\u2502{R}  {s}{' ' * (inner - _dw(s))}  {b}\u2502{R}"
         buf = [f"  {b}\u250c{'\u2500' * (inner + 4)}\u2510{R}"]
