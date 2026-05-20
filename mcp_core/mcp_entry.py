@@ -155,8 +155,6 @@ def run_mcp(args, logger):
 
     try:
         mcp = setup_mcp_server_standalone(logger)
-        from pulse_app import app as pulse_app
-        mcp.add_provider(pulse_app)
         logger.info("✅ HexStrike AI-PULSE MCP server ready")
 
         # Seed scan cache with demo data if HEXSTRIKE_SEED_SCANS is set

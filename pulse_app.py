@@ -267,7 +267,7 @@ rx_as_sum  = AS_SUM
 # Backend tools
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.tool()
+@app.tool(model=True)
 def get_overview() -> dict:
     """PULSE dashboard overview: version, uptime, RAM, disk, CPU, tools count, server health.
 
@@ -409,7 +409,7 @@ def get_scope(target: str | None = None) -> dict:
     }
 
 
-@app.tool()
+@app.tool(model=True)
 def get_surface(target: str | None = None) -> dict:
     """Open ports, services, and technology detection for a target.
 
@@ -488,7 +488,7 @@ def get_surface(target: str | None = None) -> dict:
     return result
 
 
-@app.tool()
+@app.tool(model=True)
 def get_findings(target: str | None = None) -> list[dict]:
     """Vulnerabilities and issues for a target from nuclei + nikto scan cache.
 
@@ -649,7 +649,7 @@ def get_errors_and_failures() -> dict:
     }
 
 
-@app.tool()
+@app.tool(model=True)
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
     """Attack chain for a target from the IntelligentDecisionEngine.
 
@@ -1330,7 +1330,7 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
 # Phase 4 — Live dashboard (single-call for Claude, replaces 15+ get_* calls)
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.tool()
+@app.tool(model=True)
 def get_live_dashboard(target: str | None = None) -> dict:
     """Full Pulse dashboard state in one call. Returns all panels: Overview, Scope, Surface, Findings, Plan, Active Tools, History, Rate Limit, Errors & Failures, Tool Performance, Cache Status, System Trends, Sessions, Confirmations, Network I/O, Async Scans, Intelligence.
 
@@ -1369,7 +1369,7 @@ def get_live_dashboard(target: str | None = None) -> dict:
 # Phase 1 — Unified scan entry point
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.tool()
+@app.tool(model=True)
 def scan(target: str = "", intensity: str = "quick", objective: str = "comprehensive") -> dict:
     """Full reconnaissance scan on a target. Runs appropriate security tools based on intensity, then returns surface analysis + vulnerability findings + attack plan in one response.
 

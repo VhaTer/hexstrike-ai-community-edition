@@ -803,7 +803,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     transforms = [BM25SearchTransform(
         max_results=15,
         search_result_serializer=serialize_tools_for_output_markdown,
-        always_visible=["nmap", "whatweb", "sqlmap", "pulse_dashboard"],
+        always_visible=["nmap", "whatweb", "sqlmap", "pulse_dashboard", "scan", "get_overview", "get_surface", "get_findings", "get_plan", "get_live_dashboard"],
     )] if BM25SearchTransform else []
     from mcp_core.instructions import INSTRUCTIONS
     mcp = FastMCP(
@@ -1757,5 +1757,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     register_cve_tools(mcp)
     register_bugbounty_tools(mcp)
     logger.info("🎯 Workflow prompts registered: bug_bounty_recon, wifi_attack_chain, ctf_web_challenge, smb_lateral_movement, cloud_security_audit")
+
+    # Add pulse_app provider so its tools (scan, get_surface, etc.) are
+    # visible through the BM25SearchTransform alongside exec tools.
+    try:
+        from pulse_app import app as _pulse_app
+        mcp.add_provider(_pulse_app)
+        logger.info("📊 Pulse dashboard tools registered")
+    except Exception as exc:
+        logger.warning("⚠️ Could not register pulse_app provider: %s", exc)
 
     return mcp
