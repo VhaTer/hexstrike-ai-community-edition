@@ -145,8 +145,9 @@ class TestMCPEntryIntegration:
     def test_full_mcp_startup_flow(self, mock_args_debug_off, mock_logger, mock_mcp_server):
         with patch('mcp_core.mcp_entry.setup_mcp_server_standalone',
                    return_value=mock_mcp_server):
-            from mcp_core.mcp_entry import run_mcp
-            run_mcp(mock_args_debug_off, mock_logger)
+            with patch('mcp_core.mcp_entry._acquire_lock'):  # avoid lock contention in parallel
+                from mcp_core.mcp_entry import run_mcp
+                run_mcp(mock_args_debug_off, mock_logger)
         mock_mcp_server.run.assert_called_once()
 
     def test_startup_with_auth_token(self, mock_logger):

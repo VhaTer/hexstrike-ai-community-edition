@@ -775,11 +775,11 @@ def _register_skills(mcp: FastMCP, logger) -> None:
     mcp.add_provider(
         SkillsDirectoryProvider(
             roots=skills_dir,
-            supporting_files="resources",
+            supporting_files="template",
             reload=True,
         )
     )
-    logger.info("🤖 Skills initialized (supporting files exposed as resources, reload enabled)")
+    logger.info("🤖 Skills initialized (main files visible, supporting files via template, reload enabled)")
 
 def setup_mcp_server_standalone(logger=None) -> FastMCP:
     """

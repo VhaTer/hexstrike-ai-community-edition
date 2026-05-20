@@ -147,19 +147,23 @@ class TestPrewarmSingletons:
 
 class TestAcquireLock:
     def test_acquire_lock_success(self, tmp_lock_path):
-        """Lock is acquired, _lock_fh is set."""
+        """Lock is acquired, _lock_fh is set, PID written."""
         mcp_entry._acquire_lock(MagicMock())
         assert mcp_entry._lock_fh is not None
         assert not mcp_entry._lock_fh.closed
+        # Verify PID was written
+        with open(tmp_lock_path, "r") as f:
+            pid = f.read().strip()
+        assert pid == str(os.getpid())
         # Clean up
         mcp_entry._lock_fh.close()
         os.unlink(tmp_lock_path)
 
     def test_acquire_lock_stale_removed(self, tmp_lock_path):
-        """Old lock file (>30s) is removed before acquiring."""
+        """Old lock file (>TTL) is removed before acquiring."""
         with open(tmp_lock_path, "w") as f:
             f.write("stale")
-        old_mtime = time.time() - 60
+        old_mtime = time.time() - (mcp_entry._LOCK_TTL + 5)
         os.utime(tmp_lock_path, (old_mtime, old_mtime))
 
         mcp_entry._acquire_lock(MagicMock())
@@ -168,8 +172,46 @@ class TestAcquireLock:
         mcp_entry._lock_fh.close()
         os.unlink(tmp_lock_path)
 
+    def test_acquire_lock_pid_alive_exits(self, tmp_lock_path):
+        """When lock file contains alive PID, sys.exit(1)."""
+        with open(tmp_lock_path, "w") as f:
+            f.write(str(os.getpid()))
+        with pytest.raises(SystemExit) as exc:
+            mcp_entry._acquire_lock(MagicMock())
+        assert exc.value.code == 1
+
+    def test_acquire_lock_pid_dead_proceeds(self, tmp_lock_path):
+        """When lock file contains dead PID, proceeds (acquires new lock)."""
+        with open(tmp_lock_path, "w") as f:
+            f.write("999999999")  # unlikely to be alive
+        mcp_entry._acquire_lock(MagicMock())
+        assert mcp_entry._lock_fh is not None
+        assert not mcp_entry._lock_fh.closed
+        mcp_entry._lock_fh.close()
+        os.unlink(tmp_lock_path)
+
+    def test_acquire_lock_pid_corrupt_proceeds(self, tmp_lock_path):
+        """When lock file has garbage content, proceeds."""
+        with open(tmp_lock_path, "w") as f:
+            f.write("not_a_pid\n")
+        mcp_entry._acquire_lock(MagicMock())
+        assert mcp_entry._lock_fh is not None
+        assert not mcp_entry._lock_fh.closed
+        mcp_entry._lock_fh.close()
+        os.unlink(tmp_lock_path)
+
+    def test_acquire_lock_empty_shutdown_proceeds(self, tmp_lock_path):
+        """Empty lock file (clean shutdown marker) does not block."""
+        with open(tmp_lock_path, "w") as f:
+            pass  # empty file = clean shutdown signal
+        mcp_entry._acquire_lock(MagicMock())
+        assert mcp_entry._lock_fh is not None
+        assert not mcp_entry._lock_fh.closed
+        mcp_entry._lock_fh.close()
+        os.unlink(tmp_lock_path)
+
     def test_acquire_lock_contention_exits(self, tmp_lock_path):
-        """When lock is already held, sys.exit(1) is called."""
+        """When fcntl lock is already held, sys.exit(1) is called."""
         lock_a = open(tmp_lock_path, "w")
         import fcntl
         fcntl.flock(lock_a, fcntl.LOCK_EX)
@@ -181,12 +223,24 @@ class TestAcquireLock:
         lock_a.close()
         os.unlink(tmp_lock_path)
 
+    def test_acquire_lock_no_existing_file(self, tmp_lock_path):
+        """Acquires lock when no lock file exists yet."""
+        assert not os.path.exists(tmp_lock_path)
+        mcp_entry._acquire_lock(MagicMock())
+        assert mcp_entry._lock_fh is not None
+        assert os.path.exists(tmp_lock_path)
+        mcp_entry._lock_fh.close()
+        os.unlink(tmp_lock_path)
+
     def test_release_cleans_up(self, tmp_lock_path):
-        """_release_lock unlocks file and removes lock file."""
+        """_release_lock truncates PID, unlocks file, removes lock file."""
         mcp_entry._acquire_lock(MagicMock())
         assert os.path.exists(tmp_lock_path)
         assert mcp_entry._lock_fh is not None
         assert not mcp_entry._lock_fh.closed
+        # PID should be present before release
+        with open(tmp_lock_path, "r") as f:
+            assert f.read().strip() == str(os.getpid())
 
         mcp_entry._release_lock()
         assert not os.path.exists(tmp_lock_path)

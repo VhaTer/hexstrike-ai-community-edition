@@ -17,6 +17,7 @@ import atexit
 from mcp_core.server_setup import setup_mcp_server_standalone, _scan_cache
 
 _LOCK_PATH = "/tmp/hexstrike_mcp.lock"
+_LOCK_TTL = 5
 _lock_fh = None
 
 
@@ -96,39 +97,79 @@ def _prewarm_singletons(logger):
     threading.Thread(target=_warm, daemon=True, name="prewarm").start()
 
 
+def _read_pid_from_lock() -> int | None:
+    """Read PID from existing lock file. Returns None if missing/corrupt/empty."""
+    try:
+        with open(_LOCK_PATH, "r") as f:
+            content = f.read().strip()
+            if content and content.isdigit():
+                return int(content)
+    except (FileNotFoundError, ValueError, OSError):
+        pass
+    return None
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running (Linux /proc)."""
+    try:
+        return os.path.isdir(f"/proc/{pid}")
+    except Exception:
+        return False
+
+
 def _acquire_lock(logger):
-    """Acquire a filesystem lock to prevent duplicate MCP instances.
+    """Prevent duplicate MCP instances (fcntl + PID combined — like nginx/postgres).
 
-    Exits with code 1 if another instance is already running.
-    Registers atexit handler to release and clean up the lock file.
-
-    Stale lock files (older than 30s) are silently removed.
+    Strategy:
+    1. Read existing lock file, check /proc/<PID> for alive instance.
+    2. If alive → exit 1 (duplicate). If dead → kernel already released fcntl lock.
+    3. TTL safety net: remove stale file >5s.
+    4. Open file, acquire fcntl.flock() (auto-released by kernel on crash/SIGKILL).
+    5. Write own PID to file (truncated first = clean shutdown signal).
     """
     global _lock_fh
 
-    # Remove stale lock (>30s old = crashed without cleanup)
+    # 1. PID health check — detect alive instances without relying on fcntl
+    existing_pid = _read_pid_from_lock()
+    if existing_pid is not None and _is_pid_alive(existing_pid):
+        logger.error(f"💥 Another HexStrike MCP instance is running (PID {existing_pid}). Exiting.")
+        sys.exit(1)
+
+    # 2. TTL safety net for edge cases (PID reuse, /proc unavailable, etc.)
     try:
         age = time.time() - os.path.getmtime(_LOCK_PATH)
-        if age > 30:
+        if age > _LOCK_TTL:
             os.unlink(_LOCK_PATH)
     except (FileNotFoundError, OSError):
         pass
 
+    # 3. Open file and acquire fcntl lock (auto-released by kernel on crash)
     try:
         _lock_fh = open(_LOCK_PATH, "w")
         fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except IOError:
-        logger.error("💥 Another HexStrike MCP instance is already running. Exiting.")
+        logger.error("💥 Another HexStrike MCP instance is already running (fcntl conflict). Exiting.")
         sys.exit(1)
+
+    # 4. Write PID — truncate first (= clean shutdown marker: empty file)
+    _lock_fh.truncate(0)
+    _lock_fh.write(str(os.getpid()))
+    _lock_fh.flush()
 
     atexit.register(_release_lock)
 
 
 def _release_lock():
-    """Release the MCP lock file and clean up. Registered as atexit handler."""
+    """Release MCP lock. Registered as atexit handler.
+
+    Truncates file (signals clean shutdown → empty file = intentional exit).
+    Releases fcntl lock and removes lock file.
+    """
     global _lock_fh
-    if _lock_fh is not None:
+    if _lock_fh is not None and not _lock_fh.closed:
         try:
+            _lock_fh.truncate(0)
+            _lock_fh.flush()
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
             _lock_fh.close()
         except Exception:

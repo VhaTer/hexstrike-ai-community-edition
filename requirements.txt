@@ -13,6 +13,7 @@ requests>=2.31.0,<3.0.0         # HTTP library (requests import)
 psutil>=5.9.0,<6.0.0            # System utilities (psutil import)
 fastmcp[apps]>=3.1.1               # MCP framework + Prefab UI support
 prefab-ui>=0.14.0,<0.15.0          # Prefab UI components (pinned to 0.14.x for API stability)
+beartype>=0.18.0,<1.0.0            # Runtime type checking (@beartype decorator on server_core)
 
 # ============================================================================
 # CONDITIONALLY USED

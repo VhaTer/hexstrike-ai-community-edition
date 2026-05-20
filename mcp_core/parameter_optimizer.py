@@ -186,7 +186,7 @@ class ParameterOptimizer:
         # 3. Apply profile template (stealth override if WAF detected)
         #    Must run before resource tuning so base_val comparison is clean
         effective_profile: Profile = "stealth" if forced_stealth else profile
-        result = self._apply_profile(tool, result, effective_profile)
+        result = self._apply_profile(tool, result, effective_profile, caller_keys)
 
         # 4. Resource-aware tuning — after profile, and never touches caller-set keys
         result = self._apply_resource_tuning(tool, result, caller_keys)
@@ -323,6 +323,7 @@ class ParameterOptimizer:
         tool: str,
         params: Dict[str, Any],
         profile: Profile,
+        caller_keys: set | None = None,
     ) -> Dict[str, Any]:
         """
         Apply profile template overrides.
@@ -334,10 +335,13 @@ class ParameterOptimizer:
         - String params (additional_args): APPEND profile flags to existing
           value rather than overwriting — preserves tech optimizations.
         - Empty string profile values are ignored.
+        - Scan-type flags (-sS, -sV, -sn, etc.) stripped from additional_args
+          when caller explicitly set scan_type to avoid conflict.
         """
         tool_profiles = self._PROFILES.get(tool, {})
         profile_params = tool_profiles.get(profile, {})
         base_params    = self._BASE_PARAMS.get(tool, {})
+        caller_keys    = caller_keys or set()
 
         for key, value in profile_params.items():
             current = params.get(key)
@@ -346,10 +350,16 @@ class ParameterOptimizer:
             if key == "additional_args":
                 if not value:  # profile says empty — keep existing
                     continue
+                profile_val = value.strip()
+                # Strip scan-type flags (-sX) if caller explicitly set scan_type
+                if "scan_type" in caller_keys:
+                    import re
+                    profile_val = re.sub(r'-s[A-Za-z]+\s*', '', profile_val).strip()
+                if not profile_val:
+                    continue
                 existing = (current or "").strip()
-                # Avoid duplicating flags already present
-                if value.strip() and value.strip() not in existing:
-                    params[key] = f"{existing} {value.strip()}".strip()
+                if profile_val not in existing:
+                    params[key] = f"{existing} {profile_val}".strip()
                 continue
 
             # Numeric params — only override if value is still the base default

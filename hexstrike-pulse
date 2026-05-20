@@ -66,12 +66,7 @@ if [ -f hexstrike-env/bin/activate ]; then
     source hexstrike-env/bin/activate
 fi
 
-# Clean stale lock file (>30s old = crashed without cleanup)
-LOCK_FILE="/tmp/hexstrike_mcp.lock"
-if [ -f "$LOCK_FILE" ]; then
-    if [ "$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))" -gt 30 ]; then
-        rm -f "$LOCK_FILE" 2>/dev/null
-    fi
-fi
+# Lock handled by _acquire_lock() in mcp_entry.py (fcntl + PID combo).
+# The launcher does NOT touch the lock file — prevents race with Python process.
 
 exec python3 hexstrike_mcp.py "$@" 1>&3
