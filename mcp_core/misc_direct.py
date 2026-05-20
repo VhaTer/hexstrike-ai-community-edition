@@ -24,9 +24,12 @@ from server_core.command_executor import execute_command
 
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
+    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
     for key in keys:
         if not data.get(key, ""):
-            return {"success": False, "error": f"'{key}' is required"}
+            hint = _HINTS.get(key, "")
+            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
+            return {"success": False, "error": msg}
     return {}
 
 
@@ -339,7 +342,7 @@ def _sqlite(data: dict) -> dict:
 def _api_schema_analyzer(data: dict) -> dict:
     schema_url = data.get("schema_url", "").strip()
     schema_type = data.get("schema_type", "openapi")
-    if not schema_url: return {"success": False, "error": "schema_url is required"}
+    if not schema_url: return {"success": False, "error": "schema_url is required (use http://host[:port])"}
 
     result = execute_command(f"curl -s '{schema_url}'", use_cache=True)
     if not result.get("success"): return {"success": False, "error": "Failed to fetch API schema"}
@@ -604,7 +607,7 @@ def _api_fuzzer(data: dict) -> dict:
 def _bbot(data: dict) -> dict:
     target      = data.get("target", "").strip()
     parameters  = data.get("parameters", {})
-    if not target: return {"success": False, "error": "target is required"}
+    if not target: return {"success": False, "error": "target is required (use an IP or hostname)"}
     flags = ""
     for k, v in parameters.items():
         flags += f" -{k} {v}"
@@ -614,7 +617,7 @@ def _bbot(data: dict) -> dict:
 
 def _nuclei(data: dict) -> dict:
     target          = data.get("target", "").strip()
-    if not target: return {"success": False, "error": "target is required"}
+    if not target: return {"success": False, "error": "target is required (use an IP or hostname, or http://host[:port] for URL)"}
     severity        = data.get("severity", "")
     tags            = data.get("tags", "")
     template        = data.get("template", "")

@@ -55,6 +55,7 @@ _ctf_tools            = None
 _ctf_automator        = None
 _ctf_coordinator      = None
 _tool_stats_store     = None
+_target_store         = None
 
 
 def get_tool_stats_store():
@@ -64,6 +65,15 @@ def get_tool_stats_store():
         from .tool_stats_store import ToolStatsStore
         _tool_stats_store = ToolStatsStore()
     return _tool_stats_store
+
+
+def get_target_store():
+    """TargetStore — per-target findings and session history (persisted to JSON)."""
+    global _target_store
+    if _target_store is None:
+        from .target_store import TargetStore
+        _target_store = TargetStore()
+    return _target_store
 
 
 def get_session_store():
@@ -187,6 +197,7 @@ _LAZY_ALIASES = {
     "ctf_automator":          get_ctf_automator,
     "ctf_coordinator":        get_ctf_coordinator,
     "tool_stats_store":       get_tool_stats_store,
+    "target_store":           get_target_store,
 }
 
 

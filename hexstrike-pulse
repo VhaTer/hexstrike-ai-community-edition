@@ -44,7 +44,18 @@
 #   Replace /ABSOLUTE/PATH/TO with the output of: pwd
 #   Example: /home/user/hexstrike-ai-community-edition/hexstrike-pulse
 #
+# RESTART (do NOT run ./hexstrike-pulse manually — kills Claude's MCP process):
+#
+#   pkill -f hexstrike_mcp.py && rm -f /tmp/hexstrike_mcp.lock
+#   then restart Claude Desktop — it launches its own MCP process
+#
 # =============================================================================
+
+# Isolate stdout: WSL boot messages, .bashrc, or any shell output on stdout
+# would break the MCP JSON-RPC protocol. All bash output → stderr, only
+# Python's JSON-RPC → original stdout (fd 3).
+exec 3>&1
+exec 1>&2
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
@@ -63,4 +74,4 @@ if [ -f "$LOCK_FILE" ]; then
     fi
 fi
 
-exec python3 hexstrike_mcp.py "$@"
+exec python3 hexstrike_mcp.py "$@" 1>&3

@@ -121,25 +121,31 @@ def _acquire_lock(logger):
         logger.error("💥 Another HexStrike MCP instance is already running. Exiting.")
         sys.exit(1)
 
-    def _release():
-        global _lock_fh
-        if _lock_fh is not None:
-            try:
-                fcntl.flock(_lock_fh, fcntl.LOCK_UN)
-                _lock_fh.close()
-            except Exception:
-                pass
-        try:
-            os.unlink(_LOCK_PATH)
-        except FileNotFoundError:
-            pass
+    atexit.register(_release_lock)
 
-    atexit.register(_release)
+
+def _release_lock():
+    """Release the MCP lock file and clean up. Registered as atexit handler."""
+    global _lock_fh
+    if _lock_fh is not None:
+        try:
+            fcntl.flock(_lock_fh, fcntl.LOCK_UN)
+            _lock_fh.close()
+        except Exception:
+            pass
+    try:
+        os.unlink(_LOCK_PATH)
+    except FileNotFoundError:
+        pass
 
 
 def run_mcp(args, logger):
-    """Run the HexStrike MCP server in standalone mode (stdio transport)."""
-    _acquire_lock(logger)
+    """Run the HexStrike MCP server with configurable transport."""
+    transport = getattr(args, 'transport', 'stdio')
+
+    # Acquire lock only for stdio (prevents duplicate Claude Desktop instances)
+    if transport == 'stdio':
+        _acquire_lock(logger)
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -160,8 +166,16 @@ def run_mcp(args, logger):
         # request doesn't block on lazy initialization.
         _prewarm_singletons(logger)
 
-        # stdio transport for Claude Desktop / MCP clients
-        mcp.run(show_banner=False, log_level="WARNING")
+        if transport == 'http':
+            host = getattr(args, 'host', '127.0.0.1')
+            port = getattr(args, 'port', 8888)
+            from hexstrike_server import register_http_routes
+            register_http_routes(mcp, logger)
+            logger.info(f"🌐 HTTP transport on {host}:{port} — MCP SSE at /mcp")
+            mcp.run(transport="http", host=host, port=port, show_banner=False, log_level="WARNING")
+        else:
+            # stdio transport for Claude Desktop / MCP clients
+            mcp.run(show_banner=False, log_level="WARNING")
 
     except Exception as e:
         logger.error(f"💥 Error starting MCP server: {str(e)}")

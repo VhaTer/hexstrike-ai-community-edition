@@ -44,7 +44,7 @@ from prefab_ui.rx import Rx
 from config import _config as app_config
 from mcp_core.server_setup import _scan_cache, _rate_limit_events
 from server_core.operational_metrics import _op_metrics
-from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_tool_stats_store
+from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store
 from tool_registry import TOOLS
 
 logger = logging.getLogger(__name__)
@@ -470,16 +470,22 @@ def get_surface(target: str | None = None) -> dict:
     else:
         risk = "unknown"
 
-    return {
+    suggestion = _suggest_next_from_context({
+        "ports": sorted(ports, key=lambda p: p["port"]),
+        "technologies": sorted(techs),
+    }, [])
+    result = {
         "target":         target,
         "ports":          sorted(ports, key=lambda p: p["port"]),
         "ports_count":    port_count,
         "technologies":   sorted(techs),
         "risk_level":     risk,
-        # Pre-formatted display
         "risk_variant":   "destructive" if risk == "high" else "warning" if risk == "medium" else "default",
         "ports_display":  f"{port_count} open port{'s' if port_count != 1 else ''}" if port_count else "No ports detected",
     }
+    if suggestion:
+        result["next_suggested_tool"] = suggestion
+    return result
 
 
 @app.tool()
@@ -1112,6 +1118,77 @@ TOOLS_BY_INTENSITY = {
     "full":   ["nmap", "whatweb", "nuclei", "nikto", "gobuster"],
 }
 
+# Tools that need url=http:// prefix instead of target= (direct IP doesn't work)
+_TOOLS_NEED_URL = {"whatweb", "gobuster", "sqlmap", "wpscan", "dalfox", "jaeles", "xsser"}
+_TOOLS_NEED_URL_AS_TARGET = {"nuclei", "httpx", "katana"}
+
+
+def _suggest_next_from_context(surface: dict, findings: list) -> dict:
+    """Suggest next tool based on structured surface + findings data.
+
+    Used by scan(), get_surface(), get_findings(), get_live_dashboard().
+    Returns dict with 'tool' and 'reason', or empty dict if context is insufficient.
+    """
+    # Surface-based suggestions
+    ports = surface.get("ports", []) if isinstance(surface, dict) else []
+    port_numbers = {p.get("port") for p in ports if isinstance(p, dict)}
+    services = [p.get("service", "").lower() for p in ports if isinstance(p, dict)]
+    services_str = " ".join(services)
+
+    techs = surface.get("technologies", []) if isinstance(surface, dict) else []
+    techs_lower = [t.lower() for t in techs if isinstance(t, str)]
+
+    if port_numbers:
+        if 80 in port_numbers or 443 in port_numbers or 8080 in port_numbers:
+            if any("wordpress" in t for t in techs_lower):
+                return {"tool": "wpscan", "reason": "WordPress detected — enumerate plugins/users"}
+            if any("joomla" in t for t in techs_lower):
+                return {"tool": "joomscan", "reason": "Joomla detected — enumerate extensions"}
+            if techs_lower:
+                return {"tool": "gobuster", "reason": "Web server detected with tech — discover hidden paths"}
+            return {"tool": "whatweb", "reason": "Web ports open — identify technologies"}
+        if 445 in port_numbers:
+            return {"tool": "smbmap", "reason": "SMB port 445 open — enumerate shares"}
+        if 22 in port_numbers:
+            return {"tool": "hydra", "reason": "SSH port 22 open — test credentials"}
+        if 1433 in port_numbers or 3306 in port_numbers or 5432 in port_numbers or 27017 in port_numbers:
+            return {"tool": "sqlmap", "reason": "Database port open — test for weak auth"}
+        if "smb" in services_str or "microsoft-ds" in services_str:
+            return {"tool": "smbmap", "reason": "SMB service detected — enumerate shares"}
+        if "http" in services_str or "ssl" in services_str:
+            return {"tool": "whatweb", "reason": "Web service detected — fingerprint technologies"}
+
+    # Findings-based suggestions
+    if findings:
+        findings_severities = []
+        findings_text = []
+        for f in findings:
+            if isinstance(f, dict):
+                findings_severities.append(f.get("severity", "").lower())
+                findings_text.append(str(f.get("finding", "")).lower())
+
+        findings_all = " ".join(findings_text)
+        has_critical = any(s == "critical" for s in findings_severities)
+        has_high = any(s == "high" for s in findings_severities)
+
+        if "sql" in findings_all or "sqli" in findings_all or "injection" in findings_all:
+            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit"}
+        if "xss" in findings_all or "cross-site" in findings_all:
+            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox"}
+        if "smb" in findings_all or "eternalblue" in findings_all or "ms17" in findings_all:
+            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation"}
+        if "ssl" in findings_all or "tls" in findings_all or "certificate" in findings_all:
+            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection"}
+        if has_critical or has_high:
+            return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation"}
+        return {"tool": "gobuster", "reason": "Findings reviewed — continue with directory discovery"}
+
+    # No context
+    if port_numbers:
+        return {"tool": "nuclei", "reason": "Ports discovered — run vulnerability scan"}
+
+    return {}
+
 def _collect_dashboard_state(target: str | None = None) -> dict:
     """Collect all dashboard data sources into a flat state dict.
 
@@ -1197,6 +1274,17 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
     trend_mem_avg_display = f"{int(trend_mem_avg)}%"
     trend_period_display = f"{trends.get('period_minutes', 0):.1f}m" if trends.get("period_minutes", 0) else "\u2014"
 
+    # TargetStore — automatically record scans for MCP Resources
+    try:
+        ts = get_target_store()
+        if active_target and history:
+            ts.record_scan(
+                target=active_target,
+                tools_used=list({h.get("tool", "?") for h in history}),
+            )
+    except Exception:
+        pass
+
     return {
         # Raw data objects
         "overview":       overview,
@@ -1234,6 +1322,7 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
         "async_scans_running":  running_list,
         "async_scans_complete": complete_list,
         "async_scans_summary":  async_scans_summary,
+        "next_suggested_tool": _suggest_next_from_context(surface, findings) if active_target else {},
     }
 
 
@@ -1272,6 +1361,7 @@ def get_live_dashboard(target: str | None = None) -> dict:
             "summary":  st["async_scans_summary"],
         },
         "intelligence":     get_tool_intelligence(),
+        "next_suggested_tool": st.get("next_suggested_tool", {}),
     }
 
 
@@ -1319,7 +1409,16 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             continue
         exec_func, binary = entry
         try:
-            out = exec_func(binary, {"target": resolved})
+            params = {"target": resolved}
+            if tool_name in _TOOLS_NEED_URL:
+                if not resolved.startswith(("http://", "https://")):
+                    params = {"url": f"http://{resolved}"}
+            elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
+                if not resolved.startswith(("http://", "https://")):
+                    params = {"url": f"http://{resolved}", "target": resolved}
+                else:
+                    params = {"url": resolved, "target": resolved}
+            out = exec_func(binary, params)
             ok = out.get("success", False)
             tool_results[tool_name] = {
                 "status": "completed" if ok else "failed",
@@ -1327,6 +1426,18 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             }
             if not ok:
                 tool_results[tool_name]["error"] = out.get("error", "Unknown error")
+            stdout_str = out.get("stdout", "") or out.get("output", "")
+            _scan_cache.set(str(time.time()), {
+                "tool": tool_name,
+                "target": resolved,
+                "timestamp": time.time(),
+                "status": "completed" if ok else "failed",
+                "result": {
+                    "success": ok,
+                    "stdout": stdout_str,
+                    "output": stdout_str,
+                },
+            })
         except Exception as e:
             tool_results[tool_name] = {"status": "error", "error": str(e)}
 
@@ -1334,6 +1445,19 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
     findings_data = get_findings(resolved) if intensity in ("medium", "full") else []
     plan_data = get_plan(resolved, objective) if intensity == "full" else {"target": resolved, "steps": [], "step_count": 0, "summary": "Skipped — use full intensity for planning"}
 
+    # TargetStore record for MCP Resources
+    try:
+        ts = get_target_store()
+        ts.record_scan(
+            target=resolved,
+            tools_used=list(tool_results.keys()),
+            surface_data=surface_data,
+            findings=findings_data,
+        )
+    except Exception:
+        pass
+
+    suggestion = _suggest_next_from_context(surface_data, findings_data)
     return {
         "target":    resolved,
         "intensity": intensity,
@@ -1347,7 +1471,7 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             f"{len(findings_data)} findings, "
             f"{plan_data.get('step_count', 0)} plan steps"
         ),
-    }
+    } | ({"next_suggested_tool": suggestion} if suggestion else {})
 
 
 # ═════════════════════════════════════════════════════════════════════════════

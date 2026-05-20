@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
+from beartype import beartype
 from server_core import config_core
 from server_core.enhanced_command_executor import EnhancedCommandExecutor
 from server_core.singletons import cache as _cache
@@ -6,7 +7,7 @@ from server_core.singletons import cache as _cache
 COMMAND_TIMEOUT = config_core.get("COMMAND_TIMEOUT", 300)  # Default to 5 minutes if not set
 
 
-def _cache_get(active_cache, command: str, params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _cache_get(active_cache, command: str, params: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Read from either AdvancedCache(key) or legacy HexStrikeCache(command, params)."""
     try:
         return active_cache.get(command)
@@ -14,7 +15,7 @@ def _cache_get(active_cache, command: str, params: Optional[Dict[str, Any]]) -> 
         return active_cache.get(command, params or {})
 
 
-def _cache_set(active_cache, command: str, params: Optional[Dict[str, Any]], result: Dict[str, Any]) -> None:
+def _cache_set(active_cache, command: str, params: Optional[dict[str, Any]], result: dict[str, Any]) -> None:
     """Write to either AdvancedCache(key, value) or legacy HexStrikeCache(command, params, result)."""
     try:
         active_cache.set(command, result)
@@ -22,7 +23,7 @@ def _cache_set(active_cache, command: str, params: Optional[Dict[str, Any]], res
         active_cache.set(command, params or {}, result)
 
 
-def _normalize_result(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_result(raw: dict[str, Any]) -> dict[str, Any]:
     """
     Normalize EnhancedCommandExecutor output to the canonical HexStrike result shape.
 
@@ -77,6 +78,7 @@ def _normalize_result(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@beartype
 def execute_command(
   command: str,
   use_cache: bool = True,
@@ -84,8 +86,8 @@ def execute_command(
   timeout: int = COMMAND_TIMEOUT,
   tool: Optional[str] = None,
   endpoint: Optional[str] = None,
-  params: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+  params: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
   """
   Execute a shell command with enhanced features.
 

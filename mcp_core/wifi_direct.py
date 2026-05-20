@@ -34,9 +34,12 @@ logger = logging.getLogger(__name__)
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
     """Return error dict if any required key is missing or empty."""
+    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
     for key in keys:
         if not data.get(key, ""):
-            return {"success": False, "error": f"'{key}' is required"}
+            hint = _HINTS.get(key, "")
+            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
+            return {"success": False, "error": msg}
     return {}
 
 

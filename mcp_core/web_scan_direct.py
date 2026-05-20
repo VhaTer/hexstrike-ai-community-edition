@@ -32,9 +32,12 @@ def _sanitize(value: str) -> str:
 
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
+    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
     for key in keys:
         if not data.get(key, ""):
-            return {"success": False, "error": f"'{key}' is required"}
+            hint = _HINTS.get(key, "")
+            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
+            return {"success": False, "error": msg}
     return {}
 
 
@@ -163,7 +166,7 @@ def _zap(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     if not target and scan_type != "daemon":
-        return {"success": False, "error": "target is required for scans"}
+        return {"success": False, "error": "target is required for scans (use an IP or hostname)"}
 
     if daemon:
         command = f"zaproxy -daemon -host {host} -port {port}"

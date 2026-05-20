@@ -23,7 +23,9 @@ Design:
 
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from beartype import beartype
 
 try:
     import psutil
@@ -49,7 +51,7 @@ class OperationalMetricsStore:
 
         # Per-tool counters: {tool_name: {runs, successes, errors, timeouts, cache_hits,
         #                                  session_restores, total_duration, max_duration}}
-        self._tools: Dict[str, Dict[str, Any]] = {}
+        self._tools: dict[str, dict[str, Any]] = {}
 
         # Global confirmation counters
         self._confirmations: Dict[str, int] = {
@@ -67,7 +69,8 @@ class OperationalMetricsStore:
 
     # ── Record ────────────────────────────────────────────────────────────────
 
-    def record(self, telemetry: Dict[str, Any]) -> None:
+    @beartype
+    def record(self, telemetry: dict[str, Any]) -> None:
         """
         Record one run_security_tool() telemetry dict.
 
@@ -125,7 +128,8 @@ class OperationalMetricsStore:
 
     # ── Views ─────────────────────────────────────────────────────────────────
 
-    def success_rate_by_tool(self) -> List[Dict[str, Any]]:
+    @beartype
+    def success_rate_by_tool(self) -> list[dict[str, Any]]:
         """Return tools sorted by success rate ascending (worst first)."""
         with self._lock:
             rows = []
@@ -142,7 +146,8 @@ class OperationalMetricsStore:
             rows.sort(key=lambda x: x["success_rate"])
             return rows
 
-    def error_count_by_tool(self) -> List[Dict[str, Any]]:
+    @beartype
+    def error_count_by_tool(self) -> list[dict[str, Any]]:
         """Return tools sorted by error count descending."""
         with self._lock:
             rows = [
@@ -152,7 +157,8 @@ class OperationalMetricsStore:
             rows.sort(key=lambda x: x["errors"], reverse=True)
             return rows
 
-    def timeout_count_by_tool(self) -> List[Dict[str, Any]]:
+    @beartype
+    def timeout_count_by_tool(self) -> list[dict[str, Any]]:
         """Return tools sorted by timeout count descending."""
         with self._lock:
             rows = [
@@ -163,7 +169,8 @@ class OperationalMetricsStore:
             rows.sort(key=lambda x: x["timeouts"], reverse=True)
             return rows
 
-    def slowest_tools(self, top_n: int = 10) -> List[Dict[str, Any]]:
+    @beartype
+    def slowest_tools(self, top_n: int = 10) -> list[dict[str, Any]]:
         """Return top_n tools by average duration descending."""
         with self._lock:
             rows = []
@@ -179,7 +186,8 @@ class OperationalMetricsStore:
             rows.sort(key=lambda x: x["avg_duration"], reverse=True)
             return rows[:top_n]
 
-    def cache_summary(self) -> Dict[str, Any]:
+    @beartype
+    def cache_summary(self) -> dict[str, Any]:
         """Return global cache hit/miss ratio."""
         with self._lock:
             total = self._cache_hits + self._cache_misses
@@ -191,12 +199,14 @@ class OperationalMetricsStore:
                 "hit_ratio": round(ratio, 4),
             }
 
-    def confirmation_summary(self) -> Dict[str, Any]:
+    @beartype
+    def confirmation_summary(self) -> dict[str, Any]:
         """Return confirmation event counts."""
         with self._lock:
             return dict(self._confirmations)
 
-    def cache_hits_by_tool(self) -> List[Dict[str, Any]]:
+    @beartype
+    def cache_hits_by_tool(self) -> list[dict[str, Any]]:
         """Return per-tool cache hit counts. Tools with hits only."""
         with self._lock:
             rows = [
@@ -208,7 +218,8 @@ class OperationalMetricsStore:
             return rows
 
     @staticmethod
-    def system_metrics() -> Dict[str, Any]:
+    @beartype
+    def system_metrics() -> dict[str, Any]:
         """Snapshot of system resources (CPU, memory, disk)."""
         if not HAS_PSUTIL:
             return {"status": "unavailable", "reason": "psutil not installed"}
@@ -227,7 +238,8 @@ class OperationalMetricsStore:
         except Exception as e:
             return {"status": "error", "error": str(e)[:100]}
 
-    def summary(self) -> Dict[str, Any]:
+    @beartype
+    def summary(self) -> dict[str, Any]:
         """Full operational summary for the metrics:// resource."""
         with self._lock:
             total_runs = sum(e["runs"] for e in self._tools.values())

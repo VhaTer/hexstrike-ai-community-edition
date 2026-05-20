@@ -491,3 +491,98 @@ class TestRunSecurityToolExec:
         result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.67"})))
         assert result["success"] is True
         assert result.get("output") == "cached result"
+
+
+# =========================================================================
+# Group F — TargetStore resource endpoints
+# =========================================================================
+
+
+class TestResourceTargetStore:
+    """MCP resource endpoints for TargetStore (targets://, target://, findings, sessions)."""
+
+    def _store(self, tmp_path):
+        from server_core.target_store import TargetStore
+        return TargetStore(data_dir=str(tmp_path))
+
+    def test_targets_list_empty(self, tmp_path):
+        store = self._store(tmp_path)
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            resource = run(mcp().get_resource("targets://"))
+            text = run(resource.fn())
+        parsed = json.loads(text)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 0
+
+    def test_targets_list_with_entries(self, tmp_path):
+        store = self._store(tmp_path)
+        store.record_scan("alpha.example", surface_data={"ports": [{"port": 80, "service": "http"}]})
+        store.record_scan("beta.example")
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            resource = run(mcp().get_resource("targets://"))
+            text = run(resource.fn())
+        parsed = json.loads(text)
+        assert len(parsed) == 2
+        assert parsed[0]["target"] == "alpha.example"
+        assert parsed[0]["findings"]["ports"] == 1
+        assert parsed[1]["target"] == "beta.example"
+
+    def test_get_target_found(self, tmp_path):
+        store = self._store(tmp_path)
+        store.record_scan("target.example", surface_data={"ports": [{"port": 443, "service": "https"}]})
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}"))
+            text = run(tmpl.fn(target="target.example"))
+        parsed = json.loads(text)
+        assert parsed["target"] == "target.example"
+        assert parsed["scan_count"] == 1
+        assert len(parsed["findings"]["ports"]) == 1
+
+    def test_get_target_not_found(self, tmp_path):
+        store = self._store(tmp_path)
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}"))
+            text = run(tmpl.fn(target="nonexistent.example"))
+        parsed = json.loads(text)
+        assert "error" in parsed
+
+    def test_get_target_findings(self, tmp_path):
+        store = self._store(tmp_path)
+        store.record_scan("findme.example", surface_data={
+            "ports": [{"port": 80, "service": "http"}],
+            "technologies": ["nginx"],
+        })
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}/findings"))
+            text = run(tmpl.fn(target="findme.example"))
+        parsed = json.loads(text)
+        assert len(parsed["ports"]) == 1
+        assert "nginx" in parsed["technologies"]
+
+    def test_get_target_findings_not_found(self, tmp_path):
+        store = self._store(tmp_path)
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}/findings"))
+            text = run(tmpl.fn(target="ghost.example"))
+        parsed = json.loads(text)
+        assert "error" in parsed
+
+    def test_get_target_sessions(self, tmp_path):
+        store = self._store(tmp_path)
+        store.record_scan("sessionized.example", session_id="sess-001", tools_used=["nmap"])
+        store.record_scan("sessionized.example", session_id="sess-002", tools_used=["whatweb"])
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}/sessions"))
+            text = run(tmpl.fn(target="sessionized.example"))
+        parsed = json.loads(text)
+        assert len(parsed) == 2
+        assert parsed[0]["session_id"] == "sess-001"
+        assert parsed[1]["session_id"] == "sess-002"
+
+    def test_get_target_sessions_not_found(self, tmp_path):
+        store = self._store(tmp_path)
+        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+            tmpl = run(mcp().get_resource_template("target://{target}/sessions"))
+            text = run(tmpl.fn(target="ghost.example"))
+        parsed = json.loads(text)
+        assert "error" in parsed

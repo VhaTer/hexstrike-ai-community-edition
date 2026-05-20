@@ -4,7 +4,8 @@ import logging
 import re as _re
 import subprocess
 import traceback
-from typing import Dict, Any
+from typing import Any
+from beartype import beartype
 from datetime import datetime
 from wcwidth import wcswidth as _wcswidth
 import server_core.config_core as config_core
@@ -124,7 +125,8 @@ class EnhancedCommandExecutor:
             if elapsed > self.timeout:
                 break
 
-    def execute(self) -> Dict[str, Any]:
+    @beartype
+    def execute(self) -> dict[str, Any]:
         """Execute the command with enhanced monitoring and output"""
         # Reset per-execution state so the instance can be reused across calls
         self.stdout_data = ""

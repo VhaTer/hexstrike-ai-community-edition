@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import os
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -12,7 +13,7 @@ from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
 from server_core.rate_limit_detector import RateLimitDetector
 from server_core.operational_metrics import _op_metrics
-from server_core.singletons import get_tool_stats_store
+from server_core.singletons import get_tool_stats_store, get_target_store
 from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
@@ -372,7 +373,7 @@ _TOOL_SKILL_MAP = {
     "bloodhound_python": "active-directory",
 }
 
-_SKILL_SUPPORT_FILES = ("REFERENCE.md", "CHECKLIST.md", "EXAMPLES.md")
+_SKILL_SUPPORT_FILES = ("REFERENCE.md",)
 _TOOL_REGISTRY_ALIASES = {
     "aircrack_ng": "aircrack-ng",
     "airmon_ng": "airmon-ng",
@@ -492,30 +493,191 @@ def _resolve_required_param_type(spec: Dict[str, Any]) -> type:
     return str
 
 
+def _suggest_next_tool(tool_name: str, output: str, target: str = "") -> dict:
+    """Suggest the next tool based on current tool output.
+
+    Returns dict with 'tool' (str) and 'reason' (str), or empty dict if context is insufficient.
+    Used by run_security_tool (exec tools) and pulse_app tools.
+    """
+    output_lower = output.lower()
+
+    # Port scanning — detect web services
+    if tool_name in ("nmap", "nmap_advanced", "masscan", "rustscan"):
+        if "80/" in output_lower or "443/" in output_lower or "http" in output_lower:
+            return {"tool": "whatweb", "reason": "Web ports detected — identify technologies"}
+        if "445/" in output_lower:
+            return {"tool": "smbmap", "reason": "SMB port 445 open — enumerate shares"}
+        if "22/" in output_lower:
+            return {"tool": "hydra", "reason": "SSH port 22 open — test credentials"}
+        if "1433/" in output_lower or "3306/" in output_lower:
+            return {"tool": "sqlmap", "reason": "Database port open — test for weak auth"}
+        return {"tool": "nuclei", "reason": "Ports discovered — run vulnerability scan"}
+
+    # Web fingerprinting — detect CMS
+    if tool_name == "whatweb":
+        if "wordpress" in output_lower:
+            return {"tool": "wpscan", "reason": "WordPress detected — enumerate plugins/users"}
+        if "joomla" in output_lower:
+            return {"tool": "joomscan", "reason": "Joomla detected — enumerate extensions"}
+        if "drupal" in output_lower:
+            return {"tool": "nuclei", "reason": "Drupal detected — check known CVEs"}
+        if output.strip():
+            return {"tool": "gobuster", "reason": "Web server detected — discover hidden paths"}
+
+    # Vulnerability scan results
+    if tool_name in ("nuclei", "nikto"):
+        if "sql" in output_lower or "sqli" in output_lower or "injection" in output_lower:
+            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit"}
+        if "xss" in output_lower or "cross-site" in output_lower:
+            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox"}
+        if "ssl" in output_lower or "tls" in output_lower or "certificate" in output_lower:
+            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection"}
+        if "smb" in output_lower or "eternalblue" in output_lower or "ms17" in output_lower:
+            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation"}
+        if output.strip():
+            return {"tool": "gobuster", "reason": "Vuln scan complete — continue with directory discovery"}
+
+    # Directory enumeration
+    if tool_name in ("gobuster", "ffuf", "dirsearch", "feroxbuster"):
+        if output.strip():
+            return {"tool": "nuclei", "reason": "Directories discovered — scan for vulnerabilities"}
+
+    # Password cracking
+    if tool_name in ("hydra", "medusa", "patator"):
+        if "success" in output_lower or "password" in output_lower:
+            return {"tool": "metasploit", "reason": "Credentials found — attempt exploitation"}
+
+    # SMB enumeration
+    if tool_name in ("smbmap", "enum4linux", "nbtscan", "netexec"):
+        if "share" in output_lower or "admin" in output_lower or "ipc" in output_lower:
+            return {"tool": "metasploit", "reason": "SMB shares accessible — check for exploitation"}
+        return {"tool": "hydra", "reason": "SMB services detected — test credentials"}
+
+    # Web vulnerability tools
+    if tool_name in ("sqlmap", "dalfox", "xsser"):
+        if "vulnerable" in output_lower or "payload" in output_lower or "parameter" in output_lower:
+            return {"tool": "metasploit", "reason": "Web vulnerability confirmed — attempt exploitation"}
+        return {"tool": "nuclei", "reason": "Web check complete — broader vulnerability scan"}
+
+    return {}
+
+
 _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
     "nmap": {
         "workflow": "FIRST recon tool on any new target. Run before whatweb.",
         "example": "nmap(target='scanme.nmap.org') or nmap(target='192.168.1.1', ports='80,443')",
+        "returns": [
+            "dict — success (bool), output (str) with port lines like '22/tcp open  ssh'",
+            "Parse output line by line: split on whitespace, port/protocol in first column, state in second, service in third.",
+        ],
     },
     "whatweb": {
         "workflow": "Web technology detection. Use AFTER nmap when web ports are found.",
         "example": "whatweb(url='http://scanme.nmap.org')",
+        "returns": [
+            "dict — success (bool), output (str) with '[200 OK] nginx PHP' tech fingerprinting results.",
+            "Check output for technology keywords: nginx, Apache, PHP, Python, WordPress, etc.",
+        ],
     },
     "sqlmap": {
         "workflow": "SQL injection testing. Use AFTER finding SQLi candidates via findings.",
         "example": "sqlmap(url='http://target/page?id=1') or sqlmap(url='http://target/page?id=1', additional_args='--batch')",
+        "returns": [
+            "dict — success (bool), output (str) with injection details and dumped data.",
+            "Filter output for 'Parameter:' and 'Type:' lines to identify injectable parameters.",
+        ],
     },
     "gobuster": {
         "workflow": "Directory/file brute force. Use AFTER whatweb when web server is detected.",
-        "example": "gobuster(target='http://target', params='dir -w /usr/share/wordlists/dirb/common.txt')",
+        "example": "gobuster(url='http://target', mode='dir')",
+        "returns": [
+            "dict — success (bool), output (str) with discovered paths like '/admin (Status: 200)'.",
+            "Filter output for '(Status: 2..)' lines to find accessible paths.",
+        ],
     },
     "nuclei": {
         "workflow": "Vulnerability scanning. Use AFTER surface scan for known CVEs.",
         "example": "nuclei(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with findings like '[medium] [missing-header] http://target'.",
+            "Filter output for lines matching '[severity] [template-id] url' — severity is one of: critical, high, medium, low, info.",
+        ],
     },
     "nikto": {
         "workflow": "Web server vulnerability scanner. Use AFTER whatweb.",
         "example": "nikto(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with findings like '+ /admin: Admin login page'.",
+            "Filter output for '+ ' prefixed lines to find issues.",
+        ],
+    },
+    "masscan": {
+        "workflow": "Fast port scanner for large ranges. Use BEFORE or INSTEAD OF nmap on /24+ subnets.",
+        "example": "masscan(target='10.10.10.0/24', ports='1-65535', rate=1000)",
+    },
+    "rustscan": {
+        "workflow": "Ultra-fast port scanner. Use INSTEAD OF nmap when speed matters on single hosts.",
+        "example": "rustscan(target='10.10.10.1')",
+    },
+    "subfinder": {
+        "workflow": "FIRST recon on any new domain target. Run before fierce or httpx.",
+        "example": "subfinder(domain='example.com')",
+    },
+    "fierce": {
+        "workflow": "DNS reconnaissance. Use AFTER subfinder for deeper DNS enumeration.",
+        "example": "fierce(domain='example.com')",
+    },
+    "dirsearch": {
+        "workflow": "Web path enumeration. Use AFTER whatweb when web server is detected.",
+        "example": "dirsearch(url='http://target')",
+    },
+    "feroxbuster": {
+        "workflow": "Recursive content discovery. Use AFTER whatweb for deep crawling.",
+        "example": "feroxbuster(url='http://target')",
+    },
+    "dalfox": {
+        "workflow": "XSS vulnerability scanning. Use AFTER whatweb when reflected params are found.",
+        "example": "dalfox(url='http://target/page?param=value')",
+    },
+    "xsser": {
+        "workflow": "Cross-site scripting testing. Use AFTER whatweb for reflected XSS analysis.",
+        "example": "xsser(url='http://target/page?param=value')",
+    },
+    "joomscan": {
+        "workflow": "Joomla vulnerability scanner. Use AFTER whatweb when Joomla CMS is detected.",
+        "example": "joomscan(url='http://target')",
+    },
+    "dotdotpwn": {
+        "workflow": "Directory traversal scanner. Use AFTER whatweb when web server is detected.",
+        "example": "dotdotpwn(target='http://target')",
+    },
+    "smbmap": {
+        "workflow": "SMB share enumeration. Use AFTER nmap when SMB port 445 is open.",
+        "example": "smbmap(target='10.10.10.1')",
+    },
+    "hydra": {
+        "workflow": "Network login brute-forcer. Use AFTER nmap when services need password testing.",
+        "example": "hydra(target='10.10.10.1', service='ssh')",
+    },
+    "medusa": {
+        "workflow": "Network login brute-forcer. Use AFTER nmap for parallel password testing.",
+        "example": "medusa(target='10.10.10.1', module='ssh')",
+    },
+    "patator": {
+        "workflow": "Multi-purpose brute-forcer. Use AFTER nmap for custom protocol brute-force.",
+        "example": "patator(target='10.10.10.1', module='ftp_login')",
+    },
+    "prowler": {
+        "workflow": "Cloud security audit. Run standalone against your cloud provider.",
+        "example": "prowler(provider='aws')",
+    },
+    "msfvenom": {
+        "workflow": "Metasploit payload generator. Use AFTER metasploit when custom payloads are needed.",
+        "example": "msfvenom(payload='linux/x64/shell_reverse_tcp', lhost='10.0.0.1')",
+    },
+    "ropgadget": {
+        "workflow": "ROP gadget finder. Use AFTER checksec when binary exploitation is needed.",
+        "example": "ropgadget(file='/path/to/binary')",
     },
 }
 
@@ -538,8 +700,14 @@ def _build_typed_tool_doc(tool_name: str, description: str, tool_def: Dict[str, 
         lines.append(f"    {param_name}: Optional. Default: {default!r}")
 
     lines.append("")
-    lines.append("Returns:")
-    lines.append("    dict with success (bool), output (str), execution_time (float), error (str)")
+    if "returns" in couche1:
+        lines.append("Returns:")
+        for ret_line in couche1["returns"]:
+            lines.append(f"    {ret_line}")
+    else:
+        lines.append("Returns:")
+        lines.append("    dict with success (bool), output (str), execution_time (float), error (str)")
+        lines.append("    Fields: success, output, error, returncode, timed_out, execution_time")
 
     if "example" in couche1:
         lines.append("")
@@ -637,7 +805,12 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         search_result_serializer=serialize_tools_for_output_markdown,
         always_visible=["nmap", "whatweb", "sqlmap", "pulse_dashboard"],
     )] if BM25SearchTransform else []
-    mcp = FastMCP("hexstrike-ai pulse", transforms=transforms)
+    from mcp_core.instructions import INSTRUCTIONS
+    mcp = FastMCP(
+        "hexstrike-ai pulse",
+        instructions=os.environ.get("HEXSTRIKE_INSTRUCTIONS", INSTRUCTIONS),
+        transforms=transforms,
+    )
 
     # Middleware — framework-level logging and session tracking
     mcp.add_middleware(HexStrikeSessionMiddleware())
@@ -733,6 +906,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 tool_name,
                 success=_telemetry["success"],
             )
+            suggestion = _suggest_next_tool(
+                tool_name,
+                normalized.get("output", ""),
+                _telemetry.get("target", ""),
+            )
+            if suggestion:
+                normalized["next_suggested_tool"] = suggestion
             return normalized
 
         try:
@@ -1506,7 +1686,40 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         from server_core.singletons import error_handler as _eh
         return json.dumps(_eh.get_error_statistics(), indent=2)
 
-    logger.info("📦 Resources: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics")
+    @mcp.resource("targets://")
+    async def list_targets() -> str:
+        """List all known targets with summary findings counts."""
+        ts = get_target_store()
+        return json.dumps(ts.get_all_targets(), indent=2)
+
+    @mcp.resource("target://{target}")
+    async def get_target(target: str) -> str:
+        """Full target profile including findings, sessions, and tool history."""
+        ts = get_target_store()
+        profile = ts.get_target(target)
+        if profile is None:
+            return json.dumps({"error": f"Unknown target: {target}"}, indent=2)
+        return json.dumps(profile, indent=2)
+
+    @mcp.resource("target://{target}/findings")
+    async def get_target_findings(target: str) -> str:
+        """Findings only for a target (ports, services, technologies, vulnerabilities)."""
+        ts = get_target_store()
+        profile = ts.get_target(target)
+        if profile is None:
+            return json.dumps({"error": f"Unknown target: {target}"}, indent=2)
+        return json.dumps(profile.get("findings", {}), indent=2)
+
+    @mcp.resource("target://{target}/sessions")
+    async def get_target_sessions(target: str) -> str:
+        """Session history for a target."""
+        ts = get_target_store()
+        profile = ts.get_target(target)
+        if profile is None:
+            return json.dumps({"error": f"Unknown target: {target}"}, indent=2)
+        return json.dumps(profile.get("sessions", []), indent=2)
+
+    logger.info("📦 Resources: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics, targets://, target://{target}")
 
     # ========================================================================
     # server_health MCP tool — wraps the health resource for tool-based access

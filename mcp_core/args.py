@@ -14,4 +14,10 @@ def parse_args():
     parser.add_argument("--auth-token", type=str, default="",
                         help="Bearer token for authentication with HexStrike-AI PULSE server")
     parser.add_argument("--disable-ssl-verify", action="store_true", help="Disable SSL certificate verification when connecting to the HexStrike-AI PULSE server in front of reverse proxies")
+    parser.add_argument("--transport", choices=["stdio", "http"], default="stdio",
+                        help="MCP transport: stdio (Claude Desktop) or http (HTTP/SSE server, default: stdio)")
+    parser.add_argument("--host", type=str, default="127.0.0.1",
+                        help="HTTP host to bind (only with --transport http, default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8888,
+                        help="HTTP port to bind (only with --transport http, default: 8888)")
     return parser.parse_args()

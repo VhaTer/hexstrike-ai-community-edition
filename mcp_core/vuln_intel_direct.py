@@ -30,7 +30,7 @@ def _require_one(data: dict, *keys: str) -> Dict[str, Any]:
     for key in keys:
         if data.get(key, ""):
             return {}
-    return {"success": False, "error": f"At least one of {list(keys)} is required"}
+    return {"success": False, "error": f"At least one of {list(keys)} is required" + " (provide a CVE ID using cve_id, or a search term using search)"}
 
 
 # ---------------------------------------------------------------------------
