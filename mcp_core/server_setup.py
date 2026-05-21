@@ -744,6 +744,118 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
         "workflow": "ROP gadget finder. Use AFTER checksec when binary exploitation is needed.",
         "example": "ropgadget(file='/path/to/binary')",
     },
+    "wpscan": {
+        "workflow": "WordPress vulnerability scanner. Use AFTER whatweb when WordPress CMS is detected.",
+        "example": "wpscan(url='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with vulnerabilities, user enumeration, plugin versions.",
+            "Filter output for '[!]' lines to find vulnerabilities; '[i]' for informational findings.",
+        ],
+    },
+    "httpx": {
+        "workflow": "HTTP probing and tech detection. Use AFTER subfinder on domain targets.",
+        "example": "httpx(target='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with HTTP status, title, tech stack per endpoint.",
+            "Filter output for status codes 200/301/403 to identify live endpoints.",
+        ],
+    },
+    "amass": {
+        "workflow": "Subdomain enumeration and OSINT. Use FIRST on domain targets before subfinder.",
+        "example": "amass(domain='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with discovered subdomains, one per line.",
+            "Filter output for lines containing the target domain to find subdomains.",
+        ],
+    },
+    "waybackurls": {
+        "workflow": "Historical URL discovery. Use AFTER subfinder for endpoint discovery.",
+        "example": "waybackurls(target='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with historical URLs, one per line.",
+            "Filter output for interesting extensions: .php, .asp, .js, .json, .config.",
+        ],
+    },
+    "metasploit": {
+        "workflow": "Exploitation framework. Use AFTER plan_attack or findings when exploit modules are identified.",
+        "example": "metasploit(module='exploit/multi/handler', target='10.10.10.1')",
+        "returns": [
+            "dict — success (bool), output (str) with exploit execution results.",
+            "Check for 'Meterpreter session' or 'Command shell session' lines for successful exploitation.",
+        ],
+    },
+    "impacket": {
+        "workflow": "AD/Windows exploitation toolkit. Use AFTER enum4linux or smbmap when SMB/AD services found.",
+        "example": "impacket(script='secretsdump', target='10.10.10.1')",
+        "returns": [
+            "dict — success (bool), output (str) with script execution results.",
+            "Impacket scripts: GetADUsers, secretsdump, smbclient, psexec, wmiexec.",
+        ],
+    },
+    "wafw00f": {
+        "workflow": "WAF detection. Use BEFORE whatweb when web server is suspected to be behind WAF.",
+        "example": "wafw00f(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with WAF name if detected, or 'No WAF detected'.",
+            "Check output for known WAF names: Cloudflare, Cloudfront, AWS WAF, ModSecurity.",
+        ],
+    },
+    "hashcat": {
+        "workflow": "Password hash cracking. Use AFTER hashid or when hash files are obtained.",
+        "example": "hashcat(hash_file='hashes.txt', mode='0', wordlist='/usr/share/wordlists/rockyou.txt')",
+        "returns": [
+            "dict — success (bool), output (str) with cracked passwords and status.",
+            "Filter output for lines matching 'hash:password' format to find cracked credentials.",
+        ],
+    },
+    "whois": {
+        "workflow": "Domain registration lookup. Use FIRST on any new domain target for OSINT.",
+        "example": "whois(target='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with registrar, creation date, name servers.",
+            "Check registrant email and organization for organizational OSINT.",
+        ],
+    },
+    "ffuf": {
+        "workflow": "Fast web fuzzer. Use AFTER gobuster for more granular directory discovery.",
+        "example": "ffuf(url='http://target/FUZZ', wordlist='/usr/share/wordlists/dirb/common.txt')",
+        "returns": [
+            "dict — success (bool), output (str) with discovered paths and HTTP status codes.",
+            "Filter output for 'Status: 200' or 'Status: 301' to find accessible paths.",
+        ],
+    },
+    "zap": {
+        "workflow": "OWASP ZAP web scanner. Use AFTER whatweb for active web vulnerability scanning.",
+        "example": "zap(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with active scan alerts and findings.",
+            "Check output for alert severity: High, Medium, Low, Informational.",
+        ],
+    },
+    "jaeles": {
+        "workflow": "Web security scanning framework. Use AFTER surface scan for signature-based detection.",
+        "example": "jaeles(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with detected vulnerabilities from YAML signatures.",
+            "Filter output for 'Vulnerability Found' or severity tags.",
+        ],
+    },
+    "gau": {
+        "workflow": "URL gathering from public sources. Use AFTER waybackurls for additional endpoint discovery.",
+        "example": "gau(target='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with gathered URLs from AlienVault and Wayback.",
+            "Filter output for specific file extensions (.php, .js) or parameters (?, =).",
+        ],
+    },
+    "katana": {
+        "workflow": "Web crawler for endpoint discovery. Use AFTER httpx for deep crawling of live endpoints.",
+        "example": "katana(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with crawled endpoints and JavaScript sources.",
+            "Filter output for endpoints with query parameters or interesting paths.",
+        ],
+    },
 }
 
 
@@ -1639,9 +1751,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         if not tool_def:
             continue
         wrapper = _create_typed_tool_wrapper(public_name, tool_def, run_security_tool)
+        rich_desc = _build_typed_tool_doc(public_name, tool_def["desc"], tool_def)
         mcp.tool(
             name=public_name,
-            description=tool_def["desc"],
+            description=rich_desc,
             annotations={"readOnlyHint": False, "openWorldHint": True},
             timeout=None,
             task=True,
