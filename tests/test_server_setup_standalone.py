@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 
 # ---------------------------------------------------------------------------
 # Auto-use fixture: clear global scan cache before every test to prevent

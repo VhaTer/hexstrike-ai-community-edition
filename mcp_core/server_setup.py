@@ -3,11 +3,14 @@ import hashlib
 import inspect
 import json
 import os
+import threading
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP, Context
 from fastmcp.server.dependencies import get_context
+from fastmcp.server.tasks import TaskConfig
 from mcp_core.parameter_optimizer import ParameterOptimizer
 from mcp_core.technology_detector import TechProfile, TechnologyDetector
 from mcp_core.elicitation import confirm_destructive_action
@@ -18,6 +21,8 @@ from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStri
 from server_core.request_context import get_request_id
 from tool_registry import get_tool
 from mcp_core.tool_routes import TOOL_ROUTES
+from mcp_core.tool_registry_v2 import _registry
+from server_core.telemetry_pipeline import _pipeline
 
 # Module-level cache for DIRECT_TOOLS — populated by setup_mcp_server_standalone()
 _DIRECT_TOOLS_CACHE: dict = {}
@@ -44,23 +49,83 @@ from server_core.advanced_cache import AdvancedCache as _AdvancedCache
 
 
 class _ScanCache(_AdvancedCache):
-    """Scan-specific cache: wraps AdvancedCache with adaptive TTL from execution_time."""
+    """Scan-specific cache: wraps AdvancedCache with adaptive TTL from execution_time + learning."""
     _TTL_DEFAULT = 1800   # 30 min
     _TTL_MEDIUM  = 3600   # 60 min (exec > 10s)
     _TTL_LONG    = 5400   # 90 min (exec > 60s)
+    _TTL_MIN     = 300    # 5 min floor
+    _TTL_MAX     = 7200   # 2h ceiling
+
+    def __init__(self, max_size: int = 500, default_ttl: int = 1800) -> None:
+        super().__init__(max_size, default_ttl)
+        self._ttl_scores: dict[str, dict[str, float | int]] = {}
+        self._ttl_lock = threading.RLock()
 
     def set(self, key: str, value: Any, execution_time: float = 0.0, ttl: Optional[int] = None) -> None:  # type: ignore[override]
+        tool = value.get("tool", "unknown") if isinstance(value, dict) else "unknown"
         if ttl is None:
-            if execution_time > 60:
-                ttl = self._TTL_LONG
-            elif execution_time > 10:
-                ttl = self._TTL_MEDIUM
-            else:
-                ttl = self._TTL_DEFAULT
+            ttl = self._get_adaptive_ttl(tool, execution_time)
+        with self._ttl_lock:
+            entry = self._ttl_scores.setdefault(tool, {
+                "sets": 0, "hits": 0, "misses": 0, "current_ttl": float(ttl),
+            })
+            entry["sets"] = int(entry["sets"]) + 1  # type: ignore[assignment]
+            entry["current_ttl"] = float(ttl)
         super().set(key, value, ttl=ttl)
 
+    def get(self, key: str) -> Any:
+        result = super().get(key)
+        tool = "unknown"
+        if isinstance(key, str):
+            parts = key.split(":")
+            tool = parts[1] if len(parts) >= 2 else "unknown"
+        with self._ttl_lock:
+            entry = self._ttl_scores.setdefault(tool, {
+                "sets": 0, "hits": 0, "misses": 0, "current_ttl": float(self._TTL_DEFAULT),
+            })
+            if result is not None:
+                entry["hits"] = int(entry["hits"]) + 1  # type: ignore[assignment]
+            else:
+                entry["misses"] = int(entry["misses"]) + 1  # type: ignore[assignment]
+        return result
+
+    def _get_adaptive_ttl(self, tool: str, execution_time: float) -> int:
+        with self._ttl_lock:
+            entry = self._ttl_scores.get(tool)
+            if entry and int(entry["sets"]) > 2:  # need 3+ samples before adapting
+                total = int(entry["hits"]) + int(entry["misses"])
+                hit_ratio = int(entry["hits"]) / (total + 0.001)
+                current = float(entry["current_ttl"])
+                if hit_ratio > 0.3 and current < self._TTL_MAX:
+                    return int(min(current * 1.2, self._TTL_MAX))
+                if hit_ratio < 0.05 and current > self._TTL_MIN:
+                    return int(max(current * 0.8, self._TTL_MIN))
+                return int(current)
+        if execution_time > 60:
+            return self._TTL_LONG
+        if execution_time > 10:
+            return self._TTL_MEDIUM
+        return self._TTL_DEFAULT
+
+    def get_ttl_scores(self) -> dict[str, dict[str, Any]]:
+        with self._ttl_lock:
+            result: dict[str, dict[str, Any]] = {}
+            for tool, e in sorted(self._ttl_scores.items()):
+                total = int(e["hits"]) + int(e["misses"])
+                hit_ratio = round(int(e["hits"]) / (total + 0.001), 3)
+                result[tool] = {
+                    "sets": int(e["sets"]),
+                    "hits": int(e["hits"]),
+                    "misses": int(e["misses"]),
+                    "hit_ratio": hit_ratio,
+                    "current_ttl_seconds": int(e["current_ttl"]),
+                }
+            return result
+
     def stats(self) -> Dict[str, Any]:
-        return self.get_stats()
+        base = self.get_stats()
+        base["ttl_scores"] = self.get_ttl_scores()
+        return base
 
 
 _scan_cache = _ScanCache(max_size=500, default_ttl=1800)
@@ -902,6 +967,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             _telemetry["duration"] = round(time.time() - _t_start, 3)
             logger.info("[telemetry] %s", json.dumps(_telemetry))
             _op_metrics.record(_telemetry)
+            _telemetry["event"] = "tool_execution"
+            _pipeline.emit(_telemetry)
             get_tool_stats_store().record(
                 tool_name,
                 success=_telemetry["success"],
@@ -1680,6 +1747,21 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         """Operational metrics: success rates, errors, timeouts, cache, confirmations by tool."""
         return json.dumps(_op_metrics.summary(), indent=2)
 
+    @mcp.resource("telemetry://summary")
+    async def telemetry_summary() -> str:
+        """Unified telemetry summary: runs, errors, cache, confirmations, prompt suggestions."""
+        return json.dumps(_pipeline.summary(), indent=2)
+
+    @mcp.resource("telemetry://recent")
+    async def telemetry_recent() -> str:
+        """Last 100 telemetry events (tool calls + resource reads)."""
+        return json.dumps({"events": _pipeline.recent_events(100)}, indent=2)
+
+    @mcp.resource("telemetry://tools/{tool}")
+    async def telemetry_per_tool(tool: str) -> str:
+        """Per-tool telemetry stats: runs, success rate, avg duration, errors."""
+        return json.dumps(_pipeline.per_tool(tool), indent=2)
+
     @mcp.resource("errors://statistics")
     async def error_statistics() -> str:
         """Error classification statistics from the IntelligentErrorHandler."""
@@ -1719,7 +1801,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             return json.dumps({"error": f"Unknown target: {target}"}, indent=2)
         return json.dumps(profile.get("sessions", []), indent=2)
 
-    logger.info("📦 Resources: health://server, scan://{target}/{tool}, metrics://tools, errors://statistics, targets://, target://{target}")
+    logger.info("📦 Resources: health://server, scan://{target}/{tool}, metrics://tools, telemetry://summary, telemetry://recent, telemetry://tools/{tool}, errors://statistics, targets://, target://{target}")
 
     # ========================================================================
     # server_health MCP tool — wraps the health resource for tool-based access
@@ -1745,6 +1827,219 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         }
 
     # ========================================================================
+    # Tool lifecycle MCP tools — install/uninstall/status
+    # ========================================================================
+
+    @mcp.tool(
+        description="Check if a HexStrike tool's binary is installed on this system. Returns status (installed/not_found/unknown), binary name, category, and install hints. Call with no arguments to list ALL tools and their status.",
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+        task=True,
+        timeout=None,
+    )
+    async def tool_status(
+        ctx: Context,
+        tool_name: str = "",
+    ) -> Dict[str, Any]:
+        """Check installation status of HexStrike tools.
+
+        Args:
+            tool_name: Optional tool name (e.g. 'nmap'). If empty, returns
+                       summary of all tools (counts by status).
+
+        Returns:
+            Tool status with binary path info and install hints.
+        """
+        if tool_name:
+            return _registry.get_tool_status(tool_name)
+
+        available = _registry.get_available()
+        missing = _registry.get_missing()
+        return {
+            "total_tools": len(_registry.all_tool_names),
+            "available": len(available),
+            "missing": len(missing),
+            "available_tools": [t["name"] for t in available],
+            "missing_tools": [t["name"] for t in missing],
+        }
+
+    @mcp.tool(
+        description="Install a HexStrike tool's system binary. Auto-detects apt/pip/gem package manager. Returns install result with command details. Non-destructive — checks if already installed first.",
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        task=True,
+        timeout=180000,
+    )
+    async def install_tool(
+        ctx: Context,
+        tool_name: str,
+    ) -> Dict[str, Any]:
+        """Install a HexStrike tool's binary.
+
+        Args:
+            tool_name: Tool name (e.g. 'nmap', 'sqlmap', 'gobuster')
+
+        Returns:
+            Install result with success/error status and command details.
+        """
+        await ctx.info(f"📦 Checking status of {tool_name}")
+        return _registry.install(tool_name)
+
+    # ========================================================================
+    # scan_background — async background scan with task protocol
+    # ========================================================================
+
+    @mcp.tool(
+        task=TaskConfig(mode="optional", poll_interval=timedelta(seconds=10)),
+        timeout=None,
+        description=(
+            "Full background reconnaissance scan on a target. Runs security tools "
+            "based on intensity level and returns surface analysis + vulnerability "
+            "findings + attack plan in one response.\n\n"
+            "Use scan_background() for scans that may take >30s (intensity=medium/full, "
+            "CIDR ranges, multiple tools). Returns a task_id immediately via the "
+            "background task protocol — the agent can continue working while the scan "
+            "runs in the background. Use scan() for quick targeted scans.\n\n"
+            "Intensity levels:\n"
+            "- quick (default): nmap + whatweb — open ports and tech detection. ~30s.\n"
+            "- medium: + nuclei + nikto — adds vulnerability scanning. ~2-3 min.\n"
+            "- full: + gobuster (web targets) — complete recon. ~5-10 min.\n\n"
+            "Uses scan cache — recently scanned targets return instantly. "
+            "Returns {target, intensity, tools, surface, findings, plan, summary}."
+        ),
+    )
+    async def scan_background(
+        ctx: Context,
+        target: str = "",
+        intensity: str = "quick",
+        objective: str = "comprehensive",
+    ) -> Dict[str, Any]:
+        """Background scan — returns task_id immediately, agent can poll."""
+        # Lazy imports to avoid circular dependency (pulse_app imports from us)
+        from pulse_app import (
+            get_scope, get_surface, get_findings, get_plan,
+            _cache_for_target, _suggest_next_from_context,
+            TOOLS_BY_INTENSITY, _TOOLS_NEED_URL, _TOOLS_NEED_URL_AS_TARGET,
+        )
+
+        # Resolve target
+        scope_data = get_scope(target) if target else get_scope()
+        resolved = scope_data.get("active_target") or target
+        if not resolved:
+            return {"error": "No target specified or found in scope", "target": None}
+
+        intensity = str(intensity).lower()
+        if intensity not in TOOLS_BY_INTENSITY:
+            intensity = "quick"
+
+        tools_to_run = TOOLS_BY_INTENSITY[intensity]
+        _direct = get_direct_tools()
+        tool_results: Dict[str, Any] = {}
+        total = len(tools_to_run)
+
+        loop = asyncio.get_running_loop()
+
+        await ctx.report_progress(0, 100)
+        await ctx.info(f"🎯 Scan {intensity} starting on {resolved} ({total} tools)")
+
+        for idx, tool_name in enumerate(tools_to_run):
+            # Check cache
+            cache_entries = _cache_for_target(resolved)
+            if any(str(c.get("tool", "")).lower() == tool_name for c in cache_entries):
+                tool_results[tool_name] = {"status": "cached", "cached": True}
+                pct = int((idx + 1) / total * 80)
+                await ctx.report_progress(pct, 100)
+                await ctx.info(f"⏩ {tool_name} cached — skipping")
+                continue
+
+            entry = _direct.get(tool_name)
+            if not entry:
+                tool_results[tool_name] = {"status": "skipped", "error": f"Unknown tool: {tool_name}"}
+                pct = int((idx + 1) / total * 80)
+                await ctx.report_progress(pct, 100)
+                continue
+
+            exec_func, binary = entry
+            params: Dict[str, Any] = {"target": resolved}
+            if tool_name in _TOOLS_NEED_URL:
+                if not resolved.startswith(("http://", "https://")):
+                    params = {"url": f"http://{resolved}"}
+            elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
+                if not resolved.startswith(("http://", "https://")):
+                    params = {"url": f"http://{resolved}", "target": resolved}
+                else:
+                    params = {"url": resolved, "target": resolved}
+
+            await ctx.info(f"🔨 Running {tool_name} on {resolved}")
+            try:
+                out = await loop.run_in_executor(None, lambda: exec_func(binary, params))
+                ok = out.get("success", False)
+                tool_results[tool_name] = {
+                    "status": "completed" if ok else "failed",
+                    "returncode": out.get("returncode"),
+                }
+                if not ok:
+                    tool_results[tool_name]["error"] = out.get("error", "Unknown error")
+                stdout_str = out.get("stdout", "") or out.get("output", "")
+                _scan_cache.set(f"bg:{tool_name}:{resolved}:{time.time()}", {
+                    "tool": tool_name,
+                    "target": resolved,
+                    "timestamp": time.time(),
+                    "status": "completed" if ok else "failed",
+                    "result": {
+                        "success": ok,
+                        "stdout": stdout_str,
+                        "output": stdout_str,
+                    },
+                })
+            except Exception as e:
+                tool_results[tool_name] = {"status": "error", "error": str(e)}
+
+            pct = int((idx + 1) / total * 80)
+            await ctx.report_progress(pct, 100)
+
+        await ctx.report_progress(85, 100)
+        await ctx.info("📊 Post-processing: surface + findings + plan")
+
+        # Post-scan analysis
+        surface_data = get_surface(resolved)
+        findings_data = get_findings(resolved) if intensity in ("medium", "full") else []
+        plan_data = get_plan(resolved, objective) if intensity == "full" else {
+            "target": resolved, "steps": [], "step_count": 0,
+            "summary": "Skipped — use full intensity for planning",
+        }
+
+        # TargetStore for MCP Resources
+        try:
+            ts = get_target_store()
+            ts.record_scan(
+                target=resolved,
+                tools_used=list(tool_results.keys()),
+                surface_data=surface_data,
+                findings=findings_data,
+            )
+        except Exception:
+            pass
+
+        await ctx.report_progress(100, 100)
+        suggestion = _suggest_next_from_context(surface_data, findings_data)
+        result = {
+            "target": resolved,
+            "intensity": intensity,
+            "tools": tool_results,
+            "surface": surface_data,
+            "findings": findings_data,
+            "plan": plan_data,
+            "summary": (
+                f"Scan {intensity} on {resolved}: "
+                f"{surface_data.get('ports_count', 0)} ports, "
+                f"{len(findings_data)} findings, "
+                f"{plan_data.get('step_count', 0)} plan steps"
+            ),
+        }
+        if suggestion:
+            result["next_suggested_tool"] = suggestion
+        return result
+
+    # ========================================================================
     # Workflow Prompts — native MCP prompts for multi-tool attack chains
     # ========================================================================
 
@@ -1767,4 +2062,49 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     except Exception as exc:
         logger.warning("⚠️ Could not register pulse_app provider: %s", exc)
 
+    # Background cache warmup — pre-seed version markers for installed tools
+    try:
+        _start_warmup(logger)
+    except Exception:
+        pass  # warmup is best-effort
+
     return mcp
+
+
+def _start_warmup(logger: Any = None) -> None:
+    """Background cache warmup: seed version markers for commonly installed tools."""
+    import subprocess as _subprocess
+
+    _log = logger or logging.getLogger(__name__)
+
+    def _warm() -> None:
+        try:
+            available = _registry.get_available()[:15]  # limit to first 15
+            for t in available:
+                binary = t.get("binary", t["name"])
+                try:
+                    proc = _subprocess.run(
+                        [binary, "--version"],
+                        capture_output=True, text=True, timeout=3,
+                    )
+                    if proc.returncode == 0:
+                        _scan_cache.set(
+                            f"seed:{t['name']}:version",
+                            {
+                                "tool": t["name"],
+                                "target": "version",
+                                "result": {
+                                    "success": True,
+                                    "output": proc.stdout.strip()[:200],
+                                },
+                                "timestamp": time.time(),
+                            },
+                            execution_time=0.5,
+                        )
+                except (_subprocess.TimeoutExpired, OSError, _subprocess.SubprocessError):
+                    pass
+            _log.debug(f"🌡️ Cache warmup complete ({len(available)} tools checked)")
+        except Exception:
+            pass  # warmup is best-effort
+
+    threading.Thread(target=_warm, daemon=True).start()

@@ -46,6 +46,7 @@ from mcp_core.server_setup import _scan_cache, _rate_limit_events
 from server_core.operational_metrics import _op_metrics
 from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store
 from tool_registry import TOOLS
+from mcp_core.tool_registry_v2 import _registry
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,12 @@ rx_cache_util  = CACHE_UTIL
 rx_cache_tool  = CACHE_TOOL
 rx_cache_sum   = CACHE_SUM
 
+# Cache Intelligence
+CACHE_TTL    = Rx("cache_ttl_scores").default([])
+CACHE_TTL_SUM= Rx("cache_ttl_summary").default("No TTL data")
+rx_ttl_scores = CACHE_TTL
+rx_ttl_sum    = CACHE_TTL_SUM
+
 # System Trends
 TREND_CPU_AVG  = Rx("trend_cpu_avg_display").default("0%")
 TREND_MEM_AVG  = Rx("trend_mem_avg_display").default("0%")
@@ -261,6 +268,12 @@ AS_SUM      = Rx("async_scans_summary").default("No async scans")
 rx_as_run  = AS_RUNNING
 rx_as_done = AS_COMPLETE
 rx_as_sum  = AS_SUM
+
+# Missing tools
+MISSING_TOOLS = Rx("missing_tools").default([])
+MISSING_COUNT = Rx("missing_count").default(0)
+rx_missing_tools = MISSING_TOOLS
+rx_missing_count = MISSING_COUNT
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -808,6 +821,33 @@ def get_cache_status() -> dict:
     }
 
 
+def get_cache_intelligence() -> dict:
+    """Per-tool adaptive TTL learning statistics."""
+    try:
+        from mcp_core.server_setup import _scan_cache
+        ttl_scores = _scan_cache.get_ttl_scores()
+    except Exception:
+        return {"scores": [], "summary": "No TTL data"}
+
+    rows = []
+    for tool, info in sorted(ttl_scores.items()):
+        hit_ratio = info.get("hit_ratio", 0)
+        hit_ratio_display = f"{hit_ratio * 100:.0f}%" if hit_ratio else "0%"
+        ttl_seconds = int(info.get("current_ttl_seconds", 1800))
+        ttl_display = _fmt_duration(ttl_seconds)
+        rows.append({
+            "tool": tool,
+            "hits": info.get("hits", 0),
+            "misses": info.get("misses", 0),
+            "hit_ratio_display": hit_ratio_display,
+            "current_ttl_display": ttl_display,
+        })
+
+    ttl_range = f"{rows[0]['current_ttl_display']}\u2013{rows[-1]['current_ttl_display']}" if rows else "N/A"
+    summary = f"{len(rows)} tools tracked \u00b7 TTL range {ttl_range}"
+    return {"scores": rows, "summary": summary}
+
+
 @app.tool()
 def get_system_trends() -> dict:
     """System resource trends over time. CPU/memory averages, history for sparklines."""
@@ -1132,7 +1172,7 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
     # Surface-based suggestions
     ports = surface.get("ports", []) if isinstance(surface, dict) else []
     port_numbers = {p.get("port") for p in ports if isinstance(p, dict)}
-    services = [p.get("service", "").lower() for p in ports if isinstance(p, dict)]
+    services = [str(p.get("service", "")).lower() for p in ports if isinstance(p, dict)]
     services_str = " ".join(services)
 
     techs = surface.get("technologies", []) if isinstance(surface, dict) else []
@@ -1164,7 +1204,7 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
         findings_text = []
         for f in findings:
             if isinstance(f, dict):
-                findings_severities.append(f.get("severity", "").lower())
+                findings_severities.append(str(f.get("severity", "")).lower())
                 findings_text.append(str(f.get("finding", "")).lower())
 
         findings_all = " ".join(findings_text)
@@ -1268,6 +1308,10 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
         f"{cache_status.get('hits', 0)} hits \u00b7 {cache_status.get('misses', 0)} misses \u00b7 "
         f"{cache_status.get('cache_size', 0)}/{cache_status.get('max_size', 500)} entries"
     )
+    # Cache Intelligence — adaptive TTL scores
+    cache_ttl_raw = get_cache_intelligence()
+    cache_ttl_scores = cache_ttl_raw.get("scores", [])
+    cache_ttl_summary = cache_ttl_raw.get("summary", "No TTL data")
     trend_cpu_avg = trends.get("cpu_avg", 0)
     trend_mem_avg = trends.get("memory_avg", 0)
     trend_cpu_avg_display = f"{int(trend_cpu_avg)}%"
@@ -1322,6 +1366,9 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
         "async_scans_running":  running_list,
         "async_scans_complete": complete_list,
         "async_scans_summary":  async_scans_summary,
+        "missing_tools": _registry.get_missing(),
+        "cache_ttl_scores":  cache_ttl_scores,
+        "cache_ttl_summary": cache_ttl_summary,
         "next_suggested_tool": _suggest_next_from_context(surface, findings) if active_target else {},
     }
 
@@ -1378,7 +1425,11 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
     - medium: + nuclei + nikto — adds vulnerability scanning. ~2-3 min.
     - full: + gobuster (web targets) — complete recon. ~5-10 min.
 
-    Uses scan cache — recently scanned targets return instantly. For long-running scans, use run_async_tool() instead.
+    Uses scan cache — recently scanned targets return instantly.
+
+    For scans that may take >30s (intensity=medium/full, CIDR ranges, multiple tools),
+    use scan_background() instead — it returns a task_id immediately and runs in the
+    background, allowing the agent to continue working while the scan progresses.
 
     Returns {target, intensity, tools, surface, findings, plan, summary}.
     Pass `objective` to guide the attack planner (default: comprehensive).
@@ -1389,7 +1440,7 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
     if not resolved:
         return {"error": "No target specified or found in scope", "target": None, "surface": None, "findings": [], "plan": None}
 
-    intensity = intensity.lower()
+    intensity = str(intensity).lower()
     if intensity not in TOOLS_BY_INTENSITY:
         intensity = "quick"
 
@@ -1400,7 +1451,7 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
     for tool_name in tools_to_run:
         # Check cache
         cache_entries = _cache_for_target(resolved)
-        if any(c.get("tool", "").lower() == tool_name for c in cache_entries):
+        if any(str(c.get("tool", "")).lower() == tool_name for c in cache_entries):
             tool_results[tool_name] = {"status": "cached", "cached": True}
             continue
         entry = _direct.get(tool_name)
@@ -1511,6 +1562,8 @@ def pulse_dashboard() -> PrefabApp:
     cache_hit_ratio_display = st["cache_hit_ratio_display"]
     cache_util_display = st["cache_util_display"]
     cache_summary_text = st["cache_summary_text"]
+    cache_ttl_scores = st["cache_ttl_scores"]
+    cache_ttl_summary = st["cache_ttl_summary"]
     trend_cpu_avg_display = st["trend_cpu_avg_display"]
     trend_mem_avg_display = st["trend_mem_avg_display"]
     trend_period_display = st["trend_period_display"]
@@ -1766,6 +1819,24 @@ def pulse_dashboard() -> PrefabApp:
 
         Separator()
 
+        # ── Missing Tools ────────────────────────────────────────────────
+        Muted("MISSING TOOLS", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            with Row(gap=3, align="center"):
+                Badge(f"{rx_missing_count} missing", variant="warning")
+                Muted("tools without binary on PATH — use install_tool()", css_class="text-sm text-muted")
+            DataTable(
+                columns=[
+                    DataTableColumn(key="name",  header="Tool"),
+                    DataTableColumn(key="binary", header="Binary"),
+                    DataTableColumn(key="category", header="Category"),
+                    DataTableColumn(key="install_hint", header="Install hint"),
+                ],
+                rows=Rx("missing_tools"),
+            )
+
+        Separator()
+
         # ── Cache Status ────────────────────────────────────────────────
         Muted("CACHE STATUS", css_class="text-xs uppercase tracking-wider p-4")
         with Column(gap=2, css_class="px-4 pb-4"):
@@ -1787,6 +1858,23 @@ def pulse_dashboard() -> PrefabApp:
                     DataTableColumn(key="runs",       header="Runs"),
                 ],
                 rows=Rx("cache_by_tool"),
+            )
+
+        Separator()
+
+        # ── Cache Intelligence ───────────────────────────────────────────
+        Muted("CACHE INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
+        with Column(gap=2, css_class="px-4 pb-4"):
+            Muted(Rx("cache_ttl_summary"), css_class="text-sm text-muted")
+            DataTable(
+                columns=[
+                    DataTableColumn(key="tool",               header="Tool"),
+                    DataTableColumn(key="hits",               header="Hits"),
+                    DataTableColumn(key="misses",             header="Misses"),
+                    DataTableColumn(key="hit_ratio_display",  header="Hit ratio"),
+                    DataTableColumn(key="current_ttl_display",header="TTL"),
+                ],
+                rows=Rx("cache_ttl_scores"),
             )
 
         Separator()
@@ -1962,6 +2050,9 @@ def pulse_dashboard() -> PrefabApp:
             "tool_performance":   perf.get("tools", []),
             "perf_timeouts":      perf.get("timeouts", []),
             "perf_summary":       perf.get("summary", "No data"),
+            # Missing Tools
+            "missing_tools":  st.get("missing_tools", []),
+            "missing_count":  len(st.get("missing_tools", [])),
             # Cache Status
             "cache_hits":              cache_status.get("hits", 0),
             "cache_misses":            cache_status.get("misses", 0),
@@ -1971,6 +2062,9 @@ def pulse_dashboard() -> PrefabApp:
             "cache_util_display":      cache_util_display,
             "cache_summary_text":      cache_summary_text,
             "cache_by_tool":           cache_status.get("by_tool", []),
+            # Cache Intelligence
+            "cache_ttl_scores":  cache_ttl_scores,
+            "cache_ttl_summary": cache_ttl_summary,
             # System Trends
             "trend_cpu_avg_display": trend_cpu_avg_display,
             "trend_mem_avg_display": trend_mem_avg_display,

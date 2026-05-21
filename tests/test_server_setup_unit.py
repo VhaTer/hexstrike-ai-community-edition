@@ -586,3 +586,213 @@ class TestResourceTargetStore:
             text = run(tmpl.fn(target="ghost.example"))
         parsed = json.loads(text)
         assert "error" in parsed
+
+
+# =========================================================================
+# scan_background — async background scan with task protocol
+# =========================================================================
+
+class TestScanBackground:
+    """Tests for scan_background tool (background task protocol)."""
+
+    def test_tool_registered(self):
+        """scan_background is registered on the MCP server."""
+        tool = run(mcp().get_tool("scan_background"))
+        assert tool is not None
+
+    def test_description_guides_usage(self):
+        """Description tells agent when to use scan_background vs scan()."""
+        tool = run(mcp().get_tool("scan_background"))
+        desc = tool.description or ""
+        assert "scan_background" in desc
+        assert ">30s" in desc or "quick" in desc
+        assert "task_id" in desc
+
+    def test_description_has_intensity_levels(self):
+        """Description lists quick/medium/full intensity levels."""
+        tool = run(mcp().get_tool("scan_background"))
+        desc = tool.description or ""
+        assert "quick" in desc
+        assert "medium" in desc
+        assert "full" in desc
+
+    def test_has_task_config(self):
+        """Tool has task=True in its annotations (background task protocol)."""
+        tool = run(mcp().get_tool("scan_background"))
+        assert tool is not None
+
+    def test_no_target_returns_error(self):
+        """No target + empty scope returns error dict."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": None}
+        mock_pulse.get_surface.return_value = {}
+        mock_pulse.get_findings.return_value = []
+        mock_pulse.get_plan.return_value = {}
+
+        with patch.dict("sys.modules", {"pulse_app": mock_pulse}):
+            result = run(tool.fn(ctx))
+
+        assert "error" in result
+        assert result["target"] is None
+
+    def test_invalid_intensity_defaults_to_quick(self):
+        """Unknown intensity falls back to 'quick'."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": "10.0.0.1"}
+        mock_pulse.get_surface.return_value = {"ports_count": 0, "ports": [], "techs": []}
+        mock_pulse.get_findings.return_value = []
+        mock_pulse.get_plan.return_value = {}
+        mock_pulse.TOOLS_BY_INTENSITY = {"quick": []}
+        mock_pulse._TOOLS_NEED_URL = frozenset()
+        mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
+        mock_pulse._cache_for_target.return_value = []
+
+        with (
+            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch("mcp_core.server_setup.get_direct_tools", return_value={}),
+        ):
+            result = run(tool.fn(ctx, intensity="extreme"))
+
+        assert result["intensity"] == "quick"
+
+    def test_quick_intensity_runs_nmap_whatweb(self):
+        """Quick intensity runs the 2 tools defined in TOOLS_BY_INTENSITY['quick']."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        def _make_exec(success=True, stdout=""):
+            return lambda b, p: {
+                "success": success, "output": stdout, "stdout": stdout,
+                "error": "", "returncode": 0 if success else 1,
+            }
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": "10.0.0.5"}
+        mock_pulse.get_surface.return_value = {"ports_count": 1, "ports": ["80"], "techs": ["nginx"]}
+        mock_pulse.get_findings.return_value = []
+        mock_pulse.get_plan.return_value = {}
+        mock_pulse.TOOLS_BY_INTENSITY = {"quick": ["nmap", "whatweb"]}
+        mock_pulse._TOOLS_NEED_URL = frozenset()
+        mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
+        mock_pulse._cache_for_target.return_value = []
+        mock_pulse._suggest_next_from_context.return_value = {}
+
+        mock_tools = {
+            "nmap": (_make_exec(stdout="22/tcp open  ssh\n80/tcp open  http"), "nmap"),
+            "whatweb": (_make_exec(stdout="http://target [200 OK] nginx PHP"), "whatweb"),
+        }
+
+        with (
+            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+        ):
+            result = run(tool.fn(ctx, target="10.0.0.5"))
+
+        assert result["target"] == "10.0.0.5"
+        assert result["intensity"] == "quick"
+        assert list(result["tools"].keys()) == ["nmap", "whatweb"]
+        assert all(v["status"] == "completed" for v in result["tools"].values())
+
+    def test_cached_tool_skipped(self):
+        """Tool with cache entry is reported as 'cached', not executed."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": "10.0.0.10"}
+        mock_pulse._cache_for_target.return_value = [
+            {"tool": "nmap", "target": "10.0.0.10", "timestamp": 9999999999,
+             "result": {"success": True, "output": "cached-results"}},
+        ]
+        mock_pulse.get_surface.return_value = {"ports_count": 0}
+        mock_pulse.get_findings.return_value = []
+        mock_pulse.get_plan.return_value = {}
+        mock_pulse.TOOLS_BY_INTENSITY = {"quick": ["nmap", "whatweb"]}
+        mock_pulse._TOOLS_NEED_URL = frozenset()
+        mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
+        mock_pulse._suggest_next_from_context.return_value = {}
+        mock_tools = {
+            "nmap": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "nmap"),
+            "whatweb": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "whatweb"),
+        }
+
+        with (
+            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+        ):
+            result = run(tool.fn(ctx, target="10.0.0.10"))
+
+        assert result["tools"]["nmap"]["status"] == "cached"
+        assert result["tools"]["nmap"].get("cached") is True
+        assert result["tools"]["whatweb"]["status"] == "completed"
+
+    def test_tool_failure_reported(self):
+        """Failed tool gets status 'failed' with error."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": "10.0.0.20"}
+        mock_pulse._cache_for_target.return_value = []
+        mock_pulse.get_surface.return_value = {"ports_count": 0}
+        mock_pulse.get_findings.return_value = []
+        mock_pulse.get_plan.return_value = {}
+        mock_pulse.TOOLS_BY_INTENSITY = {"quick": ["nmap", "whatweb"]}
+        mock_pulse._TOOLS_NEED_URL = frozenset()
+        mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
+        mock_pulse._suggest_next_from_context.return_value = {}
+        mock_tools = {
+            "nmap": (lambda b, p: {"success": False, "error": "Timeout", "output": "",
+                                     "stdout": "", "returncode": 1}, "nmap"),
+            "whatweb": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "whatweb"),
+        }
+
+        with (
+            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+        ):
+            result = run(tool.fn(ctx, target="10.0.0.20"))
+
+        assert result["tools"]["nmap"]["status"] == "failed"
+        assert "error" in result["tools"]["nmap"]
+        assert result["tools"]["whatweb"]["status"] == "completed"
+
+    def test_result_contains_all_keys(self):
+        """Return dict includes all expected keys."""
+        tool = run(mcp().get_tool("scan_background"))
+        ctx = make_mock_context()
+
+        mock_pulse = MagicMock()
+        mock_pulse.get_scope.return_value = {"active_target": "10.0.0.30"}
+        mock_pulse._cache_for_target.return_value = []
+        mock_pulse.get_surface.return_value = {"ports_count": 2, "ports": ["22", "80"], "techs": ["nginx"]}
+        mock_pulse.get_findings.return_value = [{"id": "CVE-2023-xxx", "severity": "critical"}]
+        mock_pulse.get_plan.return_value = {"target": "10.0.0.30", "steps": [], "step_count": 0}
+        mock_pulse.TOOLS_BY_INTENSITY = {"quick": ["nmap"]}
+        mock_pulse._TOOLS_NEED_URL = frozenset()
+        mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
+        mock_pulse._suggest_next_from_context.return_value = {"tool": "whatweb"}
+        mock_tools = {
+            "nmap": (lambda b, p: {"success": True, "stdout": "22/tcp open  ssh", "returncode": 0}, "nmap"),
+        }
+
+        with (
+            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+        ):
+            result = run(tool.fn(ctx, target="10.0.0.30"))
+
+        assert "target" in result
+        assert "intensity" in result
+        assert "tools" in result
+        assert "surface" in result
+        assert "findings" in result
+        assert "plan" in result
+        assert "summary" in result
+        assert result["next_suggested_tool"]["tool"] == "whatweb"

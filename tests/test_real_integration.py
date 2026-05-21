@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 HEXSTRIKE = ROOT / "hexstrike.py"

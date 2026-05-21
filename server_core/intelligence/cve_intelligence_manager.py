@@ -69,7 +69,7 @@ class CVEIntelligenceManager:
     def render_vulnerability_card(vuln_data: Dict[str, Any]) -> str:
         """Render vulnerability as a beautiful card with severity indicators"""
 
-        severity = vuln_data.get('severity', 'info').lower()
+        severity = str(vuln_data.get('severity', 'info')).lower()
         title = vuln_data.get('title', 'Unknown Vulnerability')
         url = vuln_data.get('url', 'N/A')
         description = vuln_data.get('description', 'No description available')

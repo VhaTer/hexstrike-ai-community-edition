@@ -352,7 +352,7 @@ def _api_schema_analyzer(data: dict) -> dict:
                 "endpoints_found": [], "security_issues": [], "recommendations": []}
     try:
         schema_data = json.loads(schema_content)
-        if schema_type.lower() in ["openapi", "swagger"]:
+        if str(schema_type).lower() in ["openapi", "swagger"]:
             for path, methods in schema_data.get("paths", {}).items():
                 for method, details in methods.items():
                     if isinstance(details, dict):
