@@ -37,9 +37,9 @@ except ImportError:
     SkillsDirectoryProvider = None
 
 try:
-    from fastmcp.server.transforms.search import BM25SearchTransform, serialize_tools_for_output_markdown
+    from fastmcp.server.transforms.search import RegexSearchTransform, serialize_tools_for_output_markdown
 except ImportError:
-    BM25SearchTransform = None
+    RegexSearchTransform = None
     serialize_tools_for_output_markdown = None
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ def _collect_cached_scans(session_id: str, target: str) -> Dict[str, Any]:
     """Collect all cached scan results for a given target in the current session."""
     scans: Dict[str, Any] = {}
     for k, v in _scan_cache.items():
-        if (k.startswith(session_id) or k.startswith("seed:")) and v.get("target") == target:
+        if (k.startswith(f"{session_id}:") or k.startswith("seed:")) and v.get("target") == target:
             tool = v.get("tool")
             if tool:
                 scans[tool] = v.get("result", {})
@@ -975,13 +975,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         import logging
         logger = logging.getLogger(__name__)
 
-    # BM25SearchTransform: collapse 106 tools into search_tools + call_tool to save context.
-    # markdown serializer uses ~40% fewer tokens than JSON; always_visible pins common tools.
-    transforms = [BM25SearchTransform(
-        max_results=15,
+    # RegexSearchTransform: collapse all tools into search_tools + call_tool to save context.
+    # markdown serializer uses ~40% fewer tokens than JSON; always_visible pins essential tools.
+    transforms = [RegexSearchTransform(
+        max_results=10,
         search_result_serializer=serialize_tools_for_output_markdown,
-        always_visible=["nmap", "whatweb", "sqlmap", "pulse_dashboard", "scan", "get_overview", "get_surface", "get_findings", "get_plan", "get_live_dashboard"],
-    )] if BM25SearchTransform else []
+        always_visible=["scan", "get_live_dashboard", "scan_background", "pulse_dashboard"],
+    )] if RegexSearchTransform else []
     from mcp_core.instructions import INSTRUCTIONS
     mcp = FastMCP(
         "hexstrike-ai pulse",
@@ -1792,7 +1792,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         session_id = ctx.session_id
         matches = [
             v for k, v in _scan_cache.items()
-            if v.get("target") == target and (k.startswith(session_id) or k.startswith("seed:"))
+            if v.get("target") == target and (k.startswith(f"{session_id}:") or k.startswith("seed:"))
         ]
         if not matches:
             return json.dumps({
@@ -1818,7 +1818,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             (v for k, v in sorted(_scan_cache.items(), reverse=True)
              if v.get("tool") == tool_name
              and v.get("target") == target
-             and (k.startswith(session_id) or k.startswith("seed:"))),
+             and (k.startswith(f"{session_id}:") or k.startswith("seed:"))),
             None,
         )
         if not entry:
@@ -1850,7 +1850,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 "success":   v["result"].get("success", False),
             }
             for k, v in _scan_cache.items()
-            if k.startswith(session_id) or k.startswith("seed:")
+            if k.startswith(f"{session_id}:") or k.startswith("seed:")
         ]
         entries.sort(key=lambda x: x["timestamp"], reverse=True)
         return json.dumps({"count": len(entries), "scans": entries}, indent=2)
@@ -2129,8 +2129,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 surface_data=surface_data,
                 findings=findings_data,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            await ctx.warning(f"TargetStore record_scan failed: {e}")
 
         await ctx.report_progress(100, 100)
         suggestion = _suggest_next_from_context(surface_data, findings_data)
@@ -2167,13 +2167,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     logger.info("🎯 Workflow prompts registered: bug_bounty_recon, wifi_attack_chain, ctf_web_challenge, smb_lateral_movement, cloud_security_audit")
 
     # Add pulse_app provider so its tools (scan, get_surface, etc.) are
-    # visible through the BM25SearchTransform alongside exec tools.
+    # visible through the RegexSearchTransform alongside exec tools.
     try:
         from pulse_app import app as _pulse_app
         mcp.add_provider(_pulse_app)
         logger.info("📊 Pulse dashboard tools registered")
     except Exception as exc:
-        logger.warning("⚠️ Could not register pulse_app provider: %s", exc)
+        logger.warning("⚠️ Could not register pulse_app provider: %s — scan, get_live_dashboard, pulse_dashboard will be missing from always_visible", exc)
 
     # Background cache warmup — pre-seed version markers for installed tools
     try:
@@ -2217,7 +2217,7 @@ def _start_warmup(logger: Any = None) -> None:
                 except (_subprocess.TimeoutExpired, OSError, _subprocess.SubprocessError):
                     pass
             _log.debug(f"🌡️ Cache warmup complete ({len(available)} tools checked)")
-        except Exception:
-            pass  # warmup is best-effort
+        except Exception as e:
+            _log.warning(f"🌡️ Cache warmup failed: {e}")
 
     threading.Thread(target=_warm, daemon=True).start()
