@@ -2050,7 +2050,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         loop = asyncio.get_running_loop()
 
-        await ctx.report_progress(0, 100)
         await ctx.info(f"🎯 Scan {intensity} starting on {resolved} ({total} tools)")
 
         for idx, tool_name in enumerate(tools_to_run):
@@ -2058,16 +2057,13 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             cache_entries = _cache_for_target(resolved)
             if any(str(c.get("tool", "")).lower() == tool_name for c in cache_entries):
                 tool_results[tool_name] = {"status": "cached", "cached": True}
-                pct = int((idx + 1) / total * 80)
-                await ctx.report_progress(pct, 100)
-                await ctx.info(f"⏩ {tool_name} cached — skipping")
+                await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — cached, skipping")
                 continue
 
             entry = _direct.get(tool_name)
             if not entry:
                 tool_results[tool_name] = {"status": "skipped", "error": f"Unknown tool: {tool_name}"}
-                pct = int((idx + 1) / total * 80)
-                await ctx.report_progress(pct, 100)
+                await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — unknown, skipped")
                 continue
 
             exec_func, binary = entry
@@ -2075,6 +2071,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             if tool_name in _TOOLS_NEED_URL:
                 if not resolved.startswith(("http://", "https://")):
                     params = {"url": f"http://{resolved}"}
+                else:
+                    params = {"url": resolved}
             elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
                 if not resolved.startswith(("http://", "https://")):
                     params = {"url": f"http://{resolved}", "target": resolved}
@@ -2083,7 +2081,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
             await ctx.info(f"🔨 Running {tool_name} on {resolved}")
             try:
-                out = await loop.run_in_executor(None, lambda: exec_func(binary, params))
+                out = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: exec_func(binary, params)),
+                    timeout=180,
+                )
                 ok = out.get("success", False)
                 tool_results[tool_name] = {
                     "status": "completed" if ok else "failed",
@@ -2103,13 +2104,14 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                         "output": stdout_str,
                     },
                 })
+            except asyncio.TimeoutError:
+                tool_results[tool_name] = {"status": "timeout", "error": f"{tool_name} exceeded 300s"}
+                await ctx.warning(f"⏱️ {tool_name} timed out after 300s")
             except Exception as e:
                 tool_results[tool_name] = {"status": "error", "error": str(e)}
 
-            pct = int((idx + 1) / total * 80)
-            await ctx.report_progress(pct, 100)
+            await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — done")
 
-        await ctx.report_progress(85, 100)
         await ctx.info("📊 Post-processing: surface + findings + plan")
 
         # Post-scan analysis
@@ -2132,7 +2134,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         except Exception as e:
             await ctx.warning(f"TargetStore record_scan failed: {e}")
 
-        await ctx.report_progress(100, 100)
         suggestion = _suggest_next_from_context(surface_data, findings_data)
         result = {
             "target": resolved,

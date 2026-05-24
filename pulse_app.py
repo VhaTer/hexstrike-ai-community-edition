@@ -531,26 +531,29 @@ def get_findings(target: str | None = None) -> list[dict]:
         if tool == "nuclei":
             for line in output.splitlines():
                 line = line.strip()
-                m = re.match(
-                    r"\[(critical|high|medium|low|info)\]\s*\[([^\]]*)\].*",
+                if not line:
+                    continue
+                sev_m = re.search(
+                    r"\[(critical|high|medium|low|info)\]",
                     line, re.IGNORECASE,
                 )
-                if m:
-                    sev = m.group(1).lower()
-                    finding_id = m.group(2).strip()
+                if sev_m:
+                    sev = sev_m.group(1).lower()
+                    brackets = re.findall(r"\[([^\]]*)\]", line)
+                    finding_id = brackets[1] if len(brackets) >= 2 else ""
                     parts = line.split()
                     url = parts[-1] if parts else ""
                     findings.append({
                         "tool": tool,
                         "severity": sev,
-                        "finding": finding_id or url,
+                        "finding": finding_id,
                         "details": url[:120],
                     })
 
         elif tool == "nikto":
             for line in output.splitlines():
                 line = line.strip()
-                if line.startswith("+ ") and "/:" in line:
+                if line.startswith("+ /"):
                     findings.append({
                         "tool": tool,
                         "severity": "info",
@@ -1169,7 +1172,32 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
     Used by scan(), get_surface(), get_findings(), get_live_dashboard().
     Returns dict with 'tool' and 'reason', or empty dict if context is insufficient.
     """
-    # Surface-based suggestions
+    # Findings-based suggestions take priority over surface-based ones
+    # (critical findings like SQLi matter more than generic port discovery)
+    if findings:
+        findings_severities = []
+        findings_text = []
+        for f in findings:
+            if isinstance(f, dict):
+                findings_severities.append(str(f.get("severity", "")).lower())
+                findings_text.append(str(f.get("finding", "")).lower())
+
+        findings_all = " ".join(findings_text)
+        has_critical = any(s == "critical" for s in findings_severities)
+        has_high = any(s == "high" for s in findings_severities)
+
+        if "sql" in findings_all or "sqli" in findings_all or "injection" in findings_all:
+            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit"}
+        if "xss" in findings_all or "cross-site" in findings_all:
+            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox"}
+        if "smb" in findings_all or "eternalblue" in findings_all or "ms17" in findings_all:
+            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation"}
+        if "ssl" in findings_all or "tls" in findings_all or "certificate" in findings_all:
+            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection"}
+        if has_critical or has_high:
+            return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation"}
+
+    # Surface-based suggestions (generic discovery, no critical findings)
     ports = surface.get("ports", []) if isinstance(surface, dict) else []
     port_numbers = {p.get("port") for p in ports if isinstance(p, dict)}
     services = [str(p.get("service", "")).lower() for p in ports if isinstance(p, dict)]
@@ -1198,29 +1226,8 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
         if "http" in services_str or "ssl" in services_str:
             return {"tool": "whatweb", "reason": "Web service detected — fingerprint technologies"}
 
-    # Findings-based suggestions
+    # Fallback: low-severity findings with no port context
     if findings:
-        findings_severities = []
-        findings_text = []
-        for f in findings:
-            if isinstance(f, dict):
-                findings_severities.append(str(f.get("severity", "")).lower())
-                findings_text.append(str(f.get("finding", "")).lower())
-
-        findings_all = " ".join(findings_text)
-        has_critical = any(s == "critical" for s in findings_severities)
-        has_high = any(s == "high" for s in findings_severities)
-
-        if "sql" in findings_all or "sqli" in findings_all or "injection" in findings_all:
-            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit"}
-        if "xss" in findings_all or "cross-site" in findings_all:
-            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox"}
-        if "smb" in findings_all or "eternalblue" in findings_all or "ms17" in findings_all:
-            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation"}
-        if "ssl" in findings_all or "tls" in findings_all or "certificate" in findings_all:
-            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection"}
-        if has_critical or has_high:
-            return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation"}
         return {"tool": "gobuster", "reason": "Findings reviewed — continue with directory discovery"}
 
     # No context
@@ -1464,6 +1471,8 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             if tool_name in _TOOLS_NEED_URL:
                 if not resolved.startswith(("http://", "https://")):
                     params = {"url": f"http://{resolved}"}
+                else:
+                    params = {"url": resolved}
             elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
                 if not resolved.startswith(("http://", "https://")):
                     params = {"url": f"http://{resolved}", "target": resolved}

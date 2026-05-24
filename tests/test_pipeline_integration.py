@@ -32,11 +32,11 @@ REAL_WHATWEB_OUTPUT = """http://192.168.1.100 [200 OK] Apache[2.4.57], PHP[8.2.1
 WordPress[6.4.3], Title[Test Site], Country[RESERVED][ZZ], HTTPServer[Apache/2.4.57 (Unix)],
 IP[192.168.1.100], JQuery[3.7.1], Script[text/javascript], X-Powered-By[PHP/8.2.12]"""
 
-REAL_NUCLEI_OUTPUT = """[critical] [http-missing-security-headers] [http] [Missing Security Headers] https://192.168.1.100/
-[high] [CVE-2023-44487] [http] [HTTP/2 Rapid Reset Attack] https://192.168.1.100/
-[medium] [CVE-2023-xxx] [http] [WordPress Plugin XSS] https://192.168.1.100/wp-admin/
-[info] [http-tech-detect] [http] [Apache 2.4.57 Detected] https://192.168.1.100/
-[info] [wordpress-version] [http] [WordPress 6.4.3 Detected] https://192.168.1.100/"""
+REAL_NUCLEI_OUTPUT = """[2026-05-24T10:00:00] [http-missing-security-headers] [http] [info] https://192.168.1.100/
+[2026-05-24T10:00:01] [CVE-2023-44487] [http] [high] https://192.168.1.100/
+[2026-05-24T10:00:02] [CVE-2023-xxx] [http] [medium] https://192.168.1.100/wp-admin/
+[2026-05-24T10:00:03] [http-tech-detect] [http] [info] https://192.168.1.100/
+[2026-05-24T10:00:04] [wordpress-version] [http] [info] https://192.168.1.100/"""
 
 REAL_NIKTO_OUTPUT = """- Nikto v2.5.0
 ---------------------------------------------------------------------------
@@ -52,6 +52,46 @@ REAL_NIKTO_OUTPUT = """- Nikto v2.5.0
 + /wp-json/: WordPress REST API exposed.
 ---------------------------------------------------------------------------
 + 5 host(s) tested"""
+
+# ── DVWA-specific fixtures (realistic outputs for our RPI target) ────────
+
+DVWA_NMAP_OUTPUT = """Starting Nmap 7.95 ( https://nmap.org ) at 2026-05-24 12:00 UTC
+Nmap scan report for 10.235.57.151
+Host is up (0.0012s latency).
+
+PORT     STATE    SERVICE    VERSION
+80/tcp   open     http       Apache httpd 2.4.67
+443/tcp  open     https      Apache httpd 2.4.67
+
+Nmap done: 1 IP address (1 host up) scanned in 3.48 seconds"""
+
+DVWA_WHATWEB_OUTPUT = """http://10.235.57.151/DVWA/ [200 OK] Apache[2.4.67], PHP[8.2.7], \
+MariaDB[], Title[DVWA], Country[RESERVED][ZZ], HTTPServer[Apache/2.4.67 (Raspbian)], \
+IP[10.235.57.151], Script, Login Page[/DVWA/login.php]"""
+
+DVWA_NUCLEI_OUTPUT = """[2026-05-24T10:05:00] [http-missing-security-headers] [http] [info] http://10.235.57.151/DVWA/
+[2026-05-24T10:05:01] [sql-injection] [http] [critical] http://10.235.57.151/DVWA/vulnerabilities/sqli/
+[2026-05-24T10:05:02] [xss-reflected] [http] [high] http://10.235.57.151/DVWA/vulnerabilities/xss_r/
+[2026-05-24T10:05:03] [http-tech-detect] [http] [info] http://10.235.57.151/DVWA/"""
+
+DVWA_NIKTO_OUTPUT = """- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP: 10.235.57.151
++ Target Hostname: dvwa.local
++ Target Port: 80
+---------------------------------------------------------------------------
++ /DVWA/: Server: Apache/2.4.67 (Raspbian) PHP/8.2.7
++ /DVWA/: The X-Content-Type-Options header is missing.
++ /DVWA/: The X-Frame-Options header is missing.
++ /DVWA/login.php: Admin login page found.
++ /DVWA/setup.php: DVWA setup page found.
+---------------------------------------------------------------------------
++ 1 host(s) tested"""
+
+DVWA_GOBUSTER_OUTPUT = """/DVWA/config (Status: 200) [Size: 892]
+/DVWA/setup.php (Status: 200) [Size: 1452]
+/DVWA/login.php (Status: 200) [Size: 235]
+/DVWA/security.php (Status: 200) [Size: 1142]"""
 
 REAL_GOBUSTER_OUTPUT = """/admin (Status: 301) [Size: 235]
 /backup (Status: 200) [Size: 1452]
@@ -107,6 +147,31 @@ def mock_direct_tools():
         yield tools
 
 
+@pytest.fixture
+def mock_dvwa_direct_tools():
+    """DVWA-specific direct tools with SQLi/XSS nuclei output."""
+    def _make_exec(success=True, stdout="", error=""):
+        def _exec(binary, params):
+            return {
+                "success": success,
+                "output": stdout,
+                "stdout": stdout,
+                "error": error,
+                "returncode": 0 if success else 1,
+            }
+        return _exec
+
+    tools = {
+        "nmap":    (_make_exec(stdout=DVWA_NMAP_OUTPUT), "nmap"),
+        "whatweb": (_make_exec(stdout=DVWA_WHATWEB_OUTPUT), "whatweb"),
+        "nuclei":  (_make_exec(stdout=DVWA_NUCLEI_OUTPUT), "nuclei"),
+        "nikto":   (_make_exec(stdout=DVWA_NIKTO_OUTPUT), "nikto"),
+        "gobuster": (_make_exec(stdout=DVWA_GOBUSTER_OUTPUT), "gobuster"),
+    }
+    with patch.object(pulse_app, "get_direct_tools", return_value=tools):
+        yield tools
+
+
 # ── Fixture data for a single target ─────────────────────────────────────────
 
 
@@ -128,6 +193,29 @@ def _full_cache():
             "tool": tool,
             "target": TARGET,
             "timestamp": TS,
+            "result": {"success": True, "stdout": stdout},
+        }
+    return cache
+
+
+DVWA_TARGET = "10.235.57.151"
+DVWA_TS = 9999999998
+
+
+def _full_dvwa_cache():
+    """Return a _MockCache pre-populated with DVWA fixtures."""
+    cache = _MockCache()
+    for tool, stdout in [
+        ("nmap",    DVWA_NMAP_OUTPUT),
+        ("whatweb", DVWA_WHATWEB_OUTPUT),
+        ("nuclei",  DVWA_NUCLEI_OUTPUT),
+        ("nikto",   DVWA_NIKTO_OUTPUT),
+        ("gobuster", DVWA_GOBUSTER_OUTPUT),
+    ]:
+        cache[f"sess:{tool}:{DVWA_TARGET}"] = {
+            "tool": tool,
+            "target": DVWA_TARGET,
+            "timestamp": DVWA_TS,
             "result": {"success": True, "stdout": stdout},
         }
     return cache
@@ -311,6 +399,60 @@ class TestPipelineNoData:
         surface = pulse_app.get_surface(target=TARGET)
         assert surface["ports_count"] == 0
         # Malformed or empty output should not crash
+
+
+class TestPipelineDvwa:
+    """DVWA-specific parsing tests — mirrors our RPI target exactly."""
+
+    def test_dvwa_get_surface_technologies(self, mock_cache):
+        """get_surface() detects Apache + PHP from DVWA fixtures."""
+        mock_cache.update(_full_dvwa_cache())
+        surface = pulse_app.get_surface(target=DVWA_TARGET)
+        assert surface["ports_count"] >= 2  # 80, 443
+        assert "Apache" in surface["technologies"]
+        assert "PHP" in surface["technologies"]
+
+    def test_dvwa_get_findings_nuclei_new_format(self, mock_cache):
+        """Parsses the new nuclei format (timestamp first, not severity)."""
+        mock_cache.update(_full_dvwa_cache())
+        findings = pulse_app.get_findings(target=DVWA_TARGET)
+        nuclei = [f for f in findings if f["tool"] == "nuclei"]
+        severities = [f["severity"] for f in nuclei]
+        assert "critical" in severities   # sql-injection
+        assert "high" in severities       # xss-reflected
+        assert "info" in severities       # missing headers + tech-detect
+
+    def test_dvwa_get_findings_nikto_parsed(self, mock_cache):
+        """Nikto output for DVWA is parsed as info findings."""
+        mock_cache.update(_full_dvwa_cache())
+        findings = pulse_app.get_findings(target=DVWA_TARGET)
+        nikto = [f for f in findings if f["tool"] == "nikto"]
+        assert len(nikto) >= 3
+        assert any("login" in f["finding"].lower() for f in nikto)
+
+    def test_dvwa_get_findings_total_count(self, mock_cache):
+        """DVWA yields at least 3 findings (nuclei + nikto)."""
+        mock_cache.update(_full_dvwa_cache())
+        findings = pulse_app.get_findings(target=DVWA_TARGET)
+        assert len(findings) >= 3
+
+    def test_dvwa_next_suggested_tool_sqlmap(self, mock_dvwa_direct_tools, mock_cache):
+        """SQLi finding in DVWA via scan() → next_suggested_tool is sqlmap."""
+        result = pulse_app.scan(target=DVWA_TARGET, intensity="full")
+        assert "next_suggested_tool" in result
+        suggestion = result["next_suggested_tool"]
+        assert suggestion["tool"] == "sqlmap"
+        assert "SQL" in suggestion.get("reason", "")
+
+    def test_dvwa_target_store_persists(self, mock_dvwa_direct_tools, mock_cache):
+        """TargetStore populated from DVWA fixtures persists correctly via scan()."""
+        pulse_app.scan(target=DVWA_TARGET, intensity="full")
+        store = pulse_app.get_target_store()
+        profile = store.get_target(DVWA_TARGET)
+        assert profile is not None
+        findings = profile.get("findings", {})
+        assert len(findings.get("ports", [])) >= 2
+        assert len(findings.get("vulnerabilities", [])) >= 1
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
