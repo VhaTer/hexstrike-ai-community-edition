@@ -39,6 +39,7 @@ def make_mock_context():
     ctx.get_state = AsyncMock(return_value=None)
     ctx.set_state = AsyncMock()
     ctx.read_resource = AsyncMock(return_value=MagicMock(contents=[]))
+    ctx.sample = AsyncMock(return_value="mock suggestion")
     ctx.session_id = "test-session-fixed"
     return ctx
 
@@ -317,6 +318,29 @@ class TestCtxErrorAndWarning:
         assert result["success"] is False
         assert "Invalid JSON" in result.get("error", "")
         assert ctx.error.called, "ctx.error should be called for JSON parse failure"
+
+    def test_warning_not_called_on_successful_tool(self):
+        """Successful tool execution should NOT trigger ctx.warning."""
+        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+            mcp = make_mcp()
+            result, ctx = run(call_run_security_tool(mcp, "checksec", {"target": "test"}))
+
+        assert result["success"] is True
+        assert not ctx.warning.called, "ctx.warning should NOT be called for successful tool"
+
+    def test_read_resource_mock_available(self):
+        """ctx.read_resource mock is properly configured and awaitable."""
+        ctx = make_mock_context()
+        resource = asyncio.run(ctx.read_resource("skill://test/REFERENCE.md"))
+        assert resource is not None
+        assert hasattr(resource, "contents")
+
+    def test_sample_mock_available(self):
+        """ctx.sample mock is properly configured and returns a string."""
+        ctx = make_mock_context()
+        result = asyncio.run(ctx.sample("prompt", {}))
+        assert isinstance(result, str)
+        assert "mock suggestion" in result
 
 
 # ──────────────────────────────────────────────────────────────────────────────

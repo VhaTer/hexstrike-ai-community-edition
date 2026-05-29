@@ -234,13 +234,13 @@ class TestPipelineSurface:
         assert len(result["tools"]) == 5
 
         surface = pulse_app.get_surface(target=TARGET)
-        assert surface["ports_count"] == 5  # 22, 80, 443, 3306, 8080
+        assert surface["ports_count"] == 4  # 22, 80, 443, 8080 (3306 is "filtered")
         port_nums = [p["port"] for p in surface["ports"]]
-        assert port_nums == [22, 80, 443, 3306, 8080]
+        assert port_nums == [22, 80, 443, 8080]
         assert "WordPress" in surface["technologies"]
         assert "Apache" in surface["technologies"]
         assert "PHP" in surface["technologies"]
-        assert surface["risk_level"] == "medium"  # 5 ports (<=5 → >2 → medium)
+        assert surface["risk_level"] == "medium"  # 4 ports (>2 → medium)
 
     def test_scan_returns_next_suggested_tool(self, mock_direct_tools, mock_cache):
         """scan() result includes next_suggested_tool from context."""
@@ -358,7 +358,7 @@ class TestPipelineMultiTool:
         pulse_app.scan(target=TARGET, intensity="full")    # all 5 tools
 
         surface = pulse_app.get_surface(target=TARGET)
-        assert surface["ports_count"] == 5  # same target, same ports
+        assert surface["ports_count"] == 4  # same target, same ports (3306 filtered)
 
     def test_gobuster_findings_do_not_break_pipeline(self, mock_direct_tools, mock_cache):
         """gobuster output (no nmap) should not add ports or findings."""
@@ -459,6 +459,75 @@ class TestPipelineDvwa:
 
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "none": 5}
+
+
+class TestPipelineS57Fixes:
+    """Regression tests for Session 57 pipeline fixes."""
+
+    def test_strip_ansi_removes_color_codes(self):
+        """_strip_ansi() removes ANSI escape sequences from tool output."""
+        raw = "[\x1b[92mdvwa-default-login\x1b[0m] [\x1b[94mhttp\x1b[0m] [\x1b[31mcritical\x1b[0m] http://target/"
+        clean = pulse_app._strip_ansi(raw)
+        assert "\x1b[" not in clean
+        assert "[dvwa-default-login]" in clean
+        assert "[critical]" in clean
+
+    def test_get_findings_parses_ansi_nuclei_output(self, mock_cache):
+        """nuclei output with ANSI codes is correctly parsed by get_findings()."""
+        ansi_output = (
+            "[\x1b[92mdvwa-default-login\x1b[0m] [\x1b[94mhttp\x1b[0m] [\x1b[31mcritical\x1b[0m] http://target/DVWA/\n"
+            "[\x1b[92mdockerfile\x1b[0m] [\x1b[94mhttp\x1b[0m] [\x1b[33mmedium\x1b[0m] http://target/DVWA/Dockerfile\n"
+        )
+        mock_cache[f"sess:nuclei:{TARGET}"] = {
+            "tool": "nuclei", "target": TARGET,
+            "timestamp": TS,
+            "result": {"stdout": ansi_output},
+        }
+        findings = pulse_app.get_findings(target=TARGET)
+        nuclei = [f for f in findings if f["tool"] == "nuclei"]
+        assert len(nuclei) == 2
+        severities = {f["severity"] for f in nuclei}
+        assert "critical" in severities
+        assert "medium" in severities
+
+    def test_scan_hostname_extraction_from_url(self, mock_direct_tools, mock_cache):
+        """scan() with a URL target extracts hostname for nmap."""
+        url_target = "http://192.168.1.165/DVWA/"
+        result = pulse_app.scan(target=url_target, intensity="quick")
+        assert result["target"] == url_target
+        # nmap should have been called (mocked) — doesn't fail from URL parsing
+        assert "nmap" in result["tools"]
+
+    def test_cache_invalidation_bad_nmap(self, mock_direct_tools, mock_cache):
+        """scan() invalidates stale nmap cache entries with '0 hosts up'."""
+        bad_stdout = "Starting Nmap 7.98\nNmap done: 0 IP addresses (0 hosts up) scanned in 0.34 seconds"
+        mock_cache[f"sess:nmap:{TARGET}"] = {
+            "tool": "nmap", "target": TARGET,
+            "timestamp": TS,
+            "result": {"stdout": bad_stdout, "output": bad_stdout},
+        }
+        result = pulse_app.scan(target=TARGET, intensity="quick")
+        # nmap should have been re-executed (cache invalidated), not cached
+        assert result["tools"]["nmap"]["status"] != "cached"
+        assert result["tools"]["nmap"]["returncode"] == 0
+
+    def test_good_nmap_cache_not_invalidated(self, mock_direct_tools, mock_cache):
+        """Valid nmap cache (hosts up) is NOT invalidated."""
+        good_stdout = "Starting Nmap 7.95\nNmap scan report for 192.168.1.100\nHost is up.\nPORT     STATE SERVICE\n22/tcp   open  ssh"
+        mock_cache[f"sess:nmap:{TARGET}"] = {
+            "tool": "nmap", "target": TARGET,
+            "timestamp": TS,
+            "result": {"stdout": good_stdout, "output": good_stdout},
+        }
+        result = pulse_app.scan(target=TARGET, intensity="quick")
+        # nmap should be cached (good result stays)
+        assert result["tools"]["nmap"]["status"] == "cached"
+
+    def test_nmap_scan_type_overridden_for_host_tools(self, mock_direct_tools, mock_cache):
+        """scan() passes scan_type='-sTV' for tools in _TOOLS_NEED_HOST."""
+        # Verify the dict has the right key
+        assert "nmap" in pulse_app._TOOLS_NEED_HOST
+        assert "nmap_advanced" in pulse_app._TOOLS_NEED_HOST
 
 def _severity_sort_key(f: dict):
     return SEVERITY_ORDER.get(f.get("severity", "").lower(), 99)

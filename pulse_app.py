@@ -28,6 +28,9 @@ import os
 import re
 import threading
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 
 from fastmcp import FastMCPApp
 
@@ -45,6 +48,7 @@ from config import _config as app_config
 from mcp_core.server_setup import _scan_cache, _rate_limit_events
 from server_core.operational_metrics import _op_metrics
 from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store
+from server_core.exploit_rules import suggest_exploit, ESTIMATED_TIMES
 from tool_registry import TOOLS
 from mcp_core.tool_registry_v2 import _registry
 
@@ -179,13 +183,7 @@ rx_rl_var = Rx("rl_variant").default("default")
 
 # Footer
 TOTAL_RUNS_DISP = Rx("total_runs_display").default("0 runs")
-SUCCESS_RATE    = Rx("success_rate_display").default("\u2014%")
-CACHE_HIT_RATE  = Rx("cache_hit_display").default("\u2014%")
-TIMEOUT_DISP    = Rx("timeout_count_display").default("0")
 rx_runs      = TOTAL_RUNS_DISP
-rx_success   = SUCCESS_RATE
-rx_cache     = CACHE_HIT_RATE
-rx_timeouts  = TIMEOUT_DISP
 
 # Tool Performance
 PERF_DATA     = Rx("tool_performance").default([])
@@ -454,7 +452,7 @@ def get_surface(target: str | None = None) -> dict:
         output = str(result.get("output", "") or result.get("stdout", ""))
         for line in output.splitlines():
             parts = line.strip().split()
-            if len(parts) >= 2 and "/" in parts[0]:
+            if len(parts) >= 2 and "/" in parts[0] and parts[1] == "open":
                 try:
                     port = int(parts[0].split("/")[0])
                     service = parts[2] if len(parts) >= 3 else ""
@@ -526,7 +524,8 @@ def get_findings(target: str | None = None) -> list[dict]:
     for e in entries:
         tool = e.get("tool", "")
         result = e.get("result", {})
-        output = str(result.get("output", "") or result.get("stdout", ""))
+        raw = str(result.get("output", "") or result.get("stdout", ""))
+        output = _strip_ansi(raw)
 
         if tool == "nuclei":
             for line in output.splitlines():
@@ -1162,18 +1161,28 @@ TOOLS_BY_INTENSITY = {
 }
 
 # Tools that need url=http:// prefix instead of target= (direct IP doesn't work)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
 _TOOLS_NEED_URL = {"whatweb", "gobuster", "sqlmap", "wpscan", "dalfox", "jaeles", "xsser"}
 _TOOLS_NEED_URL_AS_TARGET = {"nuclei", "httpx", "katana"}
+_TOOLS_NEED_HOST = {"nmap", "nmap_advanced"}
 
 
 def _suggest_next_from_context(surface: dict, findings: list) -> dict:
     """Suggest next tool based on structured surface + findings data.
 
-    Used by scan(), get_surface(), get_findings(), get_live_dashboard().
-    Returns dict with 'tool' and 'reason', or empty dict if context is insufficient.
+    Returns dict with 'tool', 'reason', 'expected_time', 'priority'.
+    Empty dict if context is insufficient.
+    Priority levels: critical (confirmed vuln) > high (clear target) > medium (probable) > low (exploratory).
     """
+    _EST = ESTIMATED_TIMES
+
     # Findings-based suggestions take priority over surface-based ones
-    # (critical findings like SQLi matter more than generic port discovery)
     if findings:
         findings_severities = []
         findings_text = []
@@ -1187,15 +1196,15 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
         has_high = any(s == "high" for s in findings_severities)
 
         if "sql" in findings_all or "sqli" in findings_all or "injection" in findings_all:
-            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit"}
+            return {"tool": "sqlmap", "reason": "SQL injection candidate found — confirm and exploit", "expected_time": _EST.get("sqlmap", "2-30 min"), "priority": "critical"}
         if "xss" in findings_all or "cross-site" in findings_all:
-            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox"}
+            return {"tool": "dalfox", "reason": "XSS candidate found — validate with dalfox", "expected_time": _EST.get("dalfox", "1-5 min"), "priority": "critical"}
         if "smb" in findings_all or "eternalblue" in findings_all or "ms17" in findings_all:
-            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation"}
+            return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation", "expected_time": _EST.get("metasploit", "1-5 min"), "priority": "critical"}
         if "ssl" in findings_all or "tls" in findings_all or "certificate" in findings_all:
-            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection"}
+            return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection", "expected_time": _EST.get("testssl", "30-60s"), "priority": "high"}
         if has_critical or has_high:
-            return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation"}
+            return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation", "expected_time": _EST.get("metasploit", "1-5 min"), "priority": "high"}
 
     # Surface-based suggestions (generic discovery, no critical findings)
     ports = surface.get("ports", []) if isinstance(surface, dict) else []
@@ -1209,30 +1218,30 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
     if port_numbers:
         if 80 in port_numbers or 443 in port_numbers or 8080 in port_numbers:
             if any("wordpress" in t for t in techs_lower):
-                return {"tool": "wpscan", "reason": "WordPress detected — enumerate plugins/users"}
+                return {"tool": "wpscan", "reason": "WordPress detected — enumerate plugins/users", "expected_time": _EST.get("wpscan", "1-10 min"), "priority": "high"}
             if any("joomla" in t for t in techs_lower):
-                return {"tool": "joomscan", "reason": "Joomla detected — enumerate extensions"}
+                return {"tool": "joomscan", "reason": "Joomla detected — enumerate extensions", "expected_time": _EST.get("joomscan", "1-5 min"), "priority": "high"}
             if techs_lower:
-                return {"tool": "gobuster", "reason": "Web server detected with tech — discover hidden paths"}
-            return {"tool": "whatweb", "reason": "Web ports open — identify technologies"}
+                return {"tool": "gobuster", "reason": "Web server detected with tech — discover hidden paths", "expected_time": "1-5 min", "priority": "high"}
+            return {"tool": "whatweb", "reason": "Web ports open — identify technologies", "expected_time": "10-30s", "priority": "high"}
         if 445 in port_numbers:
-            return {"tool": "smbmap", "reason": "SMB port 445 open — enumerate shares"}
+            return {"tool": "smbmap", "reason": "SMB port 445 open — enumerate shares", "expected_time": _EST.get("smbmap", "10-30s"), "priority": "high"}
         if 22 in port_numbers:
-            return {"tool": "hydra", "reason": "SSH port 22 open — test credentials"}
+            return {"tool": "hydra", "reason": "SSH port 22 open — test credentials", "expected_time": _EST.get("hydra", "5-30 min"), "priority": "medium"}
         if 1433 in port_numbers or 3306 in port_numbers or 5432 in port_numbers or 27017 in port_numbers:
-            return {"tool": "sqlmap", "reason": "Database port open — test for weak auth"}
+            return {"tool": "sqlmap", "reason": "Database port open — test for weak auth", "expected_time": _EST.get("sqlmap", "2-30 min"), "priority": "medium"}
         if "smb" in services_str or "microsoft-ds" in services_str:
-            return {"tool": "smbmap", "reason": "SMB service detected — enumerate shares"}
+            return {"tool": "smbmap", "reason": "SMB service detected — enumerate shares", "expected_time": _EST.get("smbmap", "10-30s"), "priority": "high"}
         if "http" in services_str or "ssl" in services_str:
-            return {"tool": "whatweb", "reason": "Web service detected — fingerprint technologies"}
+            return {"tool": "whatweb", "reason": "Web service detected — fingerprint technologies", "expected_time": "10-30s", "priority": "high"}
 
     # Fallback: low-severity findings with no port context
     if findings:
-        return {"tool": "gobuster", "reason": "Findings reviewed — continue with directory discovery"}
+        return {"tool": "gobuster", "reason": "Findings reviewed — continue with directory discovery", "expected_time": "1-5 min", "priority": "low"}
 
     # No context
     if port_numbers:
-        return {"tool": "nuclei", "reason": "Ports discovered — run vulnerability scan"}
+        return {"tool": "nuclei", "reason": "Ports discovered — run vulnerability scan", "expected_time": "1-5 min", "priority": "medium"}
 
     return {}
 
@@ -1262,9 +1271,6 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
     sys = _op_metrics.summary().get("system", {})
     ops = _op_metrics.summary()
     total_runs_display = f"{ops['total_runs']} runs"
-    success_rate_display = f"{int(ops['global_success_rate'] * 100)}%" if ops['total_runs'] > 0 else "\u2014"
-    cache_hit_display = f"{int(ops['cache']['hit_ratio'] * 100)}%" if ops['cache']['total'] > 0 else "\u2014"
-    timeout_count_display = str(len(ops.get("timeout_count_by_tool", [])))
 
     err = get_errors_and_failures()
     err_sr = err.get("global_success_rate", 0)
@@ -1359,10 +1365,7 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
         "netio":          netio,
         # Display helpers
         "total_runs_display":    total_runs_display,
-        "success_rate_display":  success_rate_display,
-        "cache_hit_display":     cache_hit_display,
-        "timeout_count_display": timeout_count_display,
-        "error_summary":              error_summary,
+        "error_summary":         error_summary,
         "error_success_rate_display": error_success_rate_display,
         "cache_hit_ratio_display": cache_hit_ratio_display,
         "cache_util_display":      cache_util_display,
@@ -1455,54 +1458,21 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
     _direct = get_direct_tools()
     tool_results = {}
 
-    for tool_name in tools_to_run:
-        # Check cache
-        cache_entries = _cache_for_target(resolved)
-        if any(str(c.get("tool", "")).lower() == tool_name for c in cache_entries):
-            tool_results[tool_name] = {"status": "cached", "cached": True}
-            continue
-        entry = _direct.get(tool_name)
-        if not entry:
-            tool_results[tool_name] = {"status": "skipped", "error": f"Unknown tool: {tool_name}"}
-            continue
-        exec_func, binary = entry
-        try:
-            params = {"target": resolved}
-            if tool_name in _TOOLS_NEED_URL:
-                if not resolved.startswith(("http://", "https://")):
-                    params = {"url": f"http://{resolved}"}
-                else:
-                    params = {"url": resolved}
-            elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
-                if not resolved.startswith(("http://", "https://")):
-                    params = {"url": f"http://{resolved}", "target": resolved}
-                else:
-                    params = {"url": resolved, "target": resolved}
-            out = exec_func(binary, params)
-            ok = out.get("success", False)
-            tool_results[tool_name] = {
-                "status": "completed" if ok else "failed",
-                "returncode": out.get("returncode"),
-            }
-            if not ok:
-                tool_results[tool_name]["error"] = out.get("error", "Unknown error")
-            stdout_str = out.get("stdout", "") or out.get("output", "")
-            _scan_cache.set(str(time.time()), {
-                "tool": tool_name,
-                "target": resolved,
-                "timestamp": time.time(),
-                "status": "completed" if ok else "failed",
-                "result": {
-                    "success": ok,
-                    "stdout": stdout_str,
-                    "output": stdout_str,
-                },
-            })
-        except Exception as e:
-            tool_results[tool_name] = {"status": "error", "error": str(e)}
+    _workers = min(len(tools_to_run), 5)
+    with ThreadPoolExecutor(max_workers=_workers) as pool:
+        futures = {pool.submit(_run_scan_tool, name, resolved, _direct): name
+                   for name in tools_to_run}
+        for future in as_completed(futures):
+            tr = future.result()
+            tool_results[tr.pop("tool_name")] = tr
 
     surface_data = get_surface(resolved)
     findings_data = get_findings(resolved) if intensity in ("medium", "full") else []
+    # Enrich findings with exploit suggestions (Couche 1 — rules engine)
+    for f in findings_data:
+        exploit = suggest_exploit(f)
+        if exploit:
+            f["exploit"] = exploit  # {tool, confidence, estimated_time, source}
     plan_data = get_plan(resolved, objective) if intensity == "full" else {"target": resolved, "steps": [], "step_count": 0, "summary": "Skipped — use full intensity for planning"}
 
     # TargetStore record for MCP Resources
@@ -1518,6 +1488,52 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
         pass
 
     suggestion = _suggest_next_from_context(surface_data, findings_data)
+
+    # ── cache_age ────────────────────────────────────────────────────────
+    tool_statuses = {t: v.get("status") for t, v in tool_results.items()}
+    n_cached = sum(1 for s in tool_statuses.values() if s == "cached")
+    n_completed = sum(1 for s in tool_statuses.values() if s == "completed")
+    n_failed = sum(1 for s in tool_statuses.values() if s in ("failed", "error", "timeout"))
+    total_tools = len(tool_results)
+
+    if n_cached > 0 and n_completed == 0:
+        cache_entries = _cache_for_target(resolved)
+        cached_times = [e.get("timestamp", 0) for e in cache_entries
+                        if e.get("tool") in tool_results]
+        max_age_sec = time.time() - (max(cached_times) if cached_times else time.time())
+        if max_age_sec < 60:
+            freshness = "fresh_cache"
+            age_str = f"{max_age_sec:.0f}s ago"
+        elif max_age_sec < 3600:
+            freshness = "recent_cache"
+            age_str = f"{int(max_age_sec // 60)} min ago"
+        else:
+            freshness = "stale_cache"
+            age_str = f"{int(max_age_sec // 3600)}h ago"
+    else:
+        freshness = "fresh_scan"
+        age_str = "just now"
+
+    # ── highlights ───────────────────────────────────────────────────────
+    highlights = [
+        {
+            "severity": f["severity"],
+            "tool": f.get("tool"),
+            "finding": f.get("finding", "")[:80],
+            "exploit": f.get("exploit", {}),
+        }
+        for f in findings_data[:3] if isinstance(f, dict)
+    ]
+
+    # ── severity breakdown ───────────────────────────────────────────────
+    sev_counts = {}
+    for f in findings_data:
+        if isinstance(f, dict):
+            s = f.get("severity", "info")
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+    sev_display = ", ".join(f"{c} {s}" for s in ("critical", "high", "medium", "low", "info")
+                           if (c := sev_counts.get(s)))
+
     return {
         "target":    resolved,
         "intensity": intensity,
@@ -1525,11 +1541,24 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
         "surface":   surface_data,
         "findings":  findings_data,
         "plan":      plan_data,
+        "cache_age": {
+            "status": freshness,
+            "age": age_str,
+            "age_seconds": max_age_sec if n_cached > 0 and n_completed == 0 else 0,
+            "tools_cached": n_cached,
+            "tools_completed": n_completed,
+            "tools_failed": n_failed,
+        },
+        "highlights": highlights,
         "summary": (
-            f"Scan {intensity} on {resolved}: "
-            f"{surface_data.get('ports_count', 0)} ports, "
-            f"{len(findings_data)} findings, "
-            f"{plan_data.get('step_count', 0)} plan steps"
+            f"{'cached' if freshness.startswith('fresh_cache') or freshness.startswith('recent_cache') or freshness.startswith('stale_cache') else 'fresh'} scan "
+            f"({age_str.replace('just now', 'parallel').replace('s ago', 's').replace(' min ago', 'm').replace('h ago', 'h')})"
+            f" · {total_tools} tools ({n_completed} ok"
+            + (f", {n_failed} fail" if n_failed else ", 0 fail")
+            + f")"
+            f" · {surface_data.get('ports_count', 0)} ports"
+            + (f" · {sev_display}" if sev_display else "")
+            + (f" · next: {suggestion.get('tool')}" if suggestion else "")
         ),
     } | ({"next_suggested_tool": suggestion} if suggestion else {})
 
@@ -1563,9 +1592,6 @@ def pulse_dashboard() -> PrefabApp:
     netio = st["netio"]
 
     total_runs_display = st["total_runs_display"]
-    success_rate_display = st["success_rate_display"]
-    cache_hit_display = st["cache_hit_display"]
-    timeout_count_display = st["timeout_count_display"]
     error_summary = st["error_summary"]
     error_success_rate_display = st["error_success_rate_display"]
     cache_hit_ratio_display = st["cache_hit_ratio_display"]
@@ -1972,8 +1998,6 @@ def pulse_dashboard() -> PrefabApp:
         with Row(gap=4, align="center", css_class="p-2 px-4 bg-muted/20 border-t flex-wrap"):
             Muted(f"{rx_version}")
             Muted(f"{rx_runs}")
-            Muted(f"{rx_success} success")
-            Muted(f"\u26a0 {rx_timeouts} timeouts")
 
     return PrefabApp(
         view=view,
@@ -2001,9 +2025,6 @@ def pulse_dashboard() -> PrefabApp:
             "total_errors":          overview["total_errors"],
             # Footer stats
             "total_runs_display":    total_runs_display,
-            "success_rate_display":  success_rate_display,
-            "cache_hit_display":     cache_hit_display,
-            "timeout_count_display": timeout_count_display,
             # Scope
             "scope_target":          scope.get("active_target"),
             "scope_type":            scope.get("target_type"),
@@ -2115,6 +2136,68 @@ def _cache_for_target(target: str) -> list[dict]:
         return [v for v in _scan_cache.values() if v.get("target") == target]
     except Exception:
         return []
+
+
+def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
+    """Run a single scan tool. Thread-safe — no shared state beyond _scan_cache (which is RLock-guarded).
+
+    Returns {tool_name, status, error?, returncode?}.
+    """
+    cache_entries = _cache_for_target(resolved)
+    cached = [c for c in cache_entries if str(c.get("tool", "")).lower() == tool_name]
+
+    if cached:
+        if tool_name in _TOOLS_NEED_HOST and cached[0].get("result", {}).get("stdout", "").startswith("Starting Nmap") and "0 hosts up" in cached[0].get("result", {}).get("stdout", ""):
+            pass
+        else:
+            return {"tool_name": tool_name, "status": "cached", "cached": True}
+
+    entry = _direct.get(tool_name)
+    if not entry:
+        return {"tool_name": tool_name, "status": "skipped", "error": f"Unknown tool: {tool_name}"}
+
+    exec_func, binary = entry
+    try:
+        params = {"target": resolved}
+        if tool_name in _TOOLS_NEED_URL:
+            if not resolved.startswith(("http://", "https://")):
+                params = {"url": f"http://{resolved}"}
+            else:
+                params = {"url": resolved}
+        elif tool_name in _TOOLS_NEED_URL_AS_TARGET:
+            if not resolved.startswith(("http://", "https://")):
+                params = {"url": f"http://{resolved}", "target": resolved}
+            else:
+                params = {"url": resolved, "target": resolved}
+        elif tool_name in _TOOLS_NEED_HOST:
+            host = urlparse(resolved).hostname or resolved
+            params = {"target": host, "scan_type": "-sTV"}
+
+        out = exec_func(binary, params)
+        ok = out.get("success", False)
+        result = {
+            "tool_name": tool_name,
+            "status": "completed" if ok else "failed",
+            "returncode": out.get("returncode"),
+        }
+        if not ok:
+            result["error"] = out.get("error", "Unknown error")
+
+        stdout_str = out.get("stdout", "") or out.get("output", "")
+        _scan_cache.set(f"{tool_name}:{uuid.uuid4().hex[:8]}", {
+            "tool": tool_name,
+            "target": resolved,
+            "timestamp": time.time(),
+            "status": "completed" if ok else "failed",
+            "result": {
+                "success": ok,
+                "stdout": stdout_str,
+                "output": stdout_str,
+            },
+        })
+        return result
+    except Exception as e:
+        return {"tool_name": tool_name, "status": "error", "error": str(e)}
 
 
 def _fmt_duration(seconds: float | int | None) -> str:

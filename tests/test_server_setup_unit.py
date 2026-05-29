@@ -796,3 +796,744 @@ class TestScanBackground:
         assert "plan" in result
         assert "summary" in result
         assert result["next_suggested_tool"]["tool"] == "whatweb"
+
+
+# =========================================================================
+# Group F — _enrich_profile_from_cache
+# =========================================================================
+
+
+class TestEnrichProfileFromCache:
+    """_enrich_profile_from_cache() injects cached scan results into a TargetProfile."""
+
+    def test_nmap_ports_and_services(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+        from shared.target_types import TargetType
+
+        profile = TargetProfile(target="10.0.0.1", target_type=TargetType.NETWORK_HOST)
+        cached = {
+            "nmap": {
+                "output": (
+                    "22/tcp open  ssh\n"
+                    "80/tcp open  http\n"
+                    "443/tcp open  https\n"
+                ),
+                "success": True,
+            },
+        }
+        result = _enrich_profile_from_cache(profile, cached)
+        assert 22 in result.open_ports
+        assert 80 in result.open_ports
+        assert 443 in result.open_ports
+        assert result.services[22] == "ssh"
+        assert result.services[80] == "http"
+        assert result.confidence_score > 0
+
+    def test_whatweb_technology_detection(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+        from shared.target_types import TargetType, TechnologyStack
+
+        profile = TargetProfile(target="example.com", target_type=TargetType.WEB_APPLICATION)
+        cached = {
+            "whatweb": {
+                "output": (
+                    "http://example.com [200 OK] Apache[2.4.41], "
+                    "PHP[7.4], WordPress[5.8], jQuery"
+                ),
+                "success": True,
+            },
+        }
+        result = _enrich_profile_from_cache(profile, cached)
+        assert TechnologyStack.APACHE in result.technologies
+        assert TechnologyStack.PHP in result.technologies
+        assert TechnologyStack.WORDPRESS in result.technologies
+        assert result.confidence_score > 0
+
+    def test_testssl_enriches_ssl_info(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+        from shared.target_types import TargetType
+
+        profile = TargetProfile(target="10.0.0.1")
+        cached = {
+            "testssl": {
+                "output": "SSL/TLS protocol: TLSv1.3\ncipher: AES256-GCM",
+                "success": True,
+            },
+        }
+        result = _enrich_profile_from_cache(profile, cached)
+        assert result.ssl_info["source"] == "testssl"
+        assert "TLSv1" in result.ssl_info["summary"]
+
+    def test_wafw00f_boosts_confidence(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+
+        profile = TargetProfile(target="10.0.0.1")
+        cached = {"wafw00f": {"output": "Cloudflare", "success": True}}
+        result = _enrich_profile_from_cache(profile, cached)
+        assert result.confidence_score == 0.05
+
+    def test_empty_cache_returns_profile_unchanged(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+
+        profile = TargetProfile(target="10.0.0.1")
+        result = _enrich_profile_from_cache(profile, {})
+        assert result == profile
+
+    def test_risk_level_high_when_many_ports(self):
+        from mcp_core.server_setup import _enrich_profile_from_cache
+        from shared.target_profile import TargetProfile
+        from shared.target_types import TargetType
+
+        profile = TargetProfile(target="10.0.0.1", target_type=TargetType.NETWORK_HOST)
+        cached = {
+            "nmap": {
+                "output": "\n".join(f"{p}/tcp open  service{p}" for p in range(1, 8)),
+                "success": True,
+            },
+        }
+        result = _enrich_profile_from_cache(profile, cached)
+        assert result.risk_level == "high"
+        assert result.attack_surface_score > 0
+
+
+# =========================================================================
+# Group G — _create_typed_tool_wrapper
+# =========================================================================
+
+
+class TestCreateTypedToolWrapper:
+    """_create_typed_tool_wrapper() dynamically builds typed MCP tool wrappers."""
+
+    def test_basic_typed_wrapper(self):
+        from mcp_core.server_setup import _create_typed_tool_wrapper
+
+        tool_def = {
+            "desc": "Test tool",
+            "params": {"target": {"type": "str"}},
+            "optional": {"timeout": 30, "verbose": False},
+        }
+        async def mock_run(ctx, name, params):
+            return {"success": True, "tool": name, "params": params}
+
+        wrapper = _create_typed_tool_wrapper("nmap", tool_def, mock_run)
+        assert wrapper is not None
+        assert callable(wrapper)
+        assert wrapper.__name__ == "nmap_typed"
+        assert wrapper.__doc__ is not None
+        assert "target" in wrapper.__annotations__
+        assert "timeout" in wrapper.__annotations__ or "verbose" in wrapper.__annotations__
+
+    def test_typed_wrapper_passes_optional_params(self):
+        from mcp_core.server_setup import _create_typed_tool_wrapper
+
+        tool_def = {
+            "desc": "Verbose scan",
+            "params": {"target": {"type": "str"}},
+            "optional": {"verbose": True, "timeout": 60},
+        }
+        captured = {}
+
+        async def mock_run(ctx, name, params):
+            captured["params"] = params
+            return {"success": True}
+
+        wrapper = _create_typed_tool_wrapper("nmap", tool_def, mock_run)
+        mock_ctx = make_mock_context()
+
+        with patch("mcp_core.server_setup.get_context", return_value=mock_ctx):
+            result = run(wrapper(target="10.0.0.1", verbose=False))
+
+        assert captured["params"]["target"] == "10.0.0.1"
+        assert captured["params"]["verbose"] is False
+        from mcp_core.server_setup import _create_typed_tool_wrapper
+
+        tool_def = {
+            "desc": "Port scan",
+            "params": {"target": {"type": "str"}},
+            "optional": {},
+        }
+        captured = {}
+
+        async def mock_run(ctx, name, params):
+            captured["name"] = name
+            captured["params"] = params
+            return {"success": True}
+
+        wrapper = _create_typed_tool_wrapper("nmap", tool_def, mock_run)
+        mock_ctx = make_mock_context()
+
+        with patch("mcp_core.server_setup.get_context", return_value=mock_ctx):
+            result = run(wrapper(target="10.0.0.1"))
+
+        assert captured["name"] == "nmap"
+        assert captured["params"]["target"] == "10.0.0.1"
+
+
+# =========================================================================
+# Group H — get_tool_skill
+# =========================================================================
+
+
+class TestGetToolSkill:
+    """get_tool_skill MCP tool returns skill documents for a given tool."""
+
+    def test_unknown_tool_returns_error(self):
+        tool = run(mcp().get_tool("get_tool_skill"))
+        ctx = make_mock_context()
+        result = run(tool.fn(ctx, "nonexistent_tool_xyz"))
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_known_tool_returns_skill_info(self):
+        tool = run(mcp().get_tool("get_tool_skill"))
+        ctx = make_mock_context()
+        result = run(tool.fn(ctx, "nmap"))
+        if result["success"]:
+            assert "tool_name" in result
+            assert "skill_name" in result
+            assert "documents" in result
+
+
+# =========================================================================
+# Group I — _register_skills
+# =========================================================================
+
+
+class TestRegisterSkills:
+    """_register_skills() mounts the skills directory as MCP resources."""
+
+    def test_no_skills_dir_returns_gracefully(self):
+        from mcp_core.server_setup import _register_skills
+        mcp = MagicMock()
+        mcp.add_provider = MagicMock()
+        logger = MagicMock()
+
+        with patch("mcp_core.server_setup.Path.exists", return_value=False):
+            _register_skills(mcp, logger)
+
+        mcp.add_provider.assert_not_called()
+
+    def test_skills_dir_registers_provider(self):
+        from mcp_core.server_setup import _register_skills
+        mcp = MagicMock()
+        mcp.add_provider = MagicMock()
+        logger = MagicMock()
+
+        with patch("mcp_core.server_setup.Path.exists", return_value=True):
+            with patch("mcp_core.server_setup.SkillsDirectoryProvider"):
+                _register_skills(mcp, logger)
+
+        mcp.add_provider.assert_called_once()
+
+    def test_skills_provider_none_logs_warning(self):
+        from mcp_core.server_setup import _register_skills
+        mcp = MagicMock()
+        logger = MagicMock()
+
+        with patch("mcp_core.server_setup.SkillsDirectoryProvider", None):
+            _register_skills(mcp, logger)
+
+        logger.warning.assert_called_once()
+
+
+# =========================================================================
+# Group J — _build_destructive_confirmation
+# =========================================================================
+
+
+class TestBuildDestructiveConfirmation:
+    """_build_destructive_confirmation() determines if a tool needs user confirmation."""
+
+    def test_nondestructive_tool_returns_none(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        assert _build_destructive_confirmation("nmap", {"target": "10.0.0.1"}) is None
+
+    def test_aireplay_mode_9_allowed(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("aireplay_ng", {"attack_mode": 9})
+        assert result is None
+
+    def test_aireplay_mode_0_blocks(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("aireplay_ng", {"attack_mode": 0, "interface": "wlan0", "bssid": "AA:BB:CC:DD:EE:FF"})
+        assert result is not None
+        assert "action" in result
+        assert "warning" in result
+
+    def test_aireplay_no_mode_blocks(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("aireplay_ng", {"interface": "wlan0"})
+        assert result is not None
+
+    def test_responder_analyze_allowed(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("responder", {"analyze": True})
+        assert result is None
+
+    def test_responder_active_blocks(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("responder", {"interface": "eth0"})
+        assert result is not None
+        assert "poisoning" in result["action"]
+
+    def test_metasploit_auxiliary_allowed(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "auxiliary/scanner/portscan/tcp"})
+        assert result is None
+
+    def test_metasploit_exploit_blocks(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "exploit/multi/handler"})
+        assert result is not None
+        assert "Metasploit" in result["action"]
+
+    def test_generic_destructive_without_specific_tool(self):
+        """Tool in _DESTRUCTIVE_TOOLS but not specially handled."""
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("mdk4", {"interface": "wlan0"})
+        assert result is not None
+        assert "action" in result
+
+    def test_metasploit_auxiliary_allowed(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "auxiliary/scanner/portscan/tcp"})
+        assert result is None
+
+    def test_metasploit_exploit_blocks(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "exploit/multi/handler"})
+        assert result is not None
+        assert "Metasploit" in result["action"]
+
+    def test_metasploit_options_empty(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "exploit/tomcat"})
+        assert result is not None
+
+    def test_mitm6_confirmation(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("mitm6", {"interface": "eth0", "domain": "corp.local"})
+        assert result is not None
+        assert "mitm6" in result["action"]
+
+    def test_mitm6_no_domain(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("mitm6", {"interface": "eth0"})
+        assert result is not None
+
+
+# =========================================================================
+# Group K — _infer_param_type, _resolve_required_param_type
+# =========================================================================
+
+
+class TestParamTypeInference:
+    """Type inference helpers used by _create_typed_tool_wrapper."""
+
+    def test_infer_bool(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type(True) == bool
+        assert _infer_param_type(False) == bool
+
+    def test_infer_int(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type(42) == int
+
+    def test_infer_float(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type(3.14) == float
+
+    def test_infer_dict(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type({"a": 1}) == dict
+
+    def test_infer_list(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type([1, 2, 3]) == list
+
+    def test_infer_str(self):
+        from mcp_core.server_setup import _infer_param_type
+        assert _infer_param_type("hello") == str
+
+    def test_resolve_bool(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "bool"}) == bool
+
+    def test_resolve_int(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "int"}) == int
+
+    def test_resolve_default_str(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "unknown"}) == str
+        assert _resolve_required_param_type({}) == str
+
+
+# =========================================================================
+# Group L — _normalize_tool_result
+# =========================================================================
+
+
+class TestNormalizeToolResult:
+    """_normalize_tool_result() normalizes diverse tool output formats."""
+
+    def test_normalize_dict_result(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result({"success": True, "output": "ok"})
+        assert result["success"] is True
+        assert result["output"] == "ok"
+
+    def test_normalize_non_dict(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result("string result")
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_normalize_stdout_fallback(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result({"success": True, "stdout": "fallback"})
+        assert result["output"] == "fallback"
+
+    def test_normalize_stderr_as_error(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result({"success": False, "stderr": "boom"})
+        assert result["error"] == "boom"
+
+    def test_normalize_returncode(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result({"return_code": 1})
+        assert result["returncode"] == 1
+
+    def test_normalize_partial_results(self):
+        from mcp_core.server_setup import _normalize_tool_result
+        result = _normalize_tool_result({"partial_results": True})
+        assert result["partial_results"] is True
+
+
+# =========================================================================
+# Group M — _get_registry_tool_definition
+# =========================================================================
+
+
+class TestGetRegistryToolDefinition:
+    """_get_registry_tool_definition() resolves tool names to registry entries."""
+
+    def test_known_tool_returns_definition(self):
+        from mcp_core.server_setup import _get_registry_tool_definition
+        result = _get_registry_tool_definition("nmap")
+        assert result is not None
+        assert "desc" in result
+        assert "params" in result
+
+    def test_alias_tool_returns_definition(self):
+        from mcp_core.server_setup import _get_registry_tool_definition, _TOOL_REGISTRY_ALIASES
+        if _TOOL_REGISTRY_ALIASES:
+            alias = next(iter(_TOOL_REGISTRY_ALIASES.keys()))
+            result = _get_registry_tool_definition(alias)
+            assert result is not None
+
+    def test_unknown_tool_returns_none(self):
+        from mcp_core.server_setup import _get_registry_tool_definition
+        result = _get_registry_tool_definition("nonexistent_tool_xyz")
+        assert result is None
+
+
+# =========================================================================
+# Group N — _suggest_next_tool
+# =========================================================================
+
+
+class TestSuggestNextTool:
+    """_suggest_next_tool() suggests the next tool based on current output."""
+
+    def test_nmap_web_ports(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "80/tcp open http")
+        assert result["tool"] == "whatweb"
+
+    def test_nmap_smb_port(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "445/tcp open microsoft-ds")
+        assert result["tool"] == "smbmap"
+
+    def test_nmap_ssh_port(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "22/tcp open ssh")
+        assert result["tool"] == "hydra"
+
+    def test_nmap_db_port(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "3306/tcp open mysql")
+        assert result["tool"] == "sqlmap"
+
+    def test_nmap_generic(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "161/udp open snmp")
+        assert result["tool"] == "nuclei"
+
+    def test_whatweb_wordpress(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("whatweb", "WordPress[6.0]")
+        assert result["tool"] == "wpscan"
+
+    def test_whatweb_joomla(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("whatweb", "Joomla[4.2]")
+        assert result["tool"] == "joomscan"
+
+    def test_whatweb_generic(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("whatweb", "nginx 1.20")
+        assert result["tool"] == "gobuster"
+
+    def test_nuclei_sqli(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nuclei", "SQL Injection detected")
+        assert result["tool"] == "sqlmap"
+
+    def test_nuclei_xss(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nuclei", "Cross-Site Scripting (XSS)")
+        assert result["tool"] == "dalfox"
+
+    def test_nuclei_ssl(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nuclei", "SSL certificate expired")
+        assert result["tool"] == "testssl"
+
+    def test_nuclei_smb(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nuclei", "EternalBlue MS17-010")
+        assert result["tool"] == "metasploit"
+
+    def test_empty_output_nmap_returns_nuclei(self):
+        """Even empty nmap output triggers generic nuclei suggestion."""
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nmap", "")
+        assert result["tool"] == "nuclei"
+
+    def test_empty_output_unknown_tool(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("unknown_tool", "")
+        assert result == {}
+
+
+# =========================================================================
+# Group O — _detect_from_cache
+# =========================================================================
+
+
+class TestDetectFromCache:
+    """_detect_from_cache() builds a TechProfile from cached scan results."""
+
+    def test_no_cache_returns_none(self):
+        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        _scan_cache.cache.clear()
+        _scan_cache.ttl_times.clear()
+        result = _detect_from_cache("10.0.0.1")
+        assert result is None
+
+    def test_whatweb_cache_detects_apache(self):
+        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        _scan_cache.cache.clear()
+        _scan_cache.ttl_times.clear()
+        _scan_cache.set(
+            "test:whatweb:10.0.0.1",
+            {
+                "tool": "whatweb",
+                "target": "10.0.0.1",
+                "result": {"output": "http://10.0.0.1 [200 OK] Apache[2.4.41] PHP[7.4]"},
+            },
+        )
+        result = _detect_from_cache("10.0.0.1")
+        assert result is not None
+        assert "apache" in result.web_servers
+
+    def test_wrong_target_returns_none(self):
+        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        _scan_cache.cache.clear()
+        _scan_cache.ttl_times.clear()
+        _scan_cache.set(
+            "test:whatweb:10.0.0.2",
+            {
+                "tool": "whatweb",
+                "target": "10.0.0.2",
+                "result": {"output": "Apache"},
+            },
+        )
+        result = _detect_from_cache("10.0.0.1")
+        assert result is None
+
+
+# =========================================================================
+# Group P — _resolve_required_param_type remaining types
+# =========================================================================
+
+
+class TestResolveRequiredParamTypeRemaining:
+    """_resolve_required_param_type() covers float/dict/list types."""
+
+    def test_resolve_float(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "float"}) == float
+
+    def test_resolve_dict(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "dict"}) == dict
+
+    def test_resolve_list(self):
+        from mcp_core.server_setup import _resolve_required_param_type
+        assert _resolve_required_param_type({"type": "list"}) == list
+
+
+# =========================================================================
+# Group Q — _suggest_next_tool remaining branches
+# =========================================================================
+
+
+class TestSuggestNextToolRemaining:
+    """Remaining _suggest_next_tool branches."""
+
+    def test_whatweb_drupal(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("whatweb", "Drupal 9")
+        assert result["tool"] == "nuclei"
+
+    def test_whatweb_no_content(self):
+        """Empty whatweb output should return nothing."""
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("whatweb", "")
+        assert result == {}
+
+    def test_nikto_sqli(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nikto", "SQL Injection in /page?id=1")
+        assert result["tool"] == "sqlmap"
+
+    def test_nuclei_output_empty(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("nuclei", "")
+        assert result == {}
+
+    def test_gobuster_with_output(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("gobuster", "/admin (Status: 200)")
+        assert result["tool"] == "nuclei"
+
+    def test_gobuster_no_output(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("gobuster", "")
+        assert result == {}
+
+    def test_hydra_success(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("hydra", "password: admin123")
+        assert result["tool"] == "metasploit"
+
+    def test_hydra_no_output(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("hydra", "")
+        assert result == {}
+
+    def test_smbmap_share_found(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("smbmap", "admin share")
+        assert result["tool"] == "metasploit"
+
+    def test_smbmap_generic(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("smbmap", "some output")
+        assert result["tool"] == "hydra"
+
+    def test_sqlmap_vulnerable(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("sqlmap", "parameter: id is vulnerable")
+        assert result["tool"] == "metasploit"
+
+    def test_sqlmap_generic(self):
+        from mcp_core.server_setup import _suggest_next_tool
+        result = _suggest_next_tool("sqlmap", "completed")
+        assert result["tool"] == "nuclei"
+
+
+# =========================================================================
+# Group R — _read_skill_bundle
+# =========================================================================
+
+
+class TestReadSkillBundle:
+    """_read_skill_bundle() loads skill files via MCP context."""
+
+    def test_read_skill_bundle_returns_documents(self):
+        from mcp_core.server_setup import _read_skill_bundle
+        ctx = make_mock_context()
+        ctx.read_resource = AsyncMock(return_value=SimpleNamespace(
+            contents=[SimpleNamespace(content="nmap skill content")]
+        ))
+        result = run(_read_skill_bundle(ctx, "nmap"))
+        assert "SKILL.md" in result
+        assert result["SKILL.md"] == "nmap skill content"
+
+    def test_read_skill_empty_bundle(self):
+        from mcp_core.server_setup import _read_skill_bundle
+        ctx = make_mock_context()
+        ctx.read_resource = AsyncMock(return_value=SimpleNamespace(contents=[]))
+        result = run(_read_skill_bundle(ctx, "nmap"))
+        assert result == {}
+
+    def test_read_skill_resource_exception(self):
+        from mcp_core.server_setup import _read_skill_bundle
+        ctx = make_mock_context()
+        ctx.read_resource = AsyncMock(side_effect=Exception("resource not found"))
+        result = run(_read_skill_bundle(ctx, "nmap"))
+        assert result == {}
+
+
+# =========================================================================
+# Group S — _collect_cached_scans
+# =========================================================================
+
+
+class TestCollectCachedScans:
+    """_collect_cached_scans() retrieves cached scans by session + target."""
+
+    def test_collect_with_matching_entry(self):
+        from mcp_core.server_setup import _collect_cached_scans, _scan_cache
+        _scan_cache.cache.clear()
+        _scan_cache.ttl_times.clear()
+        _scan_cache.set(
+            "test-session:nmap:10.0.0.1",
+            {"tool": "nmap", "target": "10.0.0.1", "result": {"success": True}},
+        )
+        result = _collect_cached_scans("test-session", "10.0.0.1")
+        assert "nmap" in result
+
+    def test_collect_empty_when_no_match(self):
+        from mcp_core.server_setup import _collect_cached_scans, _scan_cache
+        _scan_cache.cache.clear()
+        _scan_cache.ttl_times.clear()
+        _scan_cache.set(
+            "other-session:nmap:10.0.0.2",
+            {"tool": "nmap", "target": "10.0.0.2", "result": {"success": True}},
+        )
+        result = _collect_cached_scans("test-session", "10.0.0.1")
+        assert result == {}
+
+
+# =========================================================================
+# Group T — _build_destructive_confirmation remaining: options not dict
+# =========================================================================
+
+
+class TestBuildDestructiveConfirmationEdgeCases:
+    """Edge cases: options not a dict, mitm6 no interface."""
+
+    def test_metasploit_options_not_dict(self):
+        from mcp_core.server_setup import _build_destructive_confirmation
+        result = _build_destructive_confirmation("metasploit", {"module": "exploit/test", "options": "string"})
+        assert result is not None

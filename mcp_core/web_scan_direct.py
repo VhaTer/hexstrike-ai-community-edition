@@ -53,7 +53,7 @@ def _nikto(data: dict) -> dict:
     target          = data["target"].strip()
     additional_args = data.get("additional_args", "")
 
-    command = f"nikto -h {target}"
+    command = f"nikto -h {target} -nocheck"
     if additional_args: command += f" {additional_args}"
 
     return execute_command(command)

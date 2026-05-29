@@ -12,10 +12,16 @@ Covers:
   - install() returns helpful error for alias tools
   - install() skips if already installed
   - refresh_status() re-checks all binaries
+  - _get_binary_status cache miss with shutil.which
+  - _get_auto_install_cmd for apt/pip/gem/unknown tools
+  - install() with auto-install success, failure, timeout, missing manager
+  - _get_install_hint gem/go branches
 """
 
+import subprocess
 import pytest
-from mcp_core.tool_registry_v2 import ToolRegistry, _SKIP_INSTALL
+from unittest.mock import patch, MagicMock
+from mcp_core.tool_registry_v2 import ToolRegistry, _SKIP_INSTALL, _INSTALL_HINTS
 
 
 class TestToolRegistry:
@@ -111,3 +117,131 @@ class TestToolRegistry:
         assert len(statuses) > 0
         for binary, s in statuses.items():
             assert s in ("installed", "not_found")
+
+    def test_get_binary_status_cache_miss_calls_which(self):
+        """When cache is empty, _get_binary_status calls shutil.which."""
+        reg = ToolRegistry()
+        reg._status_cache.clear()
+        with patch("mcp_core.tool_registry_v2.shutil.which", return_value=None):
+            s = reg._get_binary_status("nmap")
+            assert s == "not_found"
+            assert reg._status_cache.get("nmap") == "not_found"
+
+    def test_get_install_hint_gem_branch(self):
+        """_get_install_hint returns gem hint for gem-based tools."""
+        reg = ToolRegistry()
+        hint = reg._get_install_hint("whatweb")
+        assert hint.startswith("gem install")
+
+    def test_get_install_hint_go_branch(self):
+        """_get_install_hint returns go hint for go-based tools."""
+        reg = ToolRegistry()
+        hint = reg._get_install_hint("dalfox")
+        assert hint.startswith("go install")
+
+    def test_get_install_hint_unknown(self):
+        """_get_install_hint returns manual instruction for unknown tool."""
+        reg = ToolRegistry()
+        hint = reg._get_install_hint("imaginary-tool-v2")
+        assert "manually" in hint
+
+    def test_get_auto_install_cmd_apt(self):
+        """_get_auto_install_cmd returns apt command for apt tools."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("nmap")
+        assert cmd == ["sudo", "apt", "install", "-y", "nmap"]
+
+    def test_get_auto_install_cmd_pip(self):
+        """_get_auto_install_cmd returns pip command for pip tools."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("sqlmap")
+        assert cmd == ["pip", "install", "sqlmap"]
+
+    def test_get_auto_install_cmd_gem(self):
+        """_get_auto_install_cmd returns gem command for gem tools."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("whatweb")
+        assert cmd == ["gem", "install", "whatweb"]
+
+    def test_get_auto_install_cmd_none(self):
+        """_get_auto_install_cmd returns None for unsupported method."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("dalfox")  # go method
+        assert cmd is None
+
+    def test_get_auto_install_cmd_unknown(self):
+        """_get_auto_install_cmd returns None for unregistered tool."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("imaginary-tool-v2")
+        assert cmd is None
+
+    def test_install_no_auto_method(self):
+        """install() returns hint when no auto-install method exists."""
+        reg = ToolRegistry()
+        # dalfox has go method -> no auto cmd
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_install_hint", return_value="go install dalfox"):
+                reg._routes["dalfox"] = ("recon_exec", "dalfox")
+                result = reg.install("dalfox")
+        assert not result["success"]
+        assert "install_command" in result
+
+    def test_install_subprocess_success(self):
+        """install() succeeds when subprocess returns 0."""
+        reg = ToolRegistry()
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_auto_install_cmd", return_value=["echo", "ok"]):
+                with patch("subprocess.run", return_value=MagicMock(returncode=0)):
+                    reg._routes["whatweb"] = ("recon_exec", "whatweb")
+                    result = reg.install("whatweb")
+        assert result["success"]
+
+    def test_install_subprocess_failure(self):
+        """install() returns error when subprocess fails."""
+        reg = ToolRegistry()
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_auto_install_cmd", return_value=["false"]):
+                with patch("subprocess.run", return_value=MagicMock(returncode=1, stderr="error")):
+                    reg._routes["whatweb"] = ("recon_exec", "whatweb")
+                    result = reg.install("whatweb")
+        assert not result["success"]
+        assert "Install failed" in result["error"]
+
+    def test_install_subprocess_timeout(self):
+        """install() returns error on subprocess timeout."""
+        reg = ToolRegistry()
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_auto_install_cmd", return_value=["sleep", "10"]):
+                with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="sleep", timeout=1)):
+                    reg._routes["whatweb"] = ("recon_exec", "whatweb")
+                    result = reg.install("whatweb")
+        assert not result["success"]
+        assert "timed out" in result["error"]
+
+    def test_install_subprocess_file_not_found(self):
+        """install() returns hint when package manager is missing."""
+        reg = ToolRegistry()
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_auto_install_cmd", return_value=["apt", "install", "-y", "whatweb"]):
+                with patch("subprocess.run", side_effect=FileNotFoundError):
+                    reg._routes["whatweb"] = ("recon_exec", "whatweb")
+                    result = reg.install("whatweb")
+        assert not result["success"]
+        assert "install_command" in result
+
+    def test_install_subprocess_exception(self):
+        """install() handles generic exceptions gracefully."""
+        reg = ToolRegistry()
+        with patch.object(reg, "_get_binary_status", return_value="not_found"):
+            with patch.object(reg, "_get_auto_install_cmd", return_value=["apt", "install", "-y", "whatweb"]):
+                with patch("subprocess.run", side_effect=RuntimeError("boom")):
+                    reg._routes["whatweb"] = ("recon_exec", "whatweb")
+                    result = reg.install("whatweb")
+        assert not result["success"]
+        assert "boom" in result["error"]
+
+    def test_get_auto_install_cmd_unknown_binary(self):
+        """_get_auto_install_cmd returns None for binary not in install hints."""
+        reg = ToolRegistry()
+        cmd = reg._get_auto_install_cmd("completely_fake_binary_xyz")
+        assert cmd is None

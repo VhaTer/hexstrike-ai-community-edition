@@ -165,7 +165,8 @@ class EnhancedCommandExecutor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                close_fds=True,
             )
 
             pid = self.process.pid

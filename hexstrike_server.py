@@ -17,11 +17,10 @@ from pathlib import Path
 from datetime import datetime
 
 from starlette.responses import FileResponse, Response, StreamingResponse, JSONResponse
-from starlette.staticfiles import StaticFiles
 
 from mcp_core.server_setup import setup_mcp_server_standalone, _op_metrics, _scan_cache
 from server_core.modern_visual_engine import ModernVisualEngine
-from server_core.singletons import cache, telemetry, enhanced_process_manager, error_handler
+from server_core.singletons import cache, telemetry, enhanced_process_manager, error_handler, get_tool_stats_store
 import server_core.config_core as config_core
 
 # ---------------------------------------------------------------------------
@@ -66,68 +65,67 @@ API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 
 
 def _build_dashboard_response():
-    """Build the web dashboard response data."""
+    """Build the web dashboard response data using the real Prefab pipeline."""
     try:
-        tools_status = _get_tool_availability()
-        essential_tools = _HEALTH_TOOL_CATEGORIES.get("essential", [])
-        all_essential_available = all(tools_status.get(t, False) for t in essential_tools)
+        from pulse_app import _collect_dashboard_state, get_tool_intelligence
+        st = _collect_dashboard_state()
+        overview = st.get("overview", {})
+        surface = st.get("surface", {})
+        findings = st.get("findings", [])
+        plan = st.get("plan", {})
+        active = st.get("active", {})
+        history = st.get("history", [])
+        rl = st.get("rl", {})
+        err = st.get("err", {})
+        perf = st.get("perf", {})
+        cache_status = st.get("cache_status", {})
+        trends = st.get("trends", {})
+        sessions = st.get("sessions", {})
+        confirmations = st.get("confirmations", {})
+        netio = st.get("netio", {})
+        scope = st.get("scope", {})
 
-        category_stats = {
-            cat: {
-                "total": len(tools),
-                "available": sum(1 for t in tools if tools_status.get(t, False)),
-            }
-            for cat, tools in _HEALTH_TOOL_CATEGORIES.items()
-        }
-
-        current_usage = enhanced_process_manager.resource_monitor.get_current_usage()
+        # Tool stats footer
+        try:
+            tool_stats = get_tool_stats_store().get_all_stats()
+            total_runs = sum(s.get("runs", 0) for s in tool_stats.values())
+            total_runs_display = f"{total_runs} runs"
+        except Exception:
+            total_runs_display = "—"
 
         return {
-            # Server identity
-            "status": "healthy" if all_essential_available else "degraded",
-            "version": config_core.get("VERSION", "unknown"),
-            "uptime": time.time() - telemetry.stats.get("start_time", time.time()),
+            "status": overview.get("server_status", "unknown"),
+            "version": overview.get("version", "?"),
+            "uptime": overview.get("uptime_seconds", 0),
+            "tools_count": overview.get("tools_count", 0),
+            "memory": overview.get("memory", "?"),
 
-            # Telemetry / commands
-            "telemetry": telemetry.get_stats(),
-
-            # Tool availability
-            "tools_status": tools_status,
-            "all_essential_tools_available": all_essential_available,
-            "total_tools_available": sum(1 for v in tools_status.values() if v),
-            "total_tools_count": len(tools_status),
-            "category_stats": category_stats,
-            "category_tools": _HEALTH_TOOL_CATEGORIES,
-            "tool_availability_age_seconds": round(time.time() - _tool_availability_last_refresh, 1) if _tool_availability_last_refresh > 0 else None,
-
-            # System resources
-            "resources": current_usage,
-            "resources_timestamp": datetime.now().isoformat(),
-
-            # Cache stats
-            "cache_stats": cache.get_stats(),
-
-            # Operational metrics (success rates, slowest tools, etc.)
-            "op_metrics": _op_metrics.summary(),
-
-            # Error statistics
-            "error_stats": error_handler.get_error_statistics(),
-
-            # Recent scan cache entries (last 10)
-            "recent_scans": [
-                {
-                    "tool":           v.get("tool", "?"),
-                    "target":         v.get("target", "?"),
-                    "timestamp":      v.get("timestamp", 0),
-                    "success":        v.get("result", {}).get("success", False),
-                    "execution_time": v.get("result", {}).get("execution_time", 0),
-                }
-                for k, v in (list(_scan_cache.items())[-10:])
-            ],
+            "scope": scope,
+            "surface": surface,
+            "findings": findings,
+            "plan": plan,
+            "active_tools": active,
+            "history": history,
+            "rate_limit": rl,
+            "errors": err,
+            "tool_performance": perf,
+            "cache_status": cache_status,
+            "system_trends": trends,
+            "sessions": sessions,
+            "confirmations": confirmations,
+            "network_io": netio,
+            "async_scans": st.get("async_scans_summary", ""),
+            "intelligence": get_tool_intelligence(),
+            "next_suggested_tool": st.get("next_suggested_tool", {}),
+            "total_runs_display": total_runs_display,
+            "error_summary": st.get("error_summary", ""),
+            "cache_hit_ratio_display": st.get("cache_hit_ratio_display", "—"),
+            "cache_summary_text": st.get("cache_summary_text", ""),
+            "missing_tools_count": len(st.get("missing_tools", [])),
         }
     except Exception as e:
-        logger.error(f"Error building web dashboard response: {e}")
-        return {"error": f"Server error: {str(e)}", "status": "error"}
+        logger.error(f"Error building dashboard response: {e}")
+        return {"status": "error", "error": str(e)[:200]}
 
 
 def _json_status_response(data):
@@ -138,25 +136,13 @@ def _json_status_response(data):
 
 
 def register_http_routes(mcp, logger, static_dir=None):
-    """Attach dashboard and health HTTP routes to the active FastMCP server."""
+    """Attach lightweight dashboard and health HTTP routes."""
     static_dir = Path(static_dir) if static_dir is not None else Path(__file__).parent / "server_static"
 
     if static_dir.exists():
-        assets_dir = static_dir / "assets"
-
-        # Mount /assets — Starlette StaticFiles handles MIME types correctly
-        if assets_dir.exists():
-            mcp._additional_http_routes.append(
-                __import__("starlette.routing", fromlist=["Mount"]).Mount(
-                    "/assets",
-                    app=StaticFiles(directory=str(assets_dir)),
-                    name="assets",
-                )
-            )
-
         @mcp.custom_route("/dashboard", methods=["GET"])
         async def dashboard_index(request):
-            """Serve dashboard SPA index."""
+            """Serve lightweight dashboard page."""
             index = static_dir / "index.html"
             if index.exists():
                 return FileResponse(str(index), media_type="text/html")
@@ -226,6 +212,16 @@ def register_http_routes(mcp, logger, static_dir=None):
             return JSONResponse(data)
         except Exception as e:
             logger.error(f"Error in /web-dashboard: {e}")
+            return JSONResponse({"error": str(e), "status": "error"}, status_code=500)
+
+    @mcp.custom_route("/api/dashboard.json", methods=["GET"])
+    async def api_dashboard_json(request):
+        """JSON API endpoint — same data as /web-dashboard."""
+        try:
+            data = _build_dashboard_response()
+            return JSONResponse(data)
+        except Exception as e:
+            logger.error(f"Error in /api/dashboard.json: {e}")
             return JSONResponse({"error": str(e), "status": "error"}, status_code=500)
 
     @mcp.custom_route("/web-dashboard/stream", methods=["GET"])

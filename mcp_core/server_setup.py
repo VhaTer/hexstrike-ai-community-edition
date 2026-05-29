@@ -679,70 +679,138 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
     "masscan": {
         "workflow": "Fast port scanner for large ranges. Use BEFORE or INSTEAD OF nmap on /24+ subnets.",
         "example": "masscan(target='10.10.10.0/24', ports='1-65535', rate=1000)",
+        "returns": [
+            "dict — success (bool), output (str) with discovered hosts and ports (masscan format).",
+            "Parse output for 'Discovered open port' lines to extract port/protocol/host.",
+        ],
     },
     "rustscan": {
         "workflow": "Ultra-fast port scanner. Use INSTEAD OF nmap when speed matters on single hosts.",
         "example": "rustscan(target='10.10.10.1')",
+        "returns": [
+            "dict — success (bool), output (str) with nmap-compatible port scan results.",
+            "Output format mirrors nmap: '22/tcp open  ssh' lines in the results.",
+        ],
     },
     "subfinder": {
         "workflow": "FIRST recon on any new domain target. Run before fierce or httpx.",
         "example": "subfinder(domain='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with subdomains, one per line.",
+            "Filter output for lines containing the target domain to find valid subdomains.",
+        ],
     },
     "fierce": {
         "workflow": "DNS reconnaissance. Use AFTER subfinder for deeper DNS enumeration.",
         "example": "fierce(domain='example.com')",
+        "returns": [
+            "dict — success (bool), output (str) with DNS records, zone transfers, hostnames.",
+            "Check output for 'Found: ' lines to identify live hosts via DNS.",
+        ],
     },
     "dirsearch": {
         "workflow": "Web path enumeration. Use AFTER whatweb when web server is detected.",
         "example": "dirsearch(url='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with discovered paths and status codes.",
+            "Filter output for '200' or '301' status codes to find accessible paths.",
+        ],
     },
     "feroxbuster": {
         "workflow": "Recursive content discovery. Use AFTER whatweb for deep crawling.",
         "example": "feroxbuster(url='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with recursively discovered paths and status codes.",
+            "Filter output for successful status codes (200, 301, 403) to find paths.",
+        ],
     },
     "dalfox": {
         "workflow": "XSS vulnerability scanning. Use AFTER whatweb when reflected params are found.",
         "example": "dalfox(url='http://target/page?param=value')",
+        "returns": [
+            "dict — success (bool), output (str) with XSS vulnerability findings and PoC URLs.",
+            "Filter output for '[V]' or 'Vulnerability' lines to find confirmed XSS vectors.",
+        ],
     },
     "xsser": {
         "workflow": "Cross-site scripting testing. Use AFTER whatweb for reflected XSS analysis.",
         "example": "xsser(url='http://target/page?param=value')",
+        "returns": [
+            "dict — success (bool), output (str) with XSS testing results and payload reflections.",
+            "Check output for 'Vulnerable' keyword to identify injectable parameters.",
+        ],
     },
     "joomscan": {
         "workflow": "Joomla vulnerability scanner. Use AFTER whatweb when Joomla CMS is detected.",
         "example": "joomscan(url='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with Joomla version, extensions, vulnerabilities.",
+            "Filter output for '[+]' lines to find extensions and '[!]' for vulnerabilities.",
+        ],
     },
     "dotdotpwn": {
         "workflow": "Directory traversal scanner. Use AFTER whatweb when web server is detected.",
         "example": "dotdotpwn(target='http://target')",
+        "returns": [
+            "dict — success (bool), output (str) with traversal test results and vulnerable paths.",
+            "Check output for 'Vulnerable' or 'Found' lines to identify path traversal bugs.",
+        ],
     },
     "smbmap": {
         "workflow": "SMB share enumeration. Use AFTER nmap when SMB port 445 is open.",
         "example": "smbmap(target='10.10.10.1')",
+        "returns": [
+            "dict — success (bool), output (str) with SMB shares, permissions, and accessible files.",
+            "Check output for 'Disk' shares with read/write access — focus on ADMIN$, IPC$.",
+        ],
     },
     "hydra": {
         "workflow": "Network login brute-forcer. Use AFTER nmap when services need password testing.",
         "example": "hydra(target='10.10.10.1', service='ssh')",
+        "returns": [
+            "dict — success (bool), output (str) with login attempts and cracked credentials.",
+            "Filter output for 'login:' and 'password:' lines to find successful logins.",
+        ],
     },
     "medusa": {
         "workflow": "Network login brute-forcer. Use AFTER nmap for parallel password testing.",
         "example": "medusa(target='10.10.10.1', module='ssh')",
+        "returns": [
+            "dict — success (bool), output (str) with login attempts and discovered credentials.",
+            "Filter output for 'ACCOUNT FOUND' lines to identify successful authentication.",
+        ],
     },
     "patator": {
         "workflow": "Multi-purpose brute-forcer. Use AFTER nmap for custom protocol brute-force.",
         "example": "patator(target='10.10.10.1', module='ftp_login')",
+        "returns": [
+            "dict — success (bool), output (str) with brute-force attempt results per target.",
+            "Check output for matches or successful authentication indicators per module.",
+        ],
     },
     "prowler": {
         "workflow": "Cloud security audit. Run standalone against your cloud provider.",
         "example": "prowler(provider='aws')",
+        "returns": [
+            "dict — success (bool), output (str) with cloud security findings and compliance checks.",
+            "Filter output for 'FAIL' lines to find misconfigurations and security issues.",
+        ],
     },
     "msfvenom": {
         "workflow": "Metasploit payload generator. Use AFTER metasploit when custom payloads are needed.",
         "example": "msfvenom(payload='linux/x64/shell_reverse_tcp', lhost='10.0.0.1')",
+        "returns": [
+            "dict — success (bool), output (str) with payload generation status and file path.",
+            "The generated binary/payload is written to the output file specified in params.",
+        ],
     },
     "ropgadget": {
         "workflow": "ROP gadget finder. Use AFTER checksec when binary exploitation is needed.",
         "example": "ropgadget(file='/path/to/binary')",
+        "returns": [
+            "dict — success (bool), output (str) with ROP gadgets, one per line, sorted by address.",
+            "Filter output for '0x' addresses with useful gadgets: 'pop rdi', 'syscall', 'ret'.",
+        ],
     },
     "wpscan": {
         "workflow": "WordPress vulnerability scanner. Use AFTER whatweb when WordPress CMS is detected.",
@@ -1037,7 +1105,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     global _DIRECT_TOOLS_CACHE
     _DIRECT_TOOLS_CACHE = DIRECT_TOOLS
 
-    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters", task=True, timeout=None)
+    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
     async def run_security_tool(
         ctx: Context,
         tool_name: str,
@@ -1756,8 +1824,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             name=public_name,
             description=rich_desc,
             annotations={"readOnlyHint": False, "openWorldHint": True},
-            timeout=None,
-            task=True,
         )(wrapper)
         typed_tools_registered += 1
 
@@ -2030,8 +2096,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         from pulse_app import (
             get_scope, get_surface, get_findings, get_plan,
             _cache_for_target, _suggest_next_from_context,
-            TOOLS_BY_INTENSITY, _TOOLS_NEED_URL, _TOOLS_NEED_URL_AS_TARGET,
+            TOOLS_BY_INTENSITY,
+            _TOOLS_NEED_URL, _TOOLS_NEED_URL_AS_TARGET, _TOOLS_NEED_HOST,
         )
+        from urllib.parse import urlparse
 
         # Resolve target
         scope_data = get_scope(target) if target else get_scope()
@@ -2048,17 +2116,41 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         tool_results: Dict[str, Any] = {}
         total = len(tools_to_run)
 
+        TOOL_TIMEOUTS: dict[str, int] = {
+            "nmap": 60,
+            "whatweb": 30,
+            "nikto": 480,
+            "sqlmap": 480,
+            "gobuster": 300,
+            "nuclei": 180,
+        }
+
         loop = asyncio.get_running_loop()
 
         await ctx.info(f"🎯 Scan {intensity} starting on {resolved} ({total} tools)")
 
         for idx, tool_name in enumerate(tools_to_run):
-            # Check cache
+            # Check cache — invalidate stale/partial entries
             cache_entries = _cache_for_target(resolved)
-            if any(str(c.get("tool", "")).lower() == tool_name for c in cache_entries):
-                tool_results[tool_name] = {"status": "cached", "cached": True}
-                await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — cached, skipping")
-                continue
+            cached_match = None
+            for c in cache_entries:
+                if str(c.get("tool", "")).lower() == tool_name:
+                    cached_match = c
+                    break
+            if cached_match:
+                stdout = (cached_match.get("result", {}) or {}).get("stdout", "")
+                status = cached_match.get("status", "")
+                stale = False
+                if status in ("timeout", "failed"):
+                    stale = True
+                elif tool_name in _TOOLS_NEED_HOST and "0 hosts up" in stdout:
+                    stale = True
+                if stale:
+                    await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — stale cache ({status}), re-running")
+                else:
+                    tool_results[tool_name] = {"status": "cached", "cached": True}
+                    await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — cached, skipping")
+                    continue
 
             entry = _direct.get(tool_name)
             if not entry:
@@ -2078,12 +2170,16 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     params = {"url": f"http://{resolved}", "target": resolved}
                 else:
                     params = {"url": resolved, "target": resolved}
+            elif tool_name in _TOOLS_NEED_HOST:
+                host = urlparse(resolved).hostname or resolved
+                params = {"target": host, "scan_type": "-sTV"}
 
             await ctx.info(f"🔨 Running {tool_name} on {resolved}")
+            tool_timeout = TOOL_TIMEOUTS.get(tool_name, 180)
             try:
                 out = await asyncio.wait_for(
                     loop.run_in_executor(None, lambda: exec_func(binary, params)),
-                    timeout=180,
+                    timeout=tool_timeout,
                 )
                 ok = out.get("success", False)
                 tool_results[tool_name] = {
@@ -2105,8 +2201,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     },
                 })
             except asyncio.TimeoutError:
-                tool_results[tool_name] = {"status": "timeout", "error": f"{tool_name} exceeded 300s"}
-                await ctx.warning(f"⏱️ {tool_name} timed out after 300s")
+                tool_results[tool_name] = {"status": "timeout", "error": f"{tool_name} exceeded {tool_timeout}s"}
+                await ctx.warning(f"⏱️ {tool_name} timed out after {tool_timeout}s")
             except Exception as e:
                 tool_results[tool_name] = {"status": "error", "error": str(e)}
 
@@ -2200,6 +2296,7 @@ def _start_warmup(logger: Any = None) -> None:
                     proc = _subprocess.run(
                         [binary, "--version"],
                         capture_output=True, text=True, timeout=3,
+                        start_new_session=True,
                     )
                     if proc.returncode == 0:
                         _scan_cache.set(

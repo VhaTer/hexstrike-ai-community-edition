@@ -19,11 +19,18 @@ Use this skill when target is cloud infrastructure rather than traditional netwo
 
 **Environment-specific tools prevent wasted effort:**
 
-1. **Identify Platform** — AWS, Azure, GCP, Kubernetes, Docker, etc.
-2. **Cloud Account** — `prowler` (AWS/Azure/GCP compliance) or `pacu` (AWS exploitation path)
-3. **Container Image** — `trivy` (fast CVE + secrets scan) or `grype` (detailed report)
-4. **Kubernetes** — `kube-hunter` (passive), `kubectl` (active RBAC/secret enumeration) — passive only without authorization
-5. **IaC Review** — `checkov` or `terrascan` on Terraform/CloudFormation before deployment
+1. **Identify Platform** — AWS, Azure, GCP, Kubernetes, Docker, etc. [critical]
+2. **Cloud Account** — `prowler` (AWS/Azure/GCP compliance) or `pacu` (AWS exploitation path) [critical, ~30-60 min]
+3. **Container Image** — `trivy` (fast CVE + secrets scan) or `grype` (detailed report) [high, ~2-10 min]
+4. **Kubernetes** — `kube-hunter` (passive), `kubectl` (active RBAC/secret enumeration) — passive only without authorization [medium, ~5-20 min]
+5. **IaC Review** — `checkov` or `terrascan` on Terraform/CloudFormation before deployment [medium, ~5-15 min]
+
+**Decision fields (aligned with cloud_security_audit prompt):**
+- **result_context:** After `prowler`, output is grouped by service (iam/s3/ec2) and severity (CRITICAL/HIGH/MEDIUM/LOW). Prioritise CRITICAL findings first.
+- **result_context:** After `trivy`, check for CRITICAL CVEs with known exploits — these are actionable.
+- **result_context:** After `kube_hunter`, if etcd port (2379) is open, full cluster compromise may be possible.
+- **Fallback:** If prowler fails (no cloud credentials), skip cloud audit and focus on container + K8s scanning.
+- **Fallback:** If trivy image not found locally, pull with `docker pull {image}` first before retrying.
 
 **Entry point:**
 

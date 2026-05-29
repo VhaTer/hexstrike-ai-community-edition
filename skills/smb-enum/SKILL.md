@@ -19,11 +19,17 @@ Use this skill in **Phase 2: Enumeration** on identified Windows hosts (ports 13
 
 **Staged enumeration minimizes detection and lockout risk:**
 
-1. **Exposure Check** — `smbmap` (null/guest access), `enum4linux -a` (full recon)
-2. **Share Access** — Test null/guest access; enumerate readable shares (information disclosure)
-3. **User Enum** — RPC users/groups; LDAP if domain-joined → handoff to `active-directory`
-4. **Cred Testing** — Only after user discovery; pair with `password-cracking` if cred list exists
-5. **Exploit Prep** — Identify services vulnerable to relay/coercion before triggering
+1. **Exposure Check** — `smbmap` (null/guest access), `enum4linux -a` (full recon) [critical, ~2-5 min]
+2. **Share Access** — Test null/guest access; enumerate readable shares (information disclosure) [high, ~2-5 min]
+3. **User Enum** — RPC users/groups; LDAP if domain-joined → handoff to `active-directory` [high, ~30-60s]
+4. **Cred Testing** — Only after user discovery; pair with `password-cracking` if cred list exists [high, ~2-10 min]
+5. **Exploit Prep** — Identify services vulnerable to relay/coercion before triggering [critical, ~30-60s]
+
+**Decision fields (aligned with smb_lateral_movement prompt):**
+- **result_context:** After `nmap --script smb-vuln-ms17-010`, check "VULNERABLE" vs "NOT VULNERABLE" — determines Path A (EternalBlue exploitation) vs Path B (credential brute-force).
+- **result_context:** After `nmap smb-security-mode`, check SMB signing status — disabled means relay attacks are viable.
+- **result_context:** After `smbmap`, check for writable shares — potential SCF/shortcut hijack vector.
+- **Fallback:** If EternalBlue patched, pivot to hydra brute-force with rockyou.txt + common usernames.
 
 **Entry point:**
 
