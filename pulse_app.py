@@ -2294,10 +2294,14 @@ def ctf_dashboard() -> PrefabApp:
     cats = cm.category_tools if hasattr(cm, "category_tools") else {}
     cats = cats or {}
     categories = sorted(cats.keys())
+    _cat_tool_list = {
+        c: [t for subs in (cats.get(c, {}) or {}).values() for t in subs]
+        for c in categories
+    }
     all_stats = _registry.get_all_stats() if hasattr(_registry, "get_all_stats") else {}
 
     cat_chart = [
-        {"category": c, "tools": len(cats.get(c, []))}
+        {"category": c, "tools": len(_cat_tool_list.get(c, []))}
         for c in categories
     ]
 
@@ -2313,7 +2317,7 @@ def ctf_dashboard() -> PrefabApp:
                     with Column(gap=2, css_class="flex-1"):
                         Muted("Categories & Tools", css_class="text-xs uppercase tracking-wider")
                         for cat in categories:
-                            tools = cats.get(cat, [])
+                            tools = _cat_tool_list.get(cat, [])
                             with Card():
                                 with CardContent(css_class="p-3"):
                                     with Row(gap=2, align="center"):
@@ -2522,7 +2526,7 @@ def recon_summary(target: str) -> PrefabApp:
 # @app.tool() — Pulse Dashboards Guide
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.tool()
+@app.tool(model=True)
 def pulse_dashboards_guide(target: str = "") -> dict:
     """Discover and use Pulse UI dashboards — CTF tracker, pentest report, recon summary."""
     url = target.rstrip("/") if target else "<target>"

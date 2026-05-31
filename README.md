@@ -1,14 +1,14 @@
 # HexStrike AI-PULSE
 
-AI-powered security orchestration engine with a live dashboard. Connect your AI agent, describe your objective, and let it orchestrate 150+ security tools — from recon to exploitation — all visible in real time.
+AI-powered security orchestration engine with live Prefab dashboards. Connect Claude Desktop, OpenCode, Continue.dev, or any MCP client — describe your objective, and let AI orchestrate 150+ security tools in real time.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)]()
-[![MCP](https://img.shields.io/badge/MCP-Compatible-purple)]()
+[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-purple)]()
 [![License](https://img.shields.io/badge/License-AGPLv3-green)]()
 
 ---
 
-## Quick Install
+## Quick start
 
 ```bash
 git clone https://github.com/VhaTer/hexstrike-ai-community-edition.git
@@ -18,7 +18,77 @@ source hexstrike-env/bin/activate
 pip install -r requirements.txt
 ```
 
-**Prerequisites:** Linux (Kali/Debian/Ubuntu), Python 3.11+, and security tools installed on your system (`nmap`, `whatweb`, `nuclei`, `nikto`, `gobuster`, `sqlmap`). Run `python3 hexstrike.py validate` to check what's available.
+**Prerequisites:** Linux (Kali/Debian/Ubuntu), Python 3.11+, and security tools installed (`nmap`, `whatweb`, `nuclei`, `nikto`, `gobuster`, `sqlmap`, …). Run `python3 hexstrike.py validate` to check availability.
+
+---
+
+## Launch
+
+Start the HTTP server — one terminal, stays up:
+
+```bash
+./hexstrike-pulse
+```
+
+| Command | What it does |
+|---------|-------------|
+| `./hexstrike-pulse` | Start HTTP server in background |
+| `./hexstrike-pulse --foreground` | Start with visible logs |
+| `./hexstrike-pulse stop` | Stop the server |
+| `./hexstrike-pulse status` | Check if running |
+| `./hexstrike-pulse --bridge` | Stdio→HTTP bridge (for Claude Desktop) |
+
+All clients connect to the same server — no conflicts, no duplicate lock files.
+
+---
+
+## Connect your AI agent
+
+### Claude Desktop (WSL/Windows)
+
+```json
+{
+  "mcpServers": {
+    "hexstrike-pulse": {
+      "command": "wsl.exe",
+      "args": ["-d", "kali-linux", "/path/to/hexstrike-ai-community-edition/hexstrike-pulse", "--bridge"]
+    }
+  }
+}
+```
+
+The `--bridge` flag runs `pulse-bridge.py` — a lightweight stdio→HTTP proxy with zero heavy imports. It connects to the already-running HTTP server instantly (~0.3s init), bypassing the 5s Python import overhead.
+
+Replace `kali-linux` with your WSL distro name and `/path/to` with the output of `pwd`.
+
+### OpenCode
+
+```json
+{
+  "mcp": {
+    "hexstrike-pulse": {
+      "type": "remote",
+      "url": "http://localhost:8888/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+### Continue.dev / Cline / any MCP client
+
+```json
+{
+  "servers": {
+    "hexstrike-pulse": {
+      "type": "streamable-http",
+      "url": "http://localhost:8888/mcp"
+    }
+  }
+}
+```
+
+All clients share the same HTTP server — openCode via remote URL, Claude Desktop via stdio bridge, Continue/Cline via direct HTTP. Zero conflicts.
 
 ---
 
@@ -26,43 +96,24 @@ pip install -r requirements.txt
 
 ### Orchestrate — let AI run the operation
 
-Start the server, connect your AI agent, and describe your objective:
-
-```bash
-python3 hexstrike_server.py
-```
-
-Then in Claude, OpenCode, or any MCP client:
+In your AI agent, describe your objective:
 
 ```
 > I'm a security researcher. My company owns scanme.nmap.org.
   Show me the attack surface and any critical vulnerabilities.
 ```
 
-The agent runs nmap, whatweb, nuclei, and nikto in sequence, analyzes results, and returns a structured report — ports, services, technologies, vulnerabilities, and recommended next steps. All cached so re-asking is instant.
+The agent runs nmap, whatweb, nuclei, and nikto in sequence, analyzes results, and returns ports, services, technologies, vulnerabilities, and recommended next steps. All cached.
 
-### Monitor — live Pulse dashboard
+### Monitor — live dashboard
 
-Open `http://127.0.0.1:8888/dashboard` while scans run. See:
-
-- Open ports and risk level as they're discovered
-- Technologies detected per target
-- Vulnerabilities found, sorted by severity
-- Tool performance and success rates
-- Cache hit rate and system resources
-
-Every scan populates the dashboard in real time. No refresh needed.
+Open `http://127.0.0.1:8888/dashboard` while scans run. See open ports, risk levels, tool performance, cache rates, and system resources in real time.
 
 ### Execute — CLI when you need direct control
 
 ```bash
-# Port scan
 python3 hexstrike.py scan nmap scanme.nmap.org
-
-# Technology detection
 python3 hexstrike.py scan whatweb http://example.com
-
-# Vulnerability scan
 python3 hexstrike.py scan nuclei http://example.com -p severity=medium
 ```
 
@@ -72,22 +123,18 @@ Full tool list: `python3 hexstrike.py tools`
 
 ## Understanding results
 
-A scan returns four sections:
-
-| Section | What it contains | Source |
-|---------|------------------|--------|
+| Section | Content | Source |
+|---------|---------|--------|
 | **Tools** | Status per tool (completed / cached / failed / skipped) | Execution |
 | **Surface** | Open ports, services, technologies, risk level | nmap + whatweb |
 | **Findings** | Vulnerabilities sorted by severity | nuclei + nikto |
-| **Plan** | Attack chain with success probability and time estimates | AI engine |
+| **Plan** | Attack chain with probability and time estimates | AI engine |
 
-### Example
+Example output:
 
 ```
 target:     scanme.nmap.org
 intensity:  medium
-tools:      nmap: completed · whatweb: completed · nuclei: completed · nikto: cached
-
 surface:    2 open ports (22/ssh, 80/http) · risk: medium
 findings:   [MEDIUM] missing-header · [INFO] python detected
 plan:       8 steps · 15m est · 74% success probability
@@ -95,74 +142,9 @@ plan:       8 steps · 15m est · 74% success probability
 
 ---
 
-## Connect your AI agent
-
-**Claude Desktop**
-```json
-{
-  "mcpServers": {
-    "hexstrike-pulse": {
-      "type": "http",
-      "url": "http://127.0.0.1:8888/mcp"
-    }
-  }
-}
-```
-
-WSL variant (Windows):
-```json
-{
-  "mcpServers": {
-    "hexstrike-pulse": {
-      "command": "wsl.exe",
-      "args": ["bash", "-ic", "cd /path/to/hexstrike && ./hexstrike-pulse"],
-      "type": "stdio"
-    }
-  }
-}
-```
-
-**OpenCode**
-```json
-{
-  "mcp": {
-    "hexstrike-pulse": {
-      "type": "remote",
-      "url": "http://127.0.0.1:8888/mcp",
-      "enabled": true
-    }
-  }
-}
-```
-
-**VS Code / Cursor / Roo Code**
-```json
-{
-  "servers": {
-    "hexstrike-pulse": {
-      "type": "http",
-      "url": "http://127.0.0.1:8888/mcp"
-    }
-  }
-}
-```
-
----
-
-## Entry points
-
-| Command | Use case |
-|---------|----------|
-| `hexstrike.py` | CLI — run tools, validate setup, list tools |
-| `hexstrike_server.py` | HTTP server + dashboard + MCP endpoint |
-| `hexstrike-pulse` | Launcher for Claude Desktop (auto-venv, lock cleanup) |
-| `hexstrike_mcp.py` | MCP stdio bridge (debug) |
-
----
-
 ## Architecture
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for a high-level overview of the data pipeline, intelligence layer, and safety model.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data pipeline, intelligence layer, and safety model.
 
 ---
 

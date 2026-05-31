@@ -1,72 +1,204 @@
 #!/bin/bash
 # =============================================================================
-# HexStrike Pulse — MCP stdio server for Claude Desktop
-# =============================================================================
+# HexStrike Pulse — unified MCP server launcher
 #
-# PREREQUISITES (one-time setup):
+# USAGE:
 #
-#   1. Python 3.11+ with venv support
-#      python3 --version
+#   ./hexstrike-pulse                Start HTTP server in background
+#   ./hexstrike-pulse --foreground   Start in foreground (logs visible)
+#   ./hexstrike-pulse --bridge       Stdio→HTTP bridge (for Claude Desktop)
+#   ./hexstrike-pulse stop           Stop the background server
+#   ./hexstrike-pulse status         Check if server is running
+#   ./hexstrike-pulse --debug        Start with debug logging
 #
-#   2. Create and activate virtual environment
-#      python3 -m venv hexstrike-env
-#      source hexstrike-env/bin/activate
+# WORKFLOW (recommended):
 #
-#   3. Install dependencies
-#      pip install -r requirements.txt
+#   Terminal 1: ./hexstrike-pulse              # start HTTP server (once)
+#   Claude Desktop: connects via --bridge mode  # instant, no import cost
+#   Opencode/Continue: http://localhost:8888/mcp # remote URL
 #
-#   4. Verify environment (optional but recommended)
-#      python3 hexstrike.py validate
+# CLAUDE DESKTOP CONFIG:
 #
-# LAUNCH:
-#
-#   ./hexstrike-pulse              MCP stdio (Claude Desktop)
-#   ./hexstrike-pulse --debug      Debug logging
-#
-# ENTRY POINTS (same project, different uses):
-#
-#   ./hexstrike-pulse              Claude Desktop — MCP stdio
-#   python3 hexstrike.py serve     Web dashboard — HTTP/SSE
-#   python3 hexstrike.py scan      Direct scan — CLI
-#   python3 hexstrike.py mcp       MCP dev mode — inspector
-#
-# CLAUDE DESKTOP CONFIG (claude_desktop_config.json):
-#
-#   {
-#     "mcpServers": {
-#       "hexstrike-pulse": {
-#         "command": "/ABSOLUTE/PATH/TO/hexstrike-pulse",
-#         "args": ["--debug"]
-#       }
+#   { "mcpServers": {
+#     "hexstrike-pulse": {
+#       "command": "wsl.exe",
+#       "args": ["-d", "kali-linux", "/abs/path/hexstrike-pulse", "--bridge"]
 #     }
-#   }
+#   }}
 #
-#   Replace /ABSOLUTE/PATH/TO with the output of: pwd
-#   Example: /home/user/hexstrike-ai-community-edition/hexstrike-pulse
+#   Replace: kali-linux → your distro, /abs/path → pwd output.
 #
-# RESTART (do NOT run ./hexstrike-pulse manually — kills Claude's MCP process):
+# OPENCODE CONFIG:
 #
-#   pkill -f hexstrike_mcp.py && rm -f /tmp/hexstrike_mcp.lock
-#   then restart Claude Desktop — it launches its own MCP process
+#   { "mcp": { "hexstrike-pulse": { "type": "remote", "url": "http://localhost:8888/mcp" } } }
 #
+# All clients share the same HTTP server — no lock conflicts, instant startup.
 # =============================================================================
-
-# Isolate stdout: WSL boot messages, .bashrc, or any shell output on stdout
-# would break the MCP JSON-RPC protocol. All bash output → stderr, only
-# Python's JSON-RPC → original stdout (fd 3).
-exec 3>&1
-exec 1>&2
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIDFILE="/tmp/hexstrike-pulse.pid"
+PORT=8888
+HOST="0.0.0.0"
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+_wsl_detect() {
+    case "$(uname -r)" in
+        *[Mm]icrosoft*) return 0 ;;
+        *[Ww]sl*)      return 0 ;;
+        *)             return 1 ;;
+    esac
+}
+
+_wsl_ip() {
+    hostname -I 2>/dev/null | awk '{print $1}'
+}
+
+_pid_alive() {
+    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+}
+
+_port_listening() {
+    ss -tlnp 2>/dev/null | grep -q ":$PORT "
+}
+
+_print_connection_info() {
+    local ip
+    echo ""
+    echo "  ⚡ HexStrike Pulse — HTTP server running on http://${HOST}:${PORT}/mcp"
+    echo ""
+    echo "  ── Client configuration ──"
+    echo ""
+    echo "  Claude Desktop → http://localhost:${PORT}/mcp"
+    echo "  Opencode       → type: remote, url: http://localhost:${PORT}/mcp"
+    if _wsl_detect; then
+        ip="$(_wsl_ip)"
+        if [ -n "$ip" ]; then
+            echo ""
+            echo "  ── WSL detected ──"
+            echo "  From Windows, if localhost fails, try:"
+            echo "  http://${ip}:${PORT}/mcp"
+        fi
+    fi
+    echo ""
+    echo "  ── Commands ──"
+    echo "  ./hexstrike-pulse stop       Stop server"
+    echo "  ./hexstrike-pulse status     Check status"
+    echo "  ./hexstrike-pulse --foreground  Foreground with logs"
+    echo ""
+}
+
+_ensure_venv() {
+    if [ -f "$SCRIPT_DIR/hexstrike-env/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        source "$SCRIPT_DIR/hexstrike-env/bin/activate"
+    fi
+}
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+cmd_stop() {
+    if [ -f "$PIDFILE" ]; then
+        local pid
+        pid=$(cat "$PIDFILE" 2>/dev/null)
+        if kill "$pid" 2>/dev/null; then
+            echo "✅ Pulse server (PID $pid) stopped."
+        else
+            echo "⚠️  No process found for PID $pid — removing stale PID file."
+        fi
+        rm -f "$PIDFILE"
+    else
+        echo "ℹ️  No PID file — server not running (or crashed)."
+        if _port_listening; then
+            echo "   Port $PORT is still in use. Kill manually: fuser -k $PORT/tcp"
+        fi
+    fi
+    rm -f /tmp/hexstrike_mcp.lock
+}
+
+cmd_status() {
+    if _pid_alive; then
+        local pid
+        pid=$(cat "$PIDFILE")
+        echo "✅ Pulse server running (PID $pid, port $PORT)"
+        _print_connection_info
+        return 0
+    fi
+    if _port_listening; then
+        echo "⚠️  Port $PORT is in use but no PID file — stale server from another session?"
+        echo "   Run './hexstrike-pulse stop' to clean up."
+    else
+        echo "❌ Pulse server not running."
+    fi
+    return 1
+}
+
+cmd_stdio() {
+    cd "$SCRIPT_DIR" || exit 1
+    _ensure_venv
+    exec python3 -u hexstrike_mcp.py "$@"
+}
+
+cmd_bridge() {
+    # stdio→HTTP bridge — requires HTTP server to be running
+    cd "$SCRIPT_DIR" || exit 1
+    _ensure_venv
+    exec python3 -u pulse-bridge.py "$@"
+}
+
+cmd_foreground() {
+    cd "$SCRIPT_DIR" || exit 1
+    _ensure_venv
+    echo "🔵 Pulse HTTP server — foreground (Ctrl+C to stop)"
+    echo ""
+    exec python3 hexstrike_mcp.py --transport http --host "$HOST" --port "$PORT" "$@"
+}
+
+cmd_background() {
+    cd "$SCRIPT_DIR" || exit 1
+    _ensure_venv
+
+    # Build args: always add HTTP transport unless user overrides
+    local args="--transport http --host $HOST --port $PORT $*"
+
+    nohup python3 hexstrike_mcp.py $args > /tmp/pulse-http.log 2>&1 &
+    local pid=$!
+    echo "$pid" > "$PIDFILE"
+
+    # Wait for port to be ready (up to 8 seconds)
+    local waited=0
+    while [ $waited -lt 8 ]; do
+        if _port_listening; then
+            _print_connection_info
+            echo "  PID $pid — log: tail -f /tmp/pulse-http.log"
+            echo ""
+            exit 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    echo "⚠️  Server started but port $PORT not yet listening — check log:"
+    echo "   tail -20 /tmp/pulse-http.log"
+    exit 1
+}
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
+
 cd "$SCRIPT_DIR" || exit 1
 
-# Auto-activate venv
-if [ -f hexstrike-env/bin/activate ]; then
-    # shellcheck disable=SC1091
-    source hexstrike-env/bin/activate
-fi
-
-# Lock handled by _acquire_lock() in mcp_entry.py (fcntl + PID combo).
-# The launcher does NOT touch the lock file — prevents race with Python process.
-
-exec python3 hexstrike_mcp.py "$@" 1>&3
+case "${1:-}" in
+    stop)       shift; cmd_stop "$@" ;;
+    status)     shift; cmd_status "$@" ;;
+    --stdio)    shift; cmd_stdio "$@" ;;
+    --bridge)   shift; cmd_bridge "$@" ;;
+    --foreground|-f) shift; cmd_foreground "$@" ;;
+    *)
+        if [ -f "$PIDFILE" ] && _port_listening; then
+            echo "⚠️  Server already running (PID $(cat "$PIDFILE"))."
+            cmd_status
+            exit 0
+        fi
+        cmd_background "$@"
+        ;;
+esac

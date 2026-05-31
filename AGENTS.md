@@ -557,3 +557,22 @@ State dict : 85→49 (−42%), Rx : 64→30 (−53%)
 NOTE S69 : authenticate() retiré car business logic déguisée en tool.
 Principe : le LLM orchestre via primitives MCP, le code ne fait pas le travail du LLM.
 http_request (primitive curl, wrapper execute_command) remplace le besoin sans introduire de logique métier.
+
+## Session 70 — 2026-05-31 (Bridge notification fix + multi-client HTTP arch)
+
+- **Bug fix — bridge responds to notifications** : `pulse_bridge.py` envoyait `{"id": null, "result": {}}` pour `notifications/initialized` (no id). Claude Desktop rejetait avec `invalid_union` (id ni string ni number). Fix : `is_notification = req.get("id") is None` → skip response.
+- **SSE parser rewrite** : split on `\n\n` (SSE event boundary) instead of per-line. Gère multi-line data values correctement.
+- **Persistent HTTPConnection** : `http.client.HTTPConnection` avec keep-alive + auto-retry sur connexion stale. Supprime urllib (fresh connection chaque requête → plus fiable).
+- **Claude Desktop config** : `wsl.exe -d kali-linux -e python3 -u pulse-bridge.py` — bash retiré, Python direct via `-e`. Évite shell interposition, startup messages, shebang processing.
+- **Bridge init time**: 0.3s vs 5s (stdlib only, pas de venv, pas de fastmcp).
+- **Architecture multi-client** : 1 HTTP server (`:8888`), opencode/Continue/Cline en remote URL, Claude Desktop via --bridge. Zéro conflit lock.
+- **Server sur 127.0.0.1:8888** (pas 0.0.0.0). Bridge connecte depuis WSL → ça marche. opencode depuis WSL → aussi.
+- **opencode.json** : `type: "remote"`, `url: http://localhost:8888/mcp` (nécessite restart).
+- **Tests**: 4/4 bridge (init, notification, tools/list, ping). 96/96 pulse_app. 2915+ full suite.
+
+## Session 71 — 2026-06-01 (Bridge config fix + validation stats)
+
+- **Bug fix — Claude Desktop config non prise en compte** : l'édition de `claude_desktop_config.json` via `/mnt/c/` n'était pas lue tant que Claude Desktop n'était pas restart. Confirmed : après restart, les nouveaux args `wsl.exe -e python3 -u pulse-bridge.py` sont chargés.
+- **search_tools fonctionnel** : les résultats sont dans `content[0].text` (wrap_result), pas dans `result.result`. `search_tools("ctf")` → 7 tools dont `ctf_dashboard`. `search_tools("dashboard")` → 3 tools.
+- **ctf_dashboard Prefab UI validé** : return StructuredContent avec 7 catégories, Icon swords, Badge, BarChart. Appelable via `call_tool("ctf_dashboard", {})`.
+- **Validation tools vs DVWA (RPI 192.168.1.165)** : 7/162 tools testés sur cible réelle (nmap, whatweb, nuclei, nikto, gobuster, sqlmap, dalfox). 90 disponibles, 41 manquants, 31 Pulse App. 132 jamais testés — majorité inapplicable à DVWA (WiFi/AD/cloud/forensics). Besoin d'un lab multi-cible pour couvrir plus.
