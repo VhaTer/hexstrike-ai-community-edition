@@ -28,6 +28,7 @@ from mcp_core.prompts import (
     cloud_security_audit,
     ctf_challenge,
     ctf_web_challenge,
+    pulse_dashboards,
     register_prompts,
     smb_lateral_movement,
     wifi_attack_chain,
@@ -428,3 +429,36 @@ class TestCtfPrompts:
 
         combined = " ".join(str(m) for m in messages)
         assert "http://10.0.0.1/" in combined or '"target": "http://10.0.0.1/"' in combined
+
+
+class TestPulseDashboards:
+    """pulse_dashboards prompt — discovers CTF/pentest/recon UI entry points."""
+
+    def test_single_user_message(self):
+        result = run(pulse_dashboards(target="http://192.168.1.165/DVWA/"))
+        assert len(result) == 1
+        assert result[0].role == "user"
+
+    def test_description_contains_expected_terms(self):
+        result = run(pulse_dashboards(target="http://192.168.1.165/DVWA/"))
+        desc = str(result[0]).lower()
+        assert "ctf" in desc
+        assert "pentest" in desc
+        assert "recon" in desc
+
+    def test_mentions_call_tool(self):
+        result = run(pulse_dashboards(target="test.local"))
+        desc = str(result[0])
+        assert "call_tool" in desc
+
+    def test_includes_target_in_output(self):
+        result = run(pulse_dashboards(target="http://target.test"))
+        assert "http://target.test" in str(result[0])
+
+    def test_empty_target_placeholder(self):
+        result = run(pulse_dashboards())
+        assert "<target>" in str(result[0])
+
+    def test_meta_present(self):
+        result = run(pulse_dashboards(target="x"))
+        assert len(result) == 1

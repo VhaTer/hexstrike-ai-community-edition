@@ -661,6 +661,96 @@ async def ctf_challenge(
     return messages
 
 
+async def authenticated_web_workflow(target: str = "") -> PromptResult:
+    """
+    Authenticated web application testing workflow.
+    Use when a target has a login form requiring authentication
+    before accessing protected functionality.
+    
+    Teaches the LLM to: discover http_request → GET login form → extract CSRF token
+    → POST credentials → capture session cookie → authenticated scanning.
+    """
+    url = target.rstrip("/") if target else "<target>"
+    text = f"""## Authenticated Web Testing Workflow
+
+Target: {url}
+
+This target requires authentication before protected pages are accessible.
+Follow these steps using the MCP tools provided:
+
+### Step 1 — Discover the HTTP client
+Call `search_tools("http post form cookie")` to find the `http_request` tool.
+*http_request is a generic HTTP client that returns structured responses with status_code, headers, cookies, and body.*
+
+### Step 2 — GET the login form
+Call `call_tool("http_request", method="GET", url="{url}/login.php")`
+→ Look for hidden CSRF token in the body: `<input.*?name=['"]user_token['"].*?value=['"](.*?)['"]`
+→ Capture Set-Cookie from the cookies field of the response
+
+### Step 3 — POST credentials
+Call `call_tool("http_request", method="POST", url="{url}/login.php", data="username=...&password=...&user_token=...&Login=Login", cookie="PHPSESSID=...")`
+→ `ok: true` with a `302` redirect = login successful
+→ Capture the new session cookie for authenticated requests
+
+### Step 4 — Authenticated scanning
+Use `scan()` or individual tools with the captured cookie:
+- `call_tool("run_security_tool", tool_name="sqlmap", parameters={{"url": "...", "cookie": "PHPSESSID=..."}})`
+- `call_tool("run_security_tool", tool_name="dalfox", url="...", cookie="PHPSESSID=...")`
+
+### Key patterns
+- CSRF tokens: regex from body for hidden input values
+- Set `follow_redirects=false` to detect 302 redirect chains
+- Forward cookies between calls: take from cookies dict → pass as cookie parameter
+- Default credentials to try: admin:password, admin:admin, root:root"""
+    return PromptResult(
+        messages=[Message(text, role="user")],
+        description="Authenticated web testing — login → session → exploit",
+        meta={"version": "0.10.1"},
+    )
+
+
+async def pulse_dashboards(target: str = "") -> PromptResult:
+    """
+    Test all Pulse UI dashboards in sequence — validates ctf_dashboard(),
+    pentest_report(), and recon_summary() UI entry points.
+    Use after deploying new Prefab components to confirm no rendering errors.
+    """
+    url = target.rstrip("/") if target else "<target>"
+    text = f"""## Pulse Dashboards — Validation Run
+
+Target: {url}
+
+Call all 3 dashboards below using `call_tool()` to validate UI rendering.
+Execute them in order and confirm each one returns a visual app with no errors.
+
+### 1 — recon_summary(target)
+`call_tool("recon_summary", target="{url}")`
+→ Expect: port Table (status/service/version), tech Badges (Badge per technology), DataTable with cache + history
+→ Look for: icons, colored badges, table rows
+
+### 2 — pentest_report(target)
+`call_tool("pentest_report", target="{url}")`
+→ Expect: findings grouped by severity in Accordion panels (expandable), Code blocks with exploit payloads, port Table
+→ Look for: Accordion with clickable items, Syntax highlighted code
+
+### 3 — ctf_dashboard()
+`call_tool("ctf_dashboard")`
+→ Expect: category cards (web/crypto/pwn/etc) with tool counts, BarChart coverage, Alert if no active CTF challenges
+→ Look for: BarChart bars, Alert box, Badge counts
+
+### Validation checklist
+- Each returns a structured visual PrefabApp (not raw JSON or plain text)
+- No pydantic validation errors (e.g. Icon(size="md") would crash)
+- Icons render: shield, swords, compass
+- DataTables have header columns and data rows
+- No bare `except Exception: pass` — errors must be logged"""
+    return PromptResult(
+        messages=[Message(text, role="user")],
+        description="Pulse dashboards — validate all 3 UI entry points",
+        meta={"version": "0.10.1"},
+    )
+
+
 # ── Registration ────────────────────────────────────────────────────────
 
 
@@ -696,3 +786,13 @@ def register_prompts(mcp: FastMCP) -> None:
         title="CTF Challenge (Universal)",
         tags={"ctf", "universal"},
     )(ctf_challenge)
+    mcp.prompt(
+        name="authenticated_web_workflow",
+        title="Authenticated Web Testing",
+        tags={"web", "auth", "login", "session"},
+    )(authenticated_web_workflow)
+    mcp.prompt(
+        name="pulse_dashboards",
+        title="Pulse UI Dashboards",
+        tags={"dashboard", "ctf", "pentest", "recon", "ui"},
+    )(pulse_dashboards)

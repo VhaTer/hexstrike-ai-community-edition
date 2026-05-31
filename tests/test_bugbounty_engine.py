@@ -57,6 +57,19 @@ def mock_bb_mgr():
     return mgr
 
 
+def _mock_direct_tools(results_map=None):
+    """Build mock DIRECT_TOOLS — _run_tool calls exec_func(tool_key, params) via run_in_executor."""
+    if results_map is None:
+        results_map = {}
+    default = {"success": True, "output": "mock output"}
+    def _make_exec(result):
+        def _exec(tool, params):
+            return {**result, "tool": tool}
+        return _exec
+    all_tools = list(results_map.keys()) or ["nmap", "gobuster", "ffuf"]
+    return {t: (_make_exec(results_map.get(t, default)), t) for t in all_tools}
+
+
 # ---------------------------------------------------------------------------
 # Test _execute_bb_phase()
 # ---------------------------------------------------------------------------
@@ -83,12 +96,11 @@ class TestExecuteBbPhase:
     @pytest.mark.asyncio
     async def test_executable_tools_run(self, mock_ctx):
         from mcp_core.bugbounty_engine import _execute_bb_phase
-        async def fake_run(ctx, tool_name, parameters):
-            return {"success": True, "output": "scan results"}
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
-        with patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+        with patch("mcp_core.server_setup.get_direct_tools",
+                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "scan results"}})):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
 
         assert "nmap" in result["tools_executed"]
@@ -97,12 +109,11 @@ class TestExecuteBbPhase:
     @pytest.mark.asyncio
     async def test_tool_failure_skipped(self, mock_ctx):
         from mcp_core.bugbounty_engine import _execute_bb_phase
-        async def fake_run(ctx, tool_name, parameters):
-            return {"success": False, "error": "timeout"}
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
-        with patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+        with patch("mcp_core.server_setup.get_direct_tools",
+                   return_value=_mock_direct_tools({"nmap": {"success": False, "error": "timeout"}})):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
 
         assert "nmap" in result["tools_skipped"]
@@ -111,12 +122,13 @@ class TestExecuteBbPhase:
     @pytest.mark.asyncio
     async def test_exception_during_tool_caught(self, mock_ctx):
         from mcp_core.bugbounty_engine import _execute_bb_phase
-        async def fake_run(ctx, tool_name, parameters):
+        def _crash_exec(tool, params):
             raise RuntimeError("crashed")
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
-        with patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+        with patch("mcp_core.server_setup.get_direct_tools",
+                   return_value={"nmap": (_crash_exec, "nmap")}):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
 
         assert result["success"] is False
@@ -124,8 +136,6 @@ class TestExecuteBbPhase:
     @pytest.mark.asyncio
     async def test_mixed_tools(self, mock_ctx):
         from mcp_core.bugbounty_engine import _execute_bb_phase
-        async def fake_run(ctx, tool_name, parameters):
-            return {"success": True, "output": "ok"}
         phase = {"name": "mixed", "description": "Mixed",
                  "tools": [
                      {"tool": "nmap", "params": {}},
@@ -133,7 +143,9 @@ class TestExecuteBbPhase:
                      {"tool": "gobuster", "params": {}},
                  ]}
 
-        with patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+        with patch("mcp_core.server_setup.get_direct_tools",
+                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "ok"},
+                                                     "gobuster": {"success": True, "output": "ok"}})):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
 
         assert "nmap" in result["tools_executed"]
@@ -204,12 +216,10 @@ class TestBbRecon:
         from mcp_core.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        async def fake_run(ctx, tool_name, parameters):
-            return {"success": True, "output": "ok"}
-
         with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
-             patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+             patch("mcp_core.server_setup.get_direct_tools",
+                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "ok"}})):
             tool = await mcp.get_tool("bb_recon")
             result = await tool.fn(domain="example.com", dry_run=False)
 
@@ -345,12 +355,10 @@ class TestBbFull:
         from mcp_core.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        async def fake_run(ctx, tool_name, parameters):
-            return {"success": True, "output": "ok"}
-
         with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
-             patch("mcp_core.server_setup.run_security_tool", fake_run, create=True):
+             patch("mcp_core.server_setup.get_direct_tools",
+                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "ok"}})):
             tool = await mcp.get_tool("bb_full")
             result = await tool.fn(domain="example.com", dry_run=False)
 

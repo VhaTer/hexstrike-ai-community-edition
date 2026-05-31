@@ -1198,13 +1198,13 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.88,
     },
     'http-framework': {
-        "desc": 'HTTP/S request tool — manual probing and PoC verification',
-        "endpoint": '/api/tools/http-framework',
+        "desc": 'HTTP request client — GET/POST form login, cookie capture (Set-Cookie parsed automatically)',
+        "endpoint": '',
         "method": 'POST',
         "category": 'api',
         "params": {'url': {'required': True}},
-        "optional": {'method': 'GET', 'data': '', 'headers': '', 'action': 'request', 'cookies': ''},
-        "effectiveness": 0.75,
+        "optional": {'method': 'GET', 'data': '', 'headers': '', 'cookie': '', 'follow_redirects': True, 'max_body_size': 5000},
+        "effectiveness": 0.85,
     },
     'api_fuzzer': {
         "desc": 'Custom API fuzzer for parameter and endpoint fuzzing.',

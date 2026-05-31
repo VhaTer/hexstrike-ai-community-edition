@@ -16,6 +16,7 @@ import base64
 import json
 import os
 import sqlite3
+import tempfile
 from typing import Any, Dict
 
 import pymysql
@@ -663,6 +664,89 @@ def _scalpel(data: dict) -> dict:
     return execute_command(command)
 
 
+def _http_request(data: dict) -> dict:
+    """Generic HTTP request (wraps curl). Returns structured response."""
+    url = data.get("url", "")
+    if not url:
+        return {"success": False, "error": "url is required"}
+
+    method = data.get("method", "GET").upper()
+    post_data = data.get("data", "")
+    cookie = data.get("cookie", "")
+    headers_raw = data.get("headers", "")
+    follow = data.get("follow_redirects", True)
+    max_body = data.get("max_body_size", 5000)
+    additional_args = data.get("additional_args", "")
+
+    hf = tempfile.NamedTemporaryFile(delete=False, suffix=".hdr")
+    hf_path = hf.name; hf.close()
+    bf = tempfile.NamedTemporaryFile(delete=False, suffix=".bdy")
+    bf_path = bf.name; bf.close()
+    try:
+        cmd = "curl -s -L" if follow else "curl -s"
+        cmd += f" -X {method} -D '{hf_path}' -o '{bf_path}' --write-out '%{{http_code}}'"
+        if cookie:
+            cmd += f" --cookie '{cookie}'"
+        for h in headers_raw.split(";"):
+            h = h.strip()
+            if h:
+                cmd += f" -H '{h}'"
+        if post_data:
+            cmd += f" --data-raw '{post_data}'"
+        cmd += f" '{url}'"
+        if additional_args:
+            cmd += f" {additional_args}"
+
+        result = execute_command(cmd, timeout=30)
+        out = result.get("stdout") or ""
+        status_code = int(out.strip()) if out.strip().isdigit() else 0
+
+        hdr_text, body = "", ""
+        try:
+            with open(hf_path) as f:
+                hdr_text = f.read()
+            with open(bf_path) as f:
+                body = f.read()
+        except Exception:
+            pass
+
+        cookies = {}
+        for line in hdr_text.splitlines():
+            if line.lower().startswith("set-cookie:"):
+                val = line.split(":", 1)[1].strip()
+                eq = val.find("=")
+                semi = val.find(";") if eq > 0 else -1
+                n = val[:eq].strip() if eq > 0 else ""
+                v = val[eq + 1:semi] if semi > eq else (val[eq + 1:] if eq > 0 else "")
+                if n:
+                    cookies[n] = v
+
+        parsed_hdrs = {}
+        for line in hdr_text.splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                parsed_hdrs[k.strip()] = v.strip()
+
+        truncated = len(body) > max_body
+        return {
+            "success": status_code > 0,
+            "status_code": status_code,
+            "ok": 200 <= status_code < 300,
+            "headers": parsed_hdrs,
+            "cookies": cookies,
+            "body": body[:max_body],
+            "body_truncated": truncated,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        for p in (hf_path, bf_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -693,6 +777,7 @@ _HANDLERS = {
     "sqlite":              _sqlite,
 
     # api_scan
+    "http_request":        _http_request,
     "api_schema_analyzer": _api_schema_analyzer,
     "graphql_scanner":     _graphql_scanner,
     "jwt_analyzer":        _jwt_analyzer,

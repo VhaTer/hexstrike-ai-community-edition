@@ -264,13 +264,13 @@ class TestPipelineFindings:
     """Full pipeline: cache → get_findings() → TargetStore."""
 
     def test_parses_nuclei_and_nikto_findings(self, mock_cache):
-        """get_findings() merges nuclei + nikto, sorted by severity."""
+        """get_findings() merges nuclei + nikto, sorted by layer2.score descending."""
         mock_cache.update(_full_cache())
         findings = pulse_app.get_findings(target=TARGET)
         assert len(findings) > 0
 
-        sorted_findings = sorted(findings, key=_severity_sort_key)
-        assert [f["severity"] for f in findings] == [f["severity"] for f in sorted_findings]
+        scores = [f.get("layer2", {}).get("score", 0) for f in findings]
+        assert scores == sorted(scores, reverse=True)
 
     def test_nuclei_findings_have_correct_structure(self, mock_cache):
         """Each nuclei finding has tool, severity, finding, details."""
@@ -442,7 +442,7 @@ class TestPipelineDvwa:
         assert "next_suggested_tool" in result
         suggestion = result["next_suggested_tool"]
         assert suggestion["tool"] == "sqlmap"
-        assert "SQL" in suggestion.get("reason", "")
+        assert "sql" in suggestion.get("reason", "").lower()
 
     def test_dvwa_target_store_persists(self, mock_dvwa_direct_tools, mock_cache):
         """TargetStore populated from DVWA fixtures persists correctly via scan()."""

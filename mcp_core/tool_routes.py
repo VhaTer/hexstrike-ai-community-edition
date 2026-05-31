@@ -128,6 +128,7 @@ TOOL_ROUTES = {
     "scalpel":           ("mcp_core.misc_direct", "misc_exec", "scalpel"),
     "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
     "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
+    "http_request":      ("mcp_core.misc_direct", "misc_exec", "curl"),
     # web_probe
     "whatweb":           ("mcp_core.web_probe_direct", "web_probe_exec", "whatweb"),
     "commix":            ("mcp_core.web_probe_direct", "web_probe_exec", "commix"),

@@ -131,6 +131,18 @@ class _ScanCache(_AdvancedCache):
 _scan_cache = _ScanCache(max_size=500, default_ttl=1800)
 _server_start_time = time.time()
 _optimizer    = ParameterOptimizer()
+
+# Per-tool subprocess timeouts (seconds) — used by scan_background() and scan()
+# Each value should be realistic for the tool: nmap ~60s, nikto/sqlmap ~480s.
+# opencode MCP timeout (600s) > per-tool max > EnhancedCommandExecutor internal timeout (COMMAND_TIMEOUT=300s)
+TOOL_TIMEOUTS: dict[str, int] = {
+    "nmap": 60,
+    "whatweb": 30,
+    "nikto": 480,
+    "sqlmap": 480,
+    "gobuster": 300,
+    "nuclei": 180,
+}
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
 _rate_limit_events: list[dict] = []  # appended by run_security_tool on detection
@@ -457,6 +469,7 @@ _TOOL_REGISTRY_ALIASES = {
     "one_gadget": "one-gadget",
     "theharvester": "theHarvester",
     "wifite2": "wifite",
+    "http_request": "http-framework",
 }
 
 
@@ -924,6 +937,14 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
             "Filter output for endpoints with query parameters or interesting paths.",
         ],
     },
+    "http_request": {
+        "workflow": "Generic HTTP client. Use for GET/POST/PUT/DELETE requests, form login, API probing, cookie capture. Returns structured response with status_code, headers, cookies, and body.",
+        "example": "http_request(method='GET', url='http://target/login.php') then http_request(method='POST', url='http://target/login.php', data='username=admin&password=admin')",
+        "returns": [
+            "dict — success (bool), status_code (int), ok (bool, 2xx), headers (dict), cookies (dict), body (str), body_truncated (bool).",
+            "Cookies from Set-Cookie are parsed into the cookies dict automatically.",
+        ],
+    },
 }
 
 
@@ -1342,7 +1363,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
         loop = asyncio.get_running_loop()
         future = asyncio.ensure_future(
-            loop.run_in_executor(None, lambda: exec_func(tool_key, params))
+            loop.run_in_executor(None, lambda: exec_func(tool_name.lower(), params))
         )
 
         try:
@@ -2116,15 +2137,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         tool_results: Dict[str, Any] = {}
         total = len(tools_to_run)
 
-        TOOL_TIMEOUTS: dict[str, int] = {
-            "nmap": 60,
-            "whatweb": 30,
-            "nikto": 480,
-            "sqlmap": 480,
-            "gobuster": 300,
-            "nuclei": 180,
-        }
-
         loop = asyncio.get_running_loop()
 
         await ctx.info(f"🎯 Scan {intensity} starting on {resolved} ({total} tools)")
@@ -2173,6 +2185,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             elif tool_name in _TOOLS_NEED_HOST:
                 host = urlparse(resolved).hostname or resolved
                 params = {"target": host, "scan_type": "-sTV"}
+
+            # Apply parameter optimizer for tool-level tuning (--timeout, threads, additional_args)
+            # Additive only — caller_keys protected, never overrides scan() built params
+            params = _optimizer.optimize(tool_name, params)
 
             await ctx.info(f"🔨 Running {tool_name} on {resolved}")
             tool_timeout = TOOL_TIMEOUTS.get(tool_name, 180)

@@ -1,5 +1,11 @@
 # HexStrike AI-PULSE — Agent Guide
 
+## Règles avant tout nouvel ajout
+
+1. Grep registry + TOOL_ROUTES + commentaires `"not ported"` avant de créer quoi que ce soit
+2. Tool dans registry mais mort → ressusciter (alias ou handler) sous le nom existant
+3. Tool vraiment absent → documenter POURQUOI les 160 existants ne suffisent pas avant de coder
+
 ## Setup
 
 ```bash
@@ -254,12 +260,14 @@ python -m pytest tests/test_rpi.py -m rpi -v --tb=short                         
 ## Session 46 — 2026-05-19 (Dead state + Rx cleanup — 2 passes)
 
 Pass 1:
+
 - **17 Rx declarations supprimées** : UPTIME, RAM, STATUS, STATUS_VARIANT, SURFACE_TARGET/PORTS/TECHS, PORTS_COUNT, RECENT_SCANS, ERR_TOOL/TIMEOUTS/SLOWEST/TYPE/RECENT, CACHE_HIT_RATE, PERF_TIMEOUTS/SUM
 - **16 alias `rx_*`** associés supprimés
 - **34 state keys mortes** retirées de PrefabApp(state={...})
 - **3 assignations locales mortes** dans `pulse_dashboard()` : `sys`, `rl_events_table`, `target_profile`
 
 Pass 2 :
+
 - **18 Rx redondantes** (inline dans le template déjà) : ACTIVE_PROCS/WORK/QUEUE, CACHE_HITS/MISS/RATIO/SIZE/MAX/UTIL/TOOL, AS_RUNNING/COMPLETE, PLAN_STEPS, PERF_DATA, FINDINGS, HISTORY, INTELLIGENCE, CACHE_HIT_RATE
 - **16 alias `rx_*`** supplémentaires
 - **2 locals mortes** : `ops`, `cache_hit_display`
@@ -288,12 +296,14 @@ State dict : 85→49 (−42%), Rx : 64→30 (−53%)
 ### Couche 3 — `next_suggested_tool` dans les réponses
 
 **Exec tools (130+) :** `_suggest_next_tool(tool_name, output, target)` dans `server_setup.py`, injectée dans `finalize()` au moment du `_normalize_tool_result()`. Règles basées sur output parsing :
+
 - nmap port 80/443 → whatweb, port 445 → smbmap, port 22 → hydra, DB ports → sqlmap
 - whatweb → WordPress → wpscan, Joomla → joomscan, Drupal → nuclei, générique → gobuster
 - nuclei/nikto → SQLi → sqlmap, XSS → dalfox, SSL → testssl, SMB/EternalBlue → metasploit
 - Autres catégories : gobuster→nuclei, hydra→metasploit, smbmap→hydra/metasploit
 
 **App tools (pulse_app) :** `_suggest_next_from_context(surface, findings)` dans `pulse_app.py`. Règles basées sur données structurées (ports, services, technologies, sévérité des findings) :
+
 - `scan()` → `next_suggested_tool` dans le return
 - `get_surface()` → `next_suggested_tool` dans le return
 - `_collect_dashboard_state()` → `next_suggested_tool` dans le pipeline
@@ -486,3 +496,64 @@ State dict : 85→49 (−42%), Rx : 64→30 (−53%)
 - **cloud_security_audit** enrichi : 3 steps (prowler 30-60min, trivy 2-10min, kube_hunter 5-20min). Fallbacks : pas de creds → skip cloud audit, image not found → docker pull, K8s inaccessible → trivy config scan. Default image nginx:latest, custom image via target_image. K8s via k8s_api_ip.
 - **Tests** : 27/27 test_prompts, 88/88 test_pulse_app, 34/34 test_exploit_rules — 0 regressions.
 - Bloc A (PromptResult meta/tags) next — spike FastMCP 3.2.4 PromptResult compatibilité.
+
+## Session 64 — 2026-05-29 (get_findings() enrichit Layer 2 + word-boundary fix)
+
+- **get_findings() enrichit Layer 2 maintenant** : `suggest_exploit` + `compute_layer2_score` appelés dans `get_findings()`, plus dans `scan()`. Tous les consommateurs (dashboard, scan, get_live_dashboard) bénéficient automatiquement. Boucle d'enrichissement dédiée supprimée de `scan()` — plus de duplication.
+- **DataTable Findings** : colonne **Score** (2 décimales avec le layer2 score, `—` si 0).
+- **Sort par layer2.score descendant** dans `get_findings()` — score=0 en bas de liste.
+- **2 tests mis à jour** : `test_findings_sorted_by_score` + `test_parses_nuclei_and_nikto_findings` vérifient maintenant le tri par score.
+- **Word-boundary fix** : `KEYWORD_TO_TOOL` matching passe de `in lower_combined` à `re.search(rf"\b...\b", lower_combined)`. Fixe le faux positif `RFI`→`metasploit` sur "Dockerfile" (sous-chaîne "rfi" dans "dockerfile"). 6 nouveaux tests `TestKeywordWordBoundaries` : RFI/XSS/SQLi/SMB standalone matchent encore, Dockerfile ne matche plus.
+- **RPI validation** : `scan(http://192.168.1.165/DVWA/, intensity=full)` — 3 findings réels avec Layer 2 scores (0.357, 0.25, 0.15/0.21). Nikto timeout (300s COMMAND_TIMEOUT insuffisant pour nikto sur cible réelle). 14/14 RPI tests pass (6min 57s).
+- **Découverte** : `_populate_direct_tools()` obligatoire hors contexte MCP. Faiblesse connue — nikto a besoin de >300s.
+- 55 tests (49 exploit_rules + 6 word-boundary), 203 core pass, 0 regressions.
+
+## Session 65 — 2026-05-29 (Score-aware next_suggested_tool + word-boundary fix)
+
+- **`_suggest_next_from_context()`** repensée : le signal primaire est maintenant `layer2.score`.
+  - Trouve le finding avec le plus haut score ≥ 0.3 + exploit tool → propose CE tool (pas metasploit par défaut).
+  - Priorité : score ≥ 0.5 → critical, ≥ 0.3 → high.
+  - `has_any_score` gate : quand des scores Layer 2 sont présents, le fallback sévérité brute (`has_critical → metasploit`) est ignoré — évite de suggérer metasploit pour un critical à score 0.2.
+  - Fallback surface-based inchangé quand zéro findings ou aucun score ≥ 0.3.
+- **8 tests `TestSuggestedNextTool`** : high/medium score, multi-findings picks highest, score sans exploit → surface, critical/0.2 bloque metasploit, zéro findings, zéro ports.
+- **1 test pipeline corrigé** : assert `"sql" in reason.lower()` au lieu de `"SQL" in reason`.
+- **Word-boundary fix** déplacé ici (S64 contenait la validation RPI + word-boundary, S65 finalise le tout).
+- 187 tests core pass, 0 regressions.
+
+## Session 66 — 2026-05-29 (3 fixes pipeline + validation RPI complète)
+
+- **Fix 1 — Password leak → hydra** : `DETAIL_PATTERNS` ajouté `password=|username=admin|credentials?=` → hydra/high. Le finding nuclei `[critical] [http] [password="password",username="admin"]` a maintenant `exploit: {tool: hydra, confidence: high}`.
+- **Fix 2 — Manual → meilleur match actionable** : `_suggest_next_from_context()` track maintenant `top_actionable` (tool ≠ "manual") en parallèle de `top_finding`. Si le best score a tool="manual", descend au suivant avec un tool actionnable.
+- **Fix 3 — Nikto timeout** : `_nikto()` passe `timeout=480` à `execute_command()` au lieu du défaut 300s. Nikto complète maintenant sur RPI réel.
+- **Validation RPI pipeline complet** : `scan(http://192.168.1.165/DVWA/, full)` — 5/5 tools ok (nikto réussi), 3 findings enrichis score-descendant, `next_suggested_tool=hydra` (password leak 0.425 > .git/config 0.357 > Dockerfile 0.150).
+- 211 tests core pass, 0 regressions.
+
+## Session 67 — 2026-05-29 (authenticate() primitive + next_suggested_tool adjustment)
+
+- **`authenticate(target, username, password)`** : nouvelle `@app.tool()` dans `pulse_app.py`. Détection formulaire login (login.php, /login, /admin), extraction CSRF token via regex sur `<input>`, POST credentials avec `http.cookiejar` + `urllib.request`, retourne cookies structurés. Gère champs manquants (user_field fallback "username", csrf_field optionnel).
+- **Module-level helpers** : `_auth_sessions: dict` (target → session dict), `_extract_creds_from_details()` (extrait password/username de strings comme `password="password",username="admin"`).
+- **`next_suggested_tool` ajusté** : quand le meilleur finding a `exploit.tool=hydra` + contient credentials dans details → suggère `authenticate()` au lieu de hydra. L'agent ne brute-force pas ce qu'il connaît déjà.
+- **MCP resource** : `auth://{target}` dans `server_setup.py` — retourne la session auth active pour un target, ou erreur si pas de session.
+- **10 nouveaux tests** : 6 `TestExtractCreds` (password only, both, equals syntax, no creds, empty, None) + 4 `TestSuggestedNextToolAuthenticate` (password leak → authenticate, authenticate préféré sur hydra, non-hydra pas overridden, hydra sans creds garde hydra).
+- **221 tests core pass**, 0 regressions.
+
+## Session 68 — 2026-05-29 (Remove authenticate() + add http_request primitive)
+
+- **authenticate() supprimé** : retiré `authenticate()` tool, `_auth_sessions`, `_extract_creds_from_details()`, l'ajustement `_suggest_next_from_context()` (hydra+creds→authenticate), `auth://{target}` resource, 10 tests (TestExtractCreds + TestSuggestedNextToolAuthenticate). Le LLM orchestre via les primitives MCP, le code ne fait pas le travail du LLM.
+- **http_request ajouté** : primitive HTTP générique dans `mcp_core/misc_direct.py`. Wrappe `curl` via `execute_command()`, retourne `{success, status_code, ok, headers, cookies, body, body_truncated}`. `Set-Cookie` parsé automatiquement dans le dict `cookies`. ~45 lignes, zéro logique métier.
+- **TOOL_ROUTES** : `"http_request": ("mcp_core.misc_direct", "misc_exec", "curl")` — rejoint les 157 autres outils. Alias `http_request → http-framework` dans le registre.
+- **COUCHE1** : description workflow enrichie pour le typed tool.
+- **10 tests http_request** : GET body, POST form, body truncation, custom headers, cookie passthrough, redirect control, invalid URL, empty URL, ok semantics, headers parsing.
+- **221 tests core pass**, 0 regressions.
+
+## Session 69 — 2026-05-29 (AGENTS.md rules + registry hygiene + discoverability)
+
+- **3 règles** ajoutées en haut de AGENTS.md : grep registry avant tout ajout, ressusciter les tools morts sous leur nom existant, documenter POURQUOI les 160 existants ne suffisent pas.
+- **Registry http-framework aligné** : supprimé `action`, `cookies` (V6), ajouté `cookie` (singulier), `follow_redirects`, `max_body_size`. Description enrichie : "HTTP request client — GET/POST form login, cookie capture (Set-Cookie parsed automatically)".
+- **9 termes clés** vérifiés dans le rendu search_tools : POST, GET, cookie, Set-Cookie, form, login, HTTP request, headers, body — tous présents.
+- **Tests httpbin** : skip proprement quand le service est down (utilisent `ok` au lieu de `success`).
+- **221 tests core pass**, 0 regressions.
+
+NOTE S69 : authenticate() retiré car business logic déguisée en tool.
+Principe : le LLM orchestre via primitives MCP, le code ne fait pas le travail du LLM.
+http_request (primitive curl, wrapper execute_command) remplace le besoin sans introduire de logique métier.

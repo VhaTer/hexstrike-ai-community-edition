@@ -88,15 +88,18 @@ async def _execute_bb_phase(
             return {"tool": tool_name, "success": False, "manual": True,
                     "message": f"[MANUAL] {tool_name} — requires manual execution"}
         try:
-            from mcp_core.server_setup import run_security_tool
-            import json
-            # Merge target into params
+            from mcp_core.server_setup import get_direct_tools, _normalize_tool_result
+            import asyncio as _asyncio
+            direct_tools = get_direct_tools()
+            route = direct_tools.get(tool_name.lower())
+            if not route:
+                return {"tool": tool_name, "success": False, "manual": False,
+                        "error": f"Tool not in DIRECT_TOOLS: {tool_name}"}
+            exec_func, tool_key = route
             exec_params = {"target": target_domain, **params}
-            result = await run_security_tool(
-                ctx=ctx,
-                tool_name=tool_name,
-                parameters=json.dumps(exec_params),
-            )
+            loop = _asyncio.get_running_loop()
+            raw = await loop.run_in_executor(None, lambda: exec_func(tool_key, exec_params))
+            result = _normalize_tool_result(raw)
             return {"tool": tool_name, "success": result.get("success", False),
                     "output": result.get("output", "")[:2000], "manual": False}
         except Exception as exc:

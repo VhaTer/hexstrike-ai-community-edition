@@ -94,14 +94,18 @@ async def _execute_ctf_step_real(
     # Coroutine factory for a single tool call
     async def _run_tool(tool_name: str) -> Dict[str, Any]:
         try:
-            from mcp_core.server_setup import run_security_tool
-            import json
-            params = json.dumps({"target": target})
-            result = await run_security_tool(
-                ctx=ctx,
-                tool_name=tool_name,
-                parameters=params,
-            )
+            from mcp_core.server_setup import get_direct_tools, _normalize_tool_result
+            import asyncio as _asyncio
+            direct_tools = get_direct_tools()
+            route = direct_tools.get(tool_name.lower())
+            if not route:
+                return {"tool": tool_name, "result": {}, "success": False,
+                        "error": f"Tool not in DIRECT_TOOLS: {tool_name}"}
+            exec_func, tool_key = route
+            params = {"target": target}
+            loop = _asyncio.get_running_loop()
+            raw = await loop.run_in_executor(None, lambda: exec_func(tool_key, params))
+            result = _normalize_tool_result(raw)
             return {"tool": tool_name, "result": result, "success": result.get("success", False)}
         except Exception as exc:
             logger.warning("CTF engine: %s failed: %s", tool_name, exc)

@@ -36,19 +36,23 @@ from fastmcp import FastMCPApp
 
 from prefab_ui.app import PrefabApp
 from prefab_ui.components import (
-    Badge, Card, CardContent,
+    Accordion, AccordionItem,
+    Alert, AlertDescription, AlertTitle,
+    Badge, Card, CardContent, Code,
     Column, DataTable, DataTableColumn, Div, ForEach,
-    Grid, Heading, Icon, Metric, Muted,
-    Progress, Row, Separator, Text, Tooltip,
+    Grid, Heading, Icon, Link, Markdown, Metric, Muted,
+    Progress, Row, Separator, Tab, Table, TableBody,
+    TableCaption, TableCell, TableFooter, TableHead,
+    TableHeader, TableRow, Tabs, Text, Tooltip,
 )
-from prefab_ui.components.charts import Sparkline
+from prefab_ui.components.charts import BarChart, ChartSeries, Sparkline
 from prefab_ui.rx import Rx
 
 from config import _config as app_config
-from mcp_core.server_setup import _scan_cache, _rate_limit_events
+from mcp_core.server_setup import _scan_cache, _rate_limit_events, _optimizer, TOOL_TIMEOUTS
 from server_core.operational_metrics import _op_metrics
-from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store
-from server_core.exploit_rules import suggest_exploit, ESTIMATED_TIMES
+from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store, get_ctf_manager
+from server_core.exploit_rules import suggest_exploit, ESTIMATED_TIMES, compute_layer2_score
 from tool_registry import TOOLS
 from mcp_core.tool_registry_v2 import _registry
 
@@ -560,7 +564,16 @@ def get_findings(target: str | None = None) -> list[dict]:
                         "details": "",
                     })
 
-    findings.sort(key=lambda f: _SEVERITY_ORDER.get(f["severity"], 5))
+    # Enrich with Couche 1 + Layer 2 (pure functions, idempotent)
+    for f in findings:
+        exploit = suggest_exploit(f)
+        if exploit:
+            f["exploit"] = exploit
+        f["layer2"] = compute_layer2_score(f)
+        score = f["layer2"]["score"]
+        f["score"] = f"{score:.2f}" if score > 0 else "—"
+
+    findings.sort(key=lambda f: f.get("layer2", {}).get("score", 0), reverse=True)
     return findings
 
 
@@ -1176,13 +1189,52 @@ _TOOLS_NEED_HOST = {"nmap", "nmap_advanced"}
 def _suggest_next_from_context(surface: dict, findings: list) -> dict:
     """Suggest next tool based on structured surface + findings data.
 
+    Primary signal: highest layer2.score ≥ 0.3 with exploit tool.
+    Fallback: keyword/severity-based on findings, then surface-based.
+
     Returns dict with 'tool', 'reason', 'expected_time', 'priority'.
     Empty dict if context is insufficient.
-    Priority levels: critical (confirmed vuln) > high (clear target) > medium (probable) > low (exploratory).
+    Priority levels: critical (score ≥ 0.5) > high (score ≥ 0.3) > medium (probable) > low (exploratory).
     """
     _EST = ESTIMATED_TIMES
 
-    # Findings-based suggestions take priority over surface-based ones
+    # ── Score-aware suggestion ────────────────────────────────────────────
+    if findings:
+        top_finding = None
+        top_score = -1.0
+        top_actionable = None
+        top_actionable_score = -1.0
+        for f in findings:
+            if not isinstance(f, dict):
+                continue
+            l2 = f.get("layer2", {})
+            score = l2.get("score", 0) if isinstance(l2, dict) else 0
+            exploit = f.get("exploit", {})
+            tool = exploit.get("tool", "") if isinstance(exploit, dict) else ""
+            if score >= 0.3 and tool and score > top_score:
+                top_score = score
+                top_finding = f
+            if score >= 0.3 and tool and tool != "manual" and score > top_actionable_score:
+                top_actionable_score = score
+                top_actionable = f
+
+        best = top_actionable if top_actionable else top_finding
+        if best:
+            ex = best.get("exploit", {})
+            tool = ex.get("tool", "") if isinstance(ex, dict) else ""
+            finding_text = str(best.get("finding", ""))
+            details = str(best.get("details", ""))[:60]
+            best_score = top_actionable_score if best is top_actionable else top_score
+            priority = "critical" if best_score >= 0.5 else "high"
+
+            return {
+                "tool": tool,
+                "reason": f"{finding_text} (score {best_score:.3f}) — {details}",
+                "expected_time": _EST.get(tool, "1-10 min"),
+                "priority": priority,
+            }
+
+    # ── Fallback: keyword/severity-based on findings ──────────────────────
     if findings:
         findings_severities = []
         findings_text = []
@@ -1203,10 +1255,16 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
             return {"tool": "metasploit", "reason": "SMB vulnerability confirmed — attempt exploitation", "expected_time": _EST.get("metasploit", "1-5 min"), "priority": "critical"}
         if "ssl" in findings_all or "tls" in findings_all or "certificate" in findings_all:
             return {"tool": "testssl", "reason": "SSL/TLS issues reported — deep inspection", "expected_time": _EST.get("testssl", "30-60s"), "priority": "high"}
-        if has_critical or has_high:
+        # Severity-based metasploit shortcut: only if layer2 scores are absent
+        # (when scores are present, the score-aware path above already decided)
+        has_any_score = any(
+            isinstance(f.get("layer2"), dict) and "score" in f["layer2"]
+            for f in findings if isinstance(f, dict)
+        )
+        if (has_critical or has_high) and not has_any_score:
             return {"tool": "metasploit", "reason": "Critical/high severity findings — attempt exploitation", "expected_time": _EST.get("metasploit", "1-5 min"), "priority": "high"}
 
-    # Surface-based suggestions (generic discovery, no critical findings)
+    # ── Fallback: surface-based suggestions ──────────────────────────────
     ports = surface.get("ports", []) if isinstance(surface, dict) else []
     port_numbers = {p.get("port") for p in ports if isinstance(p, dict)}
     services = [str(p.get("service", "")).lower() for p in ports if isinstance(p, dict)]
@@ -1468,11 +1526,7 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
 
     surface_data = get_surface(resolved)
     findings_data = get_findings(resolved) if intensity in ("medium", "full") else []
-    # Enrich findings with exploit suggestions (Couche 1 — rules engine)
-    for f in findings_data:
-        exploit = suggest_exploit(f)
-        if exploit:
-            f["exploit"] = exploit  # {tool, confidence, estimated_time, source}
+    # Enrichment Couche 1 + Layer 2 now inside get_findings() — no duplicate needed here
     plan_data = get_plan(resolved, objective) if intensity == "full" else {"target": resolved, "steps": [], "step_count": 0, "summary": "Skipped — use full intensity for planning"}
 
     # TargetStore record for MCP Resources
@@ -1664,6 +1718,7 @@ def pulse_dashboard() -> PrefabApp:
                     columns=[
                         DataTableColumn(key="severity", header="Sev"),
                         DataTableColumn(key="finding",  header="Finding"),
+                        DataTableColumn(key="score",    header="Sc."),
                         DataTableColumn(key="tool",     header="Tool"),
                         DataTableColumn(key="details",  header="Details"),
                     ],
@@ -2173,6 +2228,10 @@ def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
             host = urlparse(resolved).hostname or resolved
             params = {"target": host, "scan_type": "-sTV"}
 
+        # Parameter optimizer: adds --host-timeout, --timeout, threads, additional_args
+        # Additive only — caller_keys protected, never overrides scan() built params
+        params = _optimizer.optimize(tool_name, params)
+
         out = exec_func(binary, params)
         ok = out.get("success", False)
         result = {
@@ -2222,6 +2281,275 @@ def _fmt_rl_summary(rl: dict) -> str:
         ago = _fmt_duration(time.time() - last)
         return f"{n} event(s) \u00b7 Last {ago} ago"
     return f"{n} event(s)"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# @app.ui() — CTF Dashboard
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.ui()
+def ctf_dashboard() -> PrefabApp:
+    """CTF challenge tracker — categories, tools, progress."""
+    cm = get_ctf_manager()
+    cats = cm.category_tools if hasattr(cm, "category_tools") else {}
+    cats = cats or {}
+    categories = sorted(cats.keys())
+    all_stats = _registry.get_all_stats() if hasattr(_registry, "get_all_stats") else {}
+
+    cat_chart = [
+        {"category": c, "tools": len(cats.get(c, []))}
+        for c in categories
+    ]
+
+    with PrefabApp() as app:
+        with Column(gap=4, css_class="p-4"):
+            with Row(gap=3, align="center"):
+                Icon(name="swords", size="default")
+                Heading("CTF Challenge Dashboard", css_class="text-lg font-bold")
+                Badge(f"{len(categories)} categories", variant="secondary")
+            Separator()
+            if categories:
+                with Row(gap=4, css_class="items-start"):
+                    with Column(gap=2, css_class="flex-1"):
+                        Muted("Categories & Tools", css_class="text-xs uppercase tracking-wider")
+                        for cat in categories:
+                            tools = cats.get(cat, [])
+                            with Card():
+                                with CardContent(css_class="p-3"):
+                                    with Row(gap=2, align="center"):
+                                        Badge(cat, variant="default")
+                                        Text(f"{len(tools)} tools")
+                                    Text(", ".join(tools[:8]), css_class="text-xs text-muted mt-1")
+                    with Column(gap=2, css_class="w-64"):
+                        Muted("Tool Coverage", css_class="text-xs uppercase tracking-wider")
+                        if cat_chart:
+                            with Card():
+                                with CardContent(css_class="p-3"):
+                                    BarChart(
+                                        data=cat_chart,
+                                        series=[ChartSeries(data_key="tools", label="Tools")],
+                                        x_axis="category",
+                                        show_legend=False,
+                                    )
+            else:
+                with Alert(variant="info"):
+                    AlertTitle("No CTF data")
+                    AlertDescription("No CTF categories loaded. Run a CTF challenge first.")
+    return app
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# @app.ui() — Pentest Report
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.ui()
+def pentest_report(target: str) -> PrefabApp:
+    """Full pentest report — findings by severity with exploit chain."""
+    surface = get_surface(target)
+    findings = get_findings(target)
+    plan_data = get_plan(target) if target else {}
+
+    by_severity = {"critical": [], "high": [], "medium": [], "low": [], "info": []}
+    for f in findings:
+        sev = f.get("severity", "info").lower()
+        if sev in by_severity:
+            by_severity[sev].append(f)
+        else:
+            by_severity.setdefault(sev, []).append(f)
+
+    total = len(findings)
+    crit_count = len(by_severity["critical"])
+    high_count = len(by_severity["high"])
+    ports = surface.get("ports", [])
+    techs = surface.get("technologies", [])
+
+    sev_data = [
+        {"severity": s, "count": len(by_severity.get(s, []))}
+        for s in ["critical", "high", "medium", "low", "info"]
+    ]
+
+    sev_variant = {"critical": "destructive", "high": "warning", "medium": "secondary", "low": "outline", "info": "outline"}
+
+    with PrefabApp() as app:
+        with Column(gap=4, css_class="p-4"):
+            with Row(gap=3, align="center"):
+                Icon(name="shield", size="default")
+                Heading(f"Pentest Report", css_class="text-lg font-bold")
+                Badge(f"{total} findings", variant="destructive" if crit_count > 0 else "secondary")
+            with Row(gap=4, css_class="flex-wrap"):
+                Metric(label="Target", value=target)
+                Metric(label="Ports", value=str(len(ports)))
+                Metric(label="Critical", value=str(crit_count))
+                Metric(label="High", value=str(high_count))
+            Separator()
+            if findings:
+                with Accordion(css_class="w-full"):
+                    for sev, label in [("critical", "Critical"), ("high", "High"), ("medium", "Medium"), ("low", "Low"), ("info", "Info")]:
+                        items = by_severity.get(sev, [])
+                        if not items:
+                            continue
+                        with AccordionItem(title=f"{label} ({len(items)})"):
+                            for f in items:
+                                score = f.get("score", "")
+                                score_str = f"Score: {score}" if score else ""
+                                with Card():
+                                    with CardContent(css_class="p-2"):
+                                        with Column(gap=1):
+                                            with Row(gap=2, align="center"):
+                                                Badge(sev.upper(), variant=sev_variant.get(sev, "outline"))
+                                                Text(f.get("finding", ""), css_class="font-mono text-sm")
+                                                if score_str:
+                                                    Muted(score_str, css_class="text-xs")
+                                            if f.get("details"):
+                                                Code(f["details"], css_class="text-xs")
+                                            exploit = f.get("exploit", {})
+                                            if exploit.get("tool"):
+                                                with Row(gap=2, align="center"):
+                                                    Muted("Exploit:", css_class="text-xs")
+                                                    Badge(exploit["tool"], variant="warning")
+                                                    Muted(f"confidence: {exploit.get('confidence', '')}", css_class="text-xs")
+            else:
+                with Alert(variant="info"):
+                    AlertTitle("No findings")
+                    AlertDescription(f"No vulnerabilities detected for {target}")
+            if ports:
+                Separator()
+                Muted("Open Ports", css_class="text-xs uppercase tracking-wider")
+                with Table():
+                    TableCaption(content=f"{len(ports)} open ports on {target}")
+                    with TableHeader():
+                        with TableRow():
+                            with TableHead(): Text("Port")
+                            with TableHead(): Text("Service")
+                            with TableHead(): Text("State")
+                    with TableBody():
+                        for p in ports:
+                            with TableRow():
+                                with TableCell(): Text(str(p.get("port", "")))
+                                with TableCell(): Text(p.get("service", ""))
+                                with TableCell(): Badge(p.get("state", ""), variant="outline")
+    return app
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# @app.ui() — Recon Summary
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.ui()
+def recon_summary(target: str) -> PrefabApp:
+    """Reconnaissance summary — ports, tech, cache, history."""
+    surface = get_surface(target)
+    history = get_history(target, limit=20)
+    cache_entries = _cache_for_target(target) if target else []
+
+    ports = surface.get("ports", [])
+    techs = surface.get("technologies", [])
+    risk = surface.get("risk_level", "unknown")
+    risk_var = surface.get("risk_variant", "default")
+
+    risk_color = {"high": "destructive", "medium": "warning", "low": "success", "unknown": "secondary"}
+
+    now = time.time()
+    cache_info = [
+        {"tool": e.get("tool", "?"), "age": _fmt_duration(now - e.get("timestamp", now)) if e.get("timestamp") else "?"}
+        for e in cache_entries[-10:]
+    ]
+
+    tech_chart = [{"tech": t, "count": 1} for t in techs] if techs else [{"tech": "(none)", "count": 0}]
+
+    with PrefabApp() as app:
+        with Column(gap=4, css_class="p-4"):
+            with Row(gap=3, align="center"):
+                Icon(name="compass", size="default")
+                Heading(f"Recon — {target}", css_class="text-lg font-bold")
+                Badge(risk.upper(), variant=risk_color.get(risk, "outline"))
+            with Row(gap=4, css_class="flex-wrap"):
+                Metric(label="Open Ports", value=str(len(ports)))
+                Metric(label="Technologies", value=str(len(techs)))
+                Metric(label="Cache entries", value=str(len(cache_entries)))
+                Metric(label="History entries", value=str(len(history)))
+            Separator()
+            if ports:
+                Muted("Ports & Services", css_class="text-xs uppercase tracking-wider")
+                with Table():
+                    TableCaption(content="Port scan results")
+                    with TableHeader():
+                        with TableRow():
+                            with TableHead(): Text("Port")
+                            with TableHead(): Text("Service")
+                            with TableHead(): Text("State")
+                    with TableBody():
+                        for p in ports:
+                            with TableRow():
+                                with TableCell(): Text(str(p.get("port", "")))
+                                with TableCell(): Text(p.get("service", ""))
+                                with TableCell(): Text(p.get("state", ""))
+            if techs:
+                Separator()
+                Muted("Technology Stack", css_class="text-xs uppercase tracking-wider")
+                with Card():
+                    with CardContent(css_class="p-3"):
+                        with Row(gap=2, css_class="flex-wrap"):
+                            for t in techs:
+                                Badge(t, variant="outline")
+            if cache_info:
+                Separator()
+                Muted("Cache (recent)", css_class="text-xs uppercase tracking-wider")
+                with DataTable(
+                    columns=[
+                        DataTableColumn(key="tool", header="Tool"),
+                        DataTableColumn(key="age", header="Age"),
+                    ],
+                    rows=cache_info,
+                ):
+                    pass
+            if history:
+                Separator()
+                Muted("Recent Tools", css_class="text-xs uppercase tracking-wider")
+                with DataTable(
+                    columns=[
+                        DataTableColumn(key="tool", header="Tool"),
+                        DataTableColumn(key="execution_display", header="Time"),
+                        DataTableColumn(key="status", header="Status"),
+                    ],
+                    rows=history[-8:],
+                ):
+                    pass
+    return app
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# @app.tool() — Pulse Dashboards Guide
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.tool()
+def pulse_dashboards_guide(target: str = "") -> dict:
+    """Discover and use Pulse UI dashboards — CTF tracker, pentest report, recon summary."""
+    url = target.rstrip("/") if target else "<target>"
+    return {
+        "message": f"Call `search_tools(\"dashboard\")` to find available Pulse dashboards.",
+        "dashboards": [
+            {
+                "name": "ctf_dashboard",
+                "args": {},
+                "description": "CTF challenge tracker — categories, tool coverage, BarChart",
+                "search_hint": "dashboard ctf",
+            },
+            {
+                "name": "pentest_report",
+                "args": {"target": url},
+                "description": "Findings by severity (Accordion), exploit Code blocks, port Table",
+                "search_hint": "dashboard pentest",
+            },
+            {
+                "name": "recon_summary",
+                "args": {"target": url},
+                "description": "Ports, tech Badges, DataTable cache + history",
+                "search_hint": "dashboard recon",
+            },
+        ],
+        "note": "Each returns a structured visual PrefabApp with icons, badges, data tables.",
+    }
 
 
 if __name__ == "__main__":

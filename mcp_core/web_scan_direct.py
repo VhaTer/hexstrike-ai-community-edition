@@ -56,7 +56,7 @@ def _nikto(data: dict) -> dict:
     command = f"nikto -h {target} -nocheck"
     if additional_args: command += f" {additional_args}"
 
-    return execute_command(command)
+    return execute_command(command, timeout=480)
 
 
 def _sqlmap(data: dict) -> dict:
