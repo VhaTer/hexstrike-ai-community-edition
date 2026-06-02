@@ -1,0 +1,130 @@
+{
+  "uro": {
+    "runs": 363,
+    "successes": 122
+  },
+  "anew": {
+    "runs": 233,
+    "successes": 231
+  },
+  "checksec": {
+    "runs": 186,
+    "successes": 186
+  },
+  "nmap": {
+    "runs": 2313,
+    "successes": 1897
+  },
+  "whatweb": {
+    "runs": 364,
+    "successes": 364
+  },
+  "metasploit": {
+    "runs": 197,
+    "successes": 58
+  },
+  "wafw00f": {
+    "runs": 129,
+    "successes": 129
+  },
+  "smbmap": {
+    "runs": 129,
+    "successes": 129
+  },
+  "aireplay_ng": {
+    "runs": 97,
+    "successes": 85
+  },
+  "nonexistent_tool_xyz": {
+    "runs": 78,
+    "successes": 0
+  },
+  "sqlmap": {
+    "runs": 71,
+    "successes": 62
+  },
+  "sherlock": {
+    "runs": 56,
+    "successes": 56
+  },
+  "gobuster": {
+    "runs": 52,
+    "successes": 52
+  },
+  "httpx": {
+    "runs": 52,
+    "successes": 52
+  },
+  "hakrawler": {
+    "runs": 1,
+    "successes": 1
+  },
+  "dirsearch": {
+    "runs": 1,
+    "successes": 0
+  },
+  "dalfox": {
+    "runs": 5,
+    "successes": 4
+  },
+  "nmap_advanced": {
+    "runs": 1,
+    "successes": 1
+  },
+  "nuclei": {
+    "runs": 3,
+    "successes": 1
+  },
+  "jaeles": {
+    "runs": 1,
+    "successes": 0
+  },
+  "responder": {
+    "runs": 6,
+    "successes": 6
+  },
+  "mitm6": {
+    "runs": 5,
+    "successes": 0
+  },
+  "does_not_exist": {
+    "runs": 5,
+    "successes": 0
+  },
+  "nikto": {
+    "runs": 1,
+    "successes": 1
+  },
+  "http_request": {
+    "runs": 117,
+    "successes": 111
+  },
+  "hydra": {
+    "runs": 2,
+    "successes": 0
+  },
+  "strings": {
+    "runs": 4,
+    "successes": 4
+  },
+  "exiftool": {
+    "runs": 1,
+    "successes": 1
+  },
+  "bulk_extractor": {
+    "runs": 1,
+    "successes": 1
+  },
+  "binwalk": {
+    "runs": 1,
+    "successes": 1
+  },
+  "pcb_analyze": {
+    "runs": 8,
+    "successes": 8
+  },
+  "tshark": {
+    "runs": 3,
+    "successes": 0
+  }
+}

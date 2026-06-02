@@ -1360,12 +1360,12 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.88,
     },
     'tshark': {
-        "desc": 'Terminal-based Wireshark — scriptable packet capture and analysis',
+        "desc": 'Terminal-based Wireshark — scriptable packet capture and analysis. Use file= for offline PCAP analysis, interface= for live capture.',
         "endpoint": '/api/tools/tshark',
         "method": 'POST',
         "category": 'wifi_pentest',
-        "params": {'interface': {'required': True}},
-        "optional": {'capture_filter': '', 'display_filter': '', 'duration': 60, 'output_file': '', 'additional_args': ''},
+        "params": {},
+        "optional": {'interface': '', 'file': '', 'filter': '', 'count': 50, 'additional_args': ''},
         "effectiveness": 0.88,
     },
     'tcpdump': {

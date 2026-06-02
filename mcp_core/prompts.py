@@ -754,6 +754,87 @@ Execute them in order and confirm each one returns a visual app with no errors.
 # ── Registration ────────────────────────────────────────────────────────
 
 
+async def ctf_5phase_loop(
+    target: str = "",
+    challenge_type: str = "web",
+) -> PromptResult:
+    """
+    5-phase CTF loop: Recon → Analyze → Exploit → Extract → Iterate.
+    Use for CTF challenges where the first approach doesn't reveal a flag.
+    Each phase is a checkpoint — if you hit a dead end, return to PHASE 1
+    with new information.
+    """
+    type_hints = {
+        "web": "http/ports/technologies → vuln scan → exploit",
+        "crypto": "ciphertext analysis → cracking → decode",
+        "rev": "binary entropy map → strings → decompile",
+        "pwn": "service enumeration → overflow/format string → shell",
+        "forensics": "file type identification → carve → analyze",
+        "misc": "explore → research → connect clues",
+        "osint": "passive recon → data correlation → target narrowing",
+    }
+    hint = type_hints.get(challenge_type, "adapt to challenge type")
+
+    msgs = [
+        Message(
+            "You are in a CTF 5-phase attack loop. "
+            "Each phase is a checkpoint. After each phase, assess progress. "
+            "If stuck, go back to PHASE 1 with what you've learned. "
+            "Never repeat the same tool twice — vary your approach."
+        ),
+        Message(
+            f"PHASE 1 — RECON [target: {target or 'unknown'}] [{challenge_type}] [{hint}]\n"
+            "Gather everything: ports, services, technology stack, files, hints. "
+            "Use get_surface() for ports/tech, get_findings() for vulns, "
+            "and rev_entropy_map() for binaries. "
+            "Expected artifacts: port list, technology badges, entropy map.\n\n"
+            "If target is unknown, use search_tools('ctf') to discover relevant tools.\n\n"
+            "Use run_security_tool() for raw tools, or search_tools() + call_tool() for Pulse tools."
+        ),
+        Message(
+            "PHASE 2 — ANALYZE\n"
+            "Deep analysis of recon data. "
+            "For crypto challenges: use crypto_xor_crack() on ciphertext.\n"
+            "For reversing: combine rev_entropy_map() with rev_strings.\n"
+            "For web: analyze http_request() responses, cookies, endpoints.\n"
+            "Use crypto_z3_solve() for constraint-based puzzles.\n"
+            "Expected: key derivation, vulnerability identification, attack plan."
+        ),
+        Message(
+            "PHASE 3 — EXPLOIT\n"
+            "Execute the attack. Use the tool suggested by analysis. "
+            "For web: sqlmap, gobuster, nuclei -- with targeted parameters. "
+            "For crypto: use the cracked key to decode the full message. "
+            "For rev: focus on low-entropy regions (high-entropy = packed/encrypted). "
+            "If the exploit produces unexpected output, note it and reassess."
+        ),
+        Message(
+            "PHASE 4 — EXTRACT\n"
+            "Extract the flag or artifact. "
+            "Flag formats: flag{...}, CTF{...}, CTF_..., or challenge-specific. "
+            "Check file contents, response headers, hidden parameters. "
+            "For crypto: the flag is usually in the decoded plaintext. "
+            "For rev: look for hardcoded strings or decoded payloads.\n\n"
+            "Use http_request() for authenticated access if login was required. "
+            "Use crypto_xor_crack(known_plaintext='flag{') for XOR'd flag files."
+        ),
+        Message(
+            "PHASE 5 — ITERATE\n"
+            "If you found a flag: submit it and confirm. "
+            "If not: return to PHASE 1 with new knowledge. "
+            "What did PHASE 2-4 reveal? Update your mental model. "
+            "Try a different tool. Change key_length_range in xor_crack. "
+            "Use different search_tools() queries.\n\n"
+            "Key question: 'What information do I have now that I didn't have before?'"
+        ),
+    ]
+    return PromptResult(
+        messages=msgs,
+        description=f"5-phase CTF loop: {challenge_type} on {target or 'TBD'}",
+        meta={"version": "0.11.0", "phases": 5, "challenge_type": challenge_type},
+    )
+
+
 def register_prompts(mcp: FastMCP) -> None:
     """Register all HexStrike workflow prompts on a FastMCP server."""
     mcp.prompt(
@@ -796,3 +877,8 @@ def register_prompts(mcp: FastMCP) -> None:
         title="Pulse UI Dashboards",
         tags={"dashboard", "ctf", "pentest", "recon", "ui"},
     )(pulse_dashboards)
+    mcp.prompt(
+        name="ctf_5phase_loop",
+        title="CTF 5-Phase Attack Loop",
+        tags={"ctf", "loop", "workflow", "crypto", "rev", "pwn", "web", "forensics"},
+    )(ctf_5phase_loop)

@@ -65,19 +65,17 @@ _port_listening() {
 _print_connection_info() {
     local ip
     echo ""
-    echo "  ⚡ HexStrike Pulse — HTTP server running on http://${HOST}:${PORT}/mcp"
+    echo "  ⚡ HexStrike Pulse — http://localhost:${PORT}/mcp"
     echo ""
-    echo "  ── Client configuration ──"
-    echo ""
+    echo "  ── Clients ──"
     echo "  Claude Desktop → http://localhost:${PORT}/mcp"
     echo "  Opencode       → type: remote, url: http://localhost:${PORT}/mcp"
     if _wsl_detect; then
         ip="$(_wsl_ip)"
         if [ -n "$ip" ]; then
             echo ""
-            echo "  ── WSL detected ──"
-            echo "  From Windows, if localhost fails, try:"
-            echo "  http://${ip}:${PORT}/mcp"
+            echo "  ── WSL ──"
+            echo "  http://${ip}:${PORT}/mcp  (if localhost fails)"
         fi
     fi
     echo ""
@@ -85,6 +83,7 @@ _print_connection_info() {
     echo "  ./hexstrike-pulse stop       Stop server"
     echo "  ./hexstrike-pulse status     Check status"
     echo "  ./hexstrike-pulse --foreground  Foreground with logs"
+    echo "  ./hexstrike-pulse --debug    Debug logging"
     echo ""
 }
 
@@ -133,6 +132,19 @@ cmd_status() {
     return 1
 }
 
+cmd_help() {
+    echo "HexStrike Pulse — unified MCP server launcher"
+    echo ""
+    echo "Usage:"
+    echo "  ./hexstrike-pulse              Start HTTP server (background)"
+    echo "  ./hexstrike-pulse --foreground  Foreground with logs"
+    echo "  ./hexstrike-pulse --bridge      Stdio→HTTP bridge (Claude Desktop)"
+    echo "  ./hexstrike-pulse --debug       Debug logging"
+    echo "  ./hexstrike-pulse stop          Stop server"
+    echo "  ./hexstrike-pulse status        Check status"
+    echo "  ./hexstrike-pulse -h,--help     This help"
+}
+
 cmd_stdio() {
     cd "$SCRIPT_DIR" || exit 1
     _ensure_venv
@@ -161,7 +173,7 @@ cmd_background() {
     # Build args: always add HTTP transport unless user overrides
     local args="--transport http --host $HOST --port $PORT $*"
 
-    nohup python3 hexstrike_mcp.py $args > /tmp/pulse-http.log 2>&1 &
+    nohup python3 hexstrike_mcp.py $args >> hexstrike.log 2>&1 &
     local pid=$!
     echo "$pid" > "$PIDFILE"
 
@@ -170,7 +182,7 @@ cmd_background() {
     while [ $waited -lt 8 ]; do
         if _port_listening; then
             _print_connection_info
-            echo "  PID $pid — log: tail -f /tmp/pulse-http.log"
+            echo "  PID $pid — tail -f hexstrike.log"
             echo ""
             exit 0
         fi
@@ -178,8 +190,8 @@ cmd_background() {
         waited=$((waited + 1))
     done
 
-    echo "⚠️  Server started but port $PORT not yet listening — check log:"
-    echo "   tail -20 /tmp/pulse-http.log"
+    echo "⚠️  Server started but port $PORT not yet listening:"
+    echo "   tail -20 hexstrike.log"
     exit 1
 }
 
@@ -193,9 +205,9 @@ case "${1:-}" in
     --stdio)    shift; cmd_stdio "$@" ;;
     --bridge)   shift; cmd_bridge "$@" ;;
     --foreground|-f) shift; cmd_foreground "$@" ;;
+    --help|-h)      shift; cmd_help "$@" ;;
     *)
         if [ -f "$PIDFILE" ] && _port_listening; then
-            echo "⚠️  Server already running (PID $(cat "$PIDFILE"))."
             cmd_status
             exit 0
         fi

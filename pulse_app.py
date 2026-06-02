@@ -2556,5 +2556,248 @@ def pulse_dashboards_guide(target: str = "") -> dict:
     }
 
 
+@app.tool()
+def rev_entropy_map(file_path: str, block_size: int = 256, threshold: float = 7.0) -> dict:
+    """Compute Shannon entropy per block of a binary file.
+    
+    Identifies packed, encrypted, or compressed regions — areas the LLM cannot
+    analyze statically. High-entropy blocks (>=threshold) are flagged suspicious.
+    Use this BEFORE calling rev_strings or other analysis to decide where to focus.
+    
+    Args:
+        file_path: Path to the binary file
+        block_size: Bytes per block (default 256)
+        threshold: Entropy threshold for suspicious flag (default 7.0)
+    
+    Returns:
+        dict with file metadata, block count, high_entropy_blocks, and
+        per-block list of {block, offset, size, entropy, suspicious}
+    """
+    from mcp_core.rev_direct import compute_entropy_map
+    return compute_entropy_map(file_path, block_size, threshold)
+
+
+@app.tool()
+def crypto_xor_crack(
+    data: str = "",
+    file_path: str = "",
+    key_length_range: str = "1-20",
+    top_n: int = 5,
+    known_plaintext: str = "",
+) -> dict:
+    """Crack XOR-encrypted data using frequency analysis and known-plaintext derivation.
+    
+    Use when you have ciphertext (hex, base64, or raw) that might be XOR'd with
+    a single-byte or repeating-key cipher. Tries all 256 single-byte keys, short
+    repeating keys (2-6), and direct known-plaintext key derivation.
+    
+    Args:
+        data: Hex, base64, or raw string input
+        file_path: Load bytes from file instead of data string
+        key_length_range: Range of key lengths e.g. "1-20" (default) or "3-3"
+        top_n: Number of top candidates to return
+        known_plaintext: If you know part of the plaintext (e.g. "flag{", "CTF"),
+            provide it and the key is derived directly from cipher XOR known.
+    
+    Returns:
+        dict with results sorted by score, each having key, key_bytes, plaintext,
+        score, method. matched_known_plaintext if known_plaintext found in output.
+    """
+    from mcp_core.crypto_direct import xor_crack
+    return xor_crack(
+        data=data,
+        file_path=file_path,
+        key_length_range=key_length_range,
+        top_n=top_n,
+        known_plaintext=known_plaintext,
+    )
+
+
+@app.tool()
+def crypto_z3_solve(
+    constraints: str = "",
+    file_path: str = "",
+    variables: str = "",
+    timeout_seconds: int = 30,
+) -> dict:
+    """Solve SMT constraints using Z3 (SMT-LIB2 syntax).
+    
+    Use for cryptographic puzzles, reverse engineering constraint solving, or
+    any problem expressible as boolean formulas. Accepts SMT-LIB2 directly.
+    Optionally declare BitVec(64) variables with the variables parameter.
+    
+    Args:
+        constraints: SMT-LIB2 assertions (e.g. "(assert (= x #x41))")
+        file_path: Read constraints from file instead
+        variables: Comma-separated list of BitVec(64) variables to declare
+        timeout_seconds: Solver timeout (default 30)
+    
+    Returns:
+        dict with sat/unsat/unknown status and model (if sat).
+        Error message if z3 is not installed.
+    """
+    from mcp_core.crypto_direct import z3_solve
+    return z3_solve(
+        constraints=constraints,
+        file_path=file_path,
+        variables=variables,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+@app.tool()
+def crypto_rsa_attack(
+    n: int,
+    e: int,
+    ciphertext: int = 0,
+    attacks: str = "all",
+    factordb: bool = False,
+) -> dict:
+    """Factor RSA modulus or break weak RSA keys.
+    
+    Use when you have RSA public key parameters (n, e) and need to recover
+    the private key d. Tries small primes trial division, Fermat factorization,
+    and Wiener's attack (small d). Optionally queries FactorDB API.
+    
+    Args:
+        n: RSA modulus (integer)
+        e: Public exponent (integer)
+        ciphertext: Optional ciphertext to decrypt if factorization succeeds
+        attacks: Comma-separated "small_primes,fermat,wiener,factordb" or "all"
+        factordb: If True, query FactorDB API first (requires internet)
+    
+    Returns:
+        dict with success, method, p/q/d if found, plaintext if ciphertext given.
+    """
+    from mcp_core.crypto_direct import rsa_attack
+    return rsa_attack(
+        n=n, e=e, ciphertext=ciphertext, attacks=attacks, factordb=factordb,
+    )
+
+
+@app.tool()
+def binary_varint(
+    data_hex: str = "",
+    encoding: str = "leb128_unsigned",
+) -> dict:
+    """Decode a sequence of LEB128/varint values from hex-encoded binary data.
+
+    Use on hex dumps from .sal files, protocol captures, or any binary blob
+    containing variable-length integer sequences. Returns parsed integer values.
+
+    Args:
+        data_hex:  Hex string of varint-encoded bytes (e.g. "7201ff7f01")
+        encoding:  "leb128_unsigned" (default), "leb128_signed", or "uleb128"
+
+    Returns:
+        dict with success, values (list of ints), count.
+    """
+    from mcp_core.binary_direct import binary_varint as _fn
+    return _fn(data_hex=data_hex, encoding=encoding)
+
+
+@app.tool()
+def binary_block_parser(
+    data_hex: str = "",
+    block_size: int = 0,
+    fields: str = "",
+) -> dict:
+    """Parse a hex-encoded binary blob into fixed-size blocks with typed fields.
+
+    Use for reverse-engineering custom binary formats: .sal metadata blocks,
+    file headers, protocol frames. Define fields as a JSON array.
+
+    Args:
+        data_hex:   Hex string of raw binary data
+        block_size: Number of bytes per block
+        fields:     JSON array of field dicts, each with name/offset/size/type.
+                    Type: "uint8", "uint16", "uint32", "int32", "ascii", "bytes".
+                    Example: '[{"name":"id","offset":0,"size":4,"type":"uint32"}]'
+
+    Returns:
+        dict with success, blocks (list of parsed fields per block), block_count.
+    """
+    import json as _json
+    parsed_fields = []
+    if fields:
+        try:
+            parsed_fields = _json.loads(fields)
+        except _json.JSONDecodeError as e:
+            return {"success": False, "error": f"Invalid fields JSON: {e}"}
+    from mcp_core.binary_direct import binary_block_parser as _fn
+    return _fn(data_hex=data_hex, block_size=block_size, fields=parsed_fields)
+
+
+@app.tool()
+def binary_rle_decode(
+    data_hex: str = "",
+    format: str = "value_count",
+    initial_state: int = 0,
+) -> dict:
+    """Reconstruct a digital signal from RLE-encoded binary data (hex → varints → signal).
+
+    Used for analyzing Saleae .sal files, signal captures, and any
+    run-length encoded binary format. The hex data is parsed as varints,
+    then interpreted as run lengths.
+
+    Formats:
+      "value_count":  [val, count, val, count, ...] — each pair explicit
+      "toggle_count": [run1, run2, ...] — state flips each run (Saleae-style)
+      "pulse_width":  [w1, w2, ...] — alternating high/low pulse widths
+
+    Args:
+        data_hex:      Hex string of varint-encoded run lengths
+        format:        RLE variant ("value_count", "toggle_count", "pulse_width")
+        initial_state: Starting state (0 or 1) for toggle_count / pulse_width
+
+    Returns:
+        dict with signal_values (truncated to 100k), sample_count, truncated flag.
+    """
+    from mcp_core.binary_direct import binary_rle_decode as _fn
+    return _fn(data_hex=data_hex, format=format, initial_state=initial_state)
+
+
+@app.tool()
+def binary_signal_decode(
+    data_hex: str = "",
+    rle_values: str = "",
+    protocol: str = "uart",
+    baud: int = 9600,
+    options: str = "",
+) -> dict:
+    """Decode a digital signal (UART/I2C/SPI) from samples or RLE run lengths.
+
+    Primary use: decode UART 8N1 from Saleae .sal RLE data. Pass the varint
+    values from binary_varint() as a JSON array in rle_values, or pass raw
+    sample bytes as hex in data_hex.
+
+    Args:
+        data_hex:   Hex-encoded raw samples (each byte = 0 or 1)
+        rle_values: JSON array of RLE run lengths (alt to data_hex)
+        protocol:   "uart" (default, pure Python), "i2c" or "spi" (sigrok)
+        baud:       Baud rate (default 9600, typical: 115200)
+        options:    JSON dict with sample_rate (Hz, default 1000000),
+                    rle_format, initial_state, invert
+
+    Returns:
+        dict with success, decoded text, bytes, frames, frame_count.
+    """
+    import json as _json
+    parsed_opts = {}
+    if options:
+        try:
+            parsed_opts = _json.loads(options)
+        except _json.JSONDecodeError as e:
+            return {"success": False, "error": f"Invalid options JSON: {e}"}
+    from mcp_core.binary_direct import binary_signal_decode as _fn
+    return _fn(
+        data_hex=data_hex,
+        rle_values=rle_values,
+        protocol=protocol,
+        baud=baud,
+        options=parsed_opts,
+    )
+
+
 if __name__ == "__main__":
     app.run()

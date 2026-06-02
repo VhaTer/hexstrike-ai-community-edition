@@ -211,7 +211,7 @@ def run_mcp(args, logger):
             from hexstrike_server import register_http_routes
             register_http_routes(mcp, logger)
             logger.info(f"🌐 HTTP transport on {host}:{port} — MCP SSE at /mcp")
-            mcp.run(transport="http", host=host, port=port, show_banner=False, log_level="WARNING")
+            mcp.run(transport="http", host=host, port=port, show_banner=False, log_level="WARNING", stateless=True)
         else:
             # stdio transport for Claude Desktop / MCP clients
             mcp.run(show_banner=False, log_level="WARNING")

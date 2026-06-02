@@ -16,7 +16,7 @@ Usage:
     )
 """
 
-import os
+import os, shlex
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
@@ -68,8 +68,8 @@ def _sqlmap(data: dict) -> dict:
     post_data       = data.get("data", "")
     additional_args = data.get("additional_args", "")
 
-    command = f"sqlmap -u {url} --batch"
-    if post_data:       command += f" --data=\"{post_data}\""
+    command = f"sqlmap -u {shlex.quote(url)} --batch"
+    if post_data:       command += f" --data={shlex.quote(post_data)}"
     if additional_args: command += f" {additional_args}"
 
     return execute_command(command)

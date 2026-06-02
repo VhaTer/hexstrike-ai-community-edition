@@ -311,12 +311,17 @@ if __name__ == "__main__":
         description="HexStrike AI-PULSE — FastMCP Standalone Server",
     )
     parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.8.0')}")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--host", default=None, help=f"Bind address (default: {API_HOST})")
     parser.add_argument("--port", type=int, default=None, help=f"Bind port (default: {API_PORT})")
     args = parser.parse_args()
 
     host = args.host or API_HOST
     port = args.port or API_PORT
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
 
     logging.getLogger("fastmcp").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

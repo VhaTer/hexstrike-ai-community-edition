@@ -664,6 +664,59 @@ def _scalpel(data: dict) -> dict:
     return execute_command(command)
 
 
+def _tcp_send(data: dict) -> dict:
+    """Raw TCP send/receive via Python socket. Returns structured response."""
+    host = data.get("host", "")
+    port = data.get("port", 0)
+    data_hex = data.get("data", "")
+    timeout = data.get("timeout", 10)
+
+    if not host:
+        return {"success": False, "error": "host is required"}
+    if not port:
+        return {"success": False, "error": "port is required"}
+    if not data_hex:
+        return {"success": False, "error": "data (hex) is required"}
+
+    try:
+        payload = bytes.fromhex(data_hex)
+    except ValueError:
+        return {"success": False, "error": "data must be valid hex"}
+
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((host, int(port)))
+        sent = s.send(payload)
+        try:
+            resp = s.recv(4096)
+            recv = len(resp)
+        except socket.timeout:
+            resp = b""
+            recv = 0
+        s.close()
+        return {
+            "success": True,
+            "host": host,
+            "port": int(port),
+            "data_sent_hex": data_hex,
+            "data_sent_ascii": payload.decode("latin-1", errors="replace"),
+            "bytes_sent": sent,
+            "response_hex": resp.hex(),
+            "response_ascii": resp.decode("latin-1", errors="replace"),
+            "bytes_recv": recv,
+        }
+    except socket.timeout:
+        return {"success": False, "error": f"Connection timed out after {timeout}s"}
+    except ConnectionRefusedError:
+        return {"success": False, "error": "Connection refused"}
+    except socket.gaierror:
+        return {"success": False, "error": f"Host resolution failed: {host}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def _http_request(data: dict) -> dict:
     """Generic HTTP request (wraps curl). Returns structured response."""
     url = data.get("url", "")
@@ -701,12 +754,17 @@ def _http_request(data: dict) -> dict:
         out = result.get("stdout") or ""
         status_code = int(out.strip()) if out.strip().isdigit() else 0
 
-        hdr_text, body = "", ""
+        hdr_text, body, body_hex = "", "", ""
         try:
             with open(hf_path) as f:
                 hdr_text = f.read()
-            with open(bf_path) as f:
-                body = f.read()
+            with open(bf_path, "rb") as f:
+                raw = f.read()
+            try:
+                body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                body_hex = raw.hex()
+                body = ""
         except Exception:
             pass
 
@@ -727,14 +785,15 @@ def _http_request(data: dict) -> dict:
                 k, v = line.split(":", 1)
                 parsed_hdrs[k.strip()] = v.strip()
 
-        truncated = len(body) > max_body
+        truncated = len(body) > max_body if body else len(body_hex) > max_body * 2
         return {
             "success": status_code > 0,
             "status_code": status_code,
             "ok": 200 <= status_code < 300,
             "headers": parsed_hdrs,
             "cookies": cookies,
-            "body": body[:max_body],
+            "body": body[:max_body] if body else "",
+            "body_hex": body_hex[:max_body * 2] if body_hex else "",
             "body_truncated": truncated,
         }
     except Exception as e:
@@ -775,6 +834,9 @@ _HANDLERS = {
     # db_query
     "mysql":               _mysql,
     "sqlite":              _sqlite,
+
+    # raw_tcp
+    "tcp_send":            _tcp_send,
 
     # api_scan
     "http_request":        _http_request,

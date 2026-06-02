@@ -470,6 +470,7 @@ _TOOL_REGISTRY_ALIASES = {
     "theharvester": "theHarvester",
     "wifite2": "wifite",
     "http_request": "http-framework",
+    "tcp_send": "tcp-send",
 }
 
 
@@ -945,6 +946,14 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
             "Cookies from Set-Cookie are parsed into the cookies dict automatically.",
         ],
     },
+    "tcp_send": {
+        "workflow": "Raw TCP send/receive. Use for binary protocols, netcat-style challenges, or any non-HTTP service. Sends hex-encoded payload and reads response.",
+        "example": "tcp_send(host='target', port=1337, data='FFE9') for backdoor pattern injection. Read response_hex for the reply, which may contain keys, flags, or protocol data.",
+        "returns": [
+            "dict — success (bool), host, port, data_sent_hex/ascii, bytes_sent, response_hex/ascii, bytes_recv.",
+            "response_hex contains the raw server reply as hex string. response_ascii is latin-1 decoded.",
+        ],
+    },
 }
 
 
@@ -1104,6 +1113,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.testssl_direct import testssl_exec
     from mcp_core.web_probe_direct import web_probe_exec
     from mcp_core.vuln_intel_direct import vuln_intel_exec
+    from mcp_core.pcb_direct import pcb_exec
+    from mcp_core.binary_direct import binary_exec
 
     # Build DIRECT_TOOLS from shared TOOL_ROUTES
     _exec_by_name = {
@@ -1115,6 +1126,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "misc_exec": misc_exec, "osint_exec": osint_exec,
         "ad_exec": ad_exec, "testssl_exec": testssl_exec,
         "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
+        "pcb_exec": pcb_exec,
+        "binary_exec": binary_exec,
     }
     DIRECT_TOOLS = {}
     for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
