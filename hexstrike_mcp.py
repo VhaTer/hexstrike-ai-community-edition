@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HexStrike AI MCP Client - Enhanced AI Agent Communication Interface
+HexStrike AI MCP Server - FastMCP stdio entry point
 
 Enhanced with AI-Powered Intelligence & Automation
 🚀 Bug Bounty | CTF | Red Team | Security Research

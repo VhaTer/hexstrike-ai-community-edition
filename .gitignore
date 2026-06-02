@@ -61,6 +61,12 @@ opencode.json
 hexstrike.log.*
 *.bak
 output/
-debug_app.py
+
+# Runtime state (auto-generated, re-creatable)
+.hexstrike_data/
+
+# Node.js — unused (only typescript dep)
+package.json
+package-lock.json
 tests/test_hexstrike_cli.py
 tests/test_pulse_app.py

@@ -40,6 +40,18 @@ Start the HTTP server — one terminal, stays up:
 
 All clients connect to the same server — no conflicts, no duplicate lock files.
 
+### Entry points at a glance
+
+| Entry point | When to use |
+|---|---|
+| `./hexstrike-pulse` | **Default** — HTTP server in background, one command |
+| `python3 hexstrike.py serve` | CLI alternative, foreground with logs |
+| `python3 hexstrike_server.py` | Dev/debug — Starlette HTTP + dashboard |
+| `python3 hexstrike_mcp.py` | Internal — stdio mode for Claude Desktop |
+| `python3 hexstrike.py scan <tool> <target>` | Direct tool execution, no server needed |
+
+Use `./hexstrike-pulse` unless you have a specific reason for another.
+
 ---
 
 ## Connect your AI agent
