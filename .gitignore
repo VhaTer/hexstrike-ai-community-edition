@@ -71,7 +71,7 @@ package-lock.json
 tests/test_hexstrike_cli.py
 tests/test_pulse_app.py
 CTF/
-Projects_Reports_docs/
+Projects_reports_docs/
 AGENTS.md
 ARCHITECTURE.md
 KNOWN_ISSUES.md
