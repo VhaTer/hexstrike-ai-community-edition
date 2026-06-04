@@ -71,10 +71,12 @@ _INSTALL_HINTS: dict[str, tuple[str, str]] = {
     "steghide": ("apt", "steghide"),
     "responder": ("pip", "responder"),
     "bbot": ("pip", "bbot"),
+    "curl": ("apt", "curl"),
 }
 
 # Tool names that are NOT real binaries — these are internal aliases
 _SKIP_INSTALL = {"nmap_advanced", "nxc", "bettercap_wifi", "wifite2"}
+_SHOULD_ALWAYS_BE_INSTALLED = {"curl", "python3", "bash", "openssl"}
 
 
 class ToolRegistry:
@@ -88,9 +90,11 @@ class ToolRegistry:
         self._build_manifests()
 
     def _build_manifests(self) -> None:
+        _PRIMITIVE_BINARIES: set[str] = {"", "pip", "npm"}
         for name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
             self._routes[name] = (func_name, binary)
-            self._names_by_binary.setdefault(binary, []).append(name)
+            if binary not in _PRIMITIVE_BINARIES:
+                self._names_by_binary.setdefault(binary, []).append(name)
 
     @property
     def all_tool_names(self) -> list[str]:

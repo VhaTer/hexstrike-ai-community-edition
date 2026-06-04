@@ -946,12 +946,44 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
             "Cookies from Set-Cookie are parsed into the cookies dict automatically.",
         ],
     },
-    "tcp_send": {
-        "workflow": "Raw TCP send/receive. Use for binary protocols, netcat-style challenges, or any non-HTTP service. Sends hex-encoded payload and reads response.",
-        "example": "tcp_send(host='target', port=1337, data='FFE9') for backdoor pattern injection. Read response_hex for the reply, which may contain keys, flags, or protocol data.",
+    "raw_tcp": {
+        "workflow": "Raw TCP socket client. Use for protocol-level attacks when http_request cannot send non-HTTP payloads. Payload is hex-encoded to avoid JSON encoding issues.",
+        "example": "raw_tcp(host='10.10.10.1', port=1337, payload_hex='474554202f20485454502f312e310d0a0d0a') sends GET / HTTP/1.1",
         "returns": [
-            "dict — success (bool), host, port, data_sent_hex/ascii, bytes_sent, response_hex/ascii, bytes_recv.",
-            "response_hex contains the raw server reply as hex string. response_ascii is latin-1 decoded.",
+            "dict — success (bool), response_hex (str, hex-encoded response), bytes_sent (int), bytes_recv (int), duration_ms (int).",
+            "Decode response_hex with bytes.fromhex(response_hex).decode(errors='replace') to read as text.",
+        ],
+    },
+    "execute_code": {
+        "workflow": "Execute arbitrary code. Use for inline scripting, one-liner exploits, payload encoding/decoding. Supported languages: python, bash, node.",
+        "example": "execute_code(code='import hashlib; print(hashlib.md5(b\"test\").hexdigest())', language='python')",
+        "returns": [
+            "dict — success (bool), stdout (str), stderr (str), exit_code (int), language (str), timeout (bool).",
+            "Check exit_code == 0 for success. stderr may contain warnings even on success.",
+        ],
+    },
+    "browser_fetch": {
+        "workflow": "Headless browser page fetch. Use when curl/http_request returns empty/missing content due to JS rendering. Requires Playwright installed.",
+        "example": "browser_fetch(url='http://target/spa-page') then browser_eval(url='http://target', js='document.querySelector(\\'#token\\').innerText')",
+        "returns": [
+            "dict — success (bool), html (str, post-JS rendered DOM), title (str), url (str).",
+            "Returns full HTML after JS execution — compare with http_request to detect SPA/client-side rendering.",
+        ],
+    },
+    "browser_screenshot": {
+        "workflow": "Headless browser screenshot. Use for visual verification of web pages, CAPTCHA reading, or dashboard inspection. Requires Playwright installed.",
+        "example": "browser_screenshot(url='http://target') returns base64-encoded PNG of the full page.",
+        "returns": [
+            "dict — success (bool), screenshot_base64 (str, base64-encoded PNG), title (str), url (str).",
+            "Pass selector parameter to screenshot only a specific element (e.g. '#main-content').",
+        ],
+    },
+    "browser_eval": {
+        "workflow": "Execute JavaScript in headless browser context. Use for extracting values from JS-rendered pages, reading localStorage/cookies, or manipulating DOM for XSS testing. Requires Playwright installed.",
+        "example": "browser_eval(url='http://target/admin', js='document.cookie') extracts cookies after login.",
+        "returns": [
+            "dict — success (bool), result (str, stringified JS return value), title (str), url (str).",
+            "The return value of the JS expression is converted to string — use JSON.stringify() for objects.",
         ],
     },
 }
@@ -1078,7 +1110,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     transforms = [RegexSearchTransform(
         max_results=10,
         search_result_serializer=serialize_tools_for_output_markdown,
-        always_visible=["scan", "get_live_dashboard", "scan_background", "pulse_dashboard"],
+        always_visible=["scan", "get_live_dashboard", "scan_background", "pulse_dashboard", "http_request", "execute_code", "raw_tcp", "run_security_tool"],
     )] if RegexSearchTransform else []
     from mcp_core.instructions import INSTRUCTIONS
     mcp = FastMCP(
@@ -1113,8 +1145,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     from mcp_core.testssl_direct import testssl_exec
     from mcp_core.web_probe_direct import web_probe_exec
     from mcp_core.vuln_intel_direct import vuln_intel_exec
-    from mcp_core.pcb_direct import pcb_exec
-    from mcp_core.binary_direct import binary_exec
+    from mcp_core.exec_direct import exec_direct
+    from mcp_core.browser_direct import browser_exec
 
     # Build DIRECT_TOOLS from shared TOOL_ROUTES
     _exec_by_name = {
@@ -1126,8 +1158,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "misc_exec": misc_exec, "osint_exec": osint_exec,
         "ad_exec": ad_exec, "testssl_exec": testssl_exec,
         "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
-        "pcb_exec": pcb_exec,
-        "binary_exec": binary_exec,
+        "exec_direct": exec_direct, "browser_exec": browser_exec,
     }
     DIRECT_TOOLS = {}
     for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
@@ -1727,6 +1758,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "hashpump": "hashpump", "anew": "anew", "uro": "uro",
         "nuclei": "nuclei", "responder": "responder",
         "jwt_analyzer": "jwt_analyzer", "autopsy": "autopsy",
+        "raw_tcp": "", "execute_code": "",
+        "browser_fetch": "", "browser_screenshot": "", "browser_eval": "",
         "sherlock": "sherlock", "spiderfoot": "spiderfoot",
         "sublist3r": "sublist3r", "parsero": "parsero",
         "testssl": "testssl", "whatweb": "whatweb", "commix": "commix",

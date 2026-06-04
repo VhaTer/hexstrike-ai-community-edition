@@ -106,8 +106,11 @@ class TestToolRegistry:
         assert "install_hint" in s
 
     def test_all_tools_have_binary_mapping(self, reg):
-        """Every tool should have at least a binary name."""
+        """Every tool should have at least a binary name (primitives with no binary are allowed)."""
+        _PRIMITIVE_TOOLS = {"raw_tcp", "execute_code", "browser_fetch", "browser_screenshot", "browser_eval"}
         for name in reg.all_tool_names:
+            if name in _PRIMITIVE_TOOLS:
+                continue
             s = reg.get_tool_status(name)
             assert s["binary"], f"{name} has no binary mapping"
 

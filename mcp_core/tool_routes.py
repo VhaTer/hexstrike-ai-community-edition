@@ -129,13 +129,13 @@ TOOL_ROUTES = {
     "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
     "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
     "http_request":      ("mcp_core.misc_direct", "misc_exec", "curl"),
-    "tcp_send":          ("mcp_core.misc_direct", "misc_exec", "tcp_send"),
-    # binary analysis
-    "binary_varint":         ("mcp_core.binary_direct", "binary_exec", "binary_varint"),
-    "binary_block_parser":   ("mcp_core.binary_direct", "binary_exec", "binary_block_parser"),
-    "binary_rle_decode":     ("mcp_core.binary_direct", "binary_exec", "binary_rle_decode"),
-    "binary_signal_decode":  ("mcp_core.binary_direct", "binary_exec", "binary_signal_decode"),
-    "pcb_analyze":       ("mcp_core.pcb_direct", "pcb_exec", "pcb_analyze"),
+    "raw_tcp":           ("mcp_core.misc_direct", "misc_exec", ""),
+    # exec
+    "execute_code":      ("mcp_core.exec_direct", "exec_direct", ""),
+    # browser
+    "browser_fetch":     ("mcp_core.browser_direct", "browser_exec", ""),
+    "browser_screenshot":("mcp_core.browser_direct", "browser_exec", ""),
+    "browser_eval":      ("mcp_core.browser_direct", "browser_exec", ""),
     # web_probe
     "whatweb":           ("mcp_core.web_probe_direct", "web_probe_exec", "whatweb"),
     "commix":            ("mcp_core.web_probe_direct", "web_probe_exec", "commix"),
