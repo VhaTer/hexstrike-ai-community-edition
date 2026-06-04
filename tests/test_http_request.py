@@ -1,10 +1,20 @@
 """Tests for http_request — generic HTTP client primitive."""
 
-from unittest.mock import patch
+import os
+import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from mcp_core.misc_direct import _http_request
+
+
+def _make_mock_namedtemp(name):
+    """Helper: create a MagicMock that behaves like a closed NamedTemporaryFile."""
+    m = MagicMock()
+    m.name = name
+    m.close = MagicMock()
+    return m
 
 
 def test_get_returns_body():
@@ -63,7 +73,7 @@ def test_custom_headers():
     result = _http_request({
         "url": "https://httpbin.org/headers",
         "method": "GET",
-        "headers": "X-Test: hello; X-Another: world",
+        "headers": "X-Test: hello\nX-Another: world",
     })
     if not result.get("ok"):
         pytest.skip("httpbin.org unavailable")
@@ -95,6 +105,8 @@ def test_no_follow_redirects():
         pytest.skip("httpbin.org unavailable")
     if not result.get("ok") and result["status_code"] == 0:
         pytest.skip("httpbin.org unavailable")
+    if result.get("status_code") == 503:
+        pytest.skip("httpbin.org returned 503")
     assert result["status_code"] in (302, 301, 307, 308)
 
 
@@ -109,3 +121,70 @@ def test_headers_parsed_to_dict():
     result = _http_request({"url": "http://example.com", "method": "GET"})
     assert isinstance(result["headers"], dict)
     assert "Content-Type" in result["headers"] or "content-type" in {k.lower(): v for k, v in result["headers"].items()}
+
+
+def test_binary_body_returns_hex():
+    """Binary response populates body_hex for non-UTF-8 content."""
+    hf_path = tempfile.mktemp(suffix=".hdr")
+    bf_path = tempfile.mktemp(suffix=".bdy")
+    try:
+        with open(hf_path, "w") as f:
+            f.write("Content-Type: image/png\r\n")
+        with open(bf_path, "wb") as f:
+            f.write(bytes(range(256)))
+
+        with patch("mcp_core.misc_direct.execute_command") as mock_exec:
+            mock_exec.return_value = {"stdout": "200", "stderr": ""}
+            with patch("mcp_core.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
+                mock_tmp.side_effect = [
+                    _make_mock_namedtemp(hf_path),
+                    _make_mock_namedtemp(bf_path),
+                ]
+                result = _http_request({"url": "http://example.com/img", "method": "GET"})
+
+        assert result["success"] is True
+        assert result["body_hex"] != ""
+        assert result["body_hex"] == bytes(range(256)).hex()
+    finally:
+        for p in (hf_path, bf_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def test_timeout_configurable():
+    """timeout parameter is passed to execute_command."""
+    hf_path = tempfile.mktemp(suffix=".hdr")
+    bf_path = tempfile.mktemp(suffix=".bdy")
+    try:
+        with open(hf_path, "w") as f:
+            f.write("Content-Type: text/plain\r\n")
+        with open(bf_path, "wb") as f:
+            f.write(b"hello")
+
+        with patch("mcp_core.misc_direct.execute_command") as mock_exec:
+            mock_exec.return_value = {"stdout": "200", "stderr": ""}
+            with patch("mcp_core.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
+                mock_tmp.side_effect = [
+                    _make_mock_namedtemp(hf_path),
+                    _make_mock_namedtemp(bf_path),
+                ]
+                _http_request({"url": "http://example.com", "timeout": 120})
+
+            assert mock_exec.called
+            _, kwargs = mock_exec.call_args
+            assert kwargs.get("timeout") == 120
+    finally:
+        for p in (hf_path, bf_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def test_output_key_present():
+    """Response includes 'output' key for _normalize_tool_result."""
+    result = _http_request({"url": "http://example.com", "method": "GET"})
+    assert "output" in result
+    assert "HTTP 200" in result["output"]

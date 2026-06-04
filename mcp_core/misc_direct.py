@@ -14,14 +14,19 @@ Usage:
 
 import base64
 import json
+import logging
 import os
+import socket
 import sqlite3
 import tempfile
+import time
 from typing import Any, Dict
 
 import pymysql
 
 from server_core.command_executor import execute_command
+
+logger = logging.getLogger(__name__)
 
 
 def _require(data: dict, *keys: str) -> Dict[str, Any]:
@@ -134,7 +139,8 @@ def _gdb(data: dict) -> dict:
     result = execute_command(command)
     if commands:
         try: os.remove("/tmp/gdb_commands.txt")
-        except Exception: pass
+        except Exception:
+            logger.debug("Failed to remove gdb_commands.txt", exc_info=True)
     return result
 
 
@@ -156,7 +162,8 @@ def _radare2(data: dict) -> dict:
     result = execute_command(command)
     if commands:
         try: os.remove("/tmp/r2_commands.txt")
-        except Exception: pass
+        except Exception:
+            logger.debug("Failed to remove r2_commands.txt", exc_info=True)
     return result
 
 
@@ -730,6 +737,7 @@ def _http_request(data: dict) -> dict:
     follow = data.get("follow_redirects", True)
     max_body = data.get("max_body_size", 5000)
     additional_args = data.get("additional_args", "")
+    timeout = int(data.get("timeout", 60))
 
     hf = tempfile.NamedTemporaryFile(delete=False, suffix=".hdr")
     hf_path = hf.name; hf.close()
@@ -737,10 +745,10 @@ def _http_request(data: dict) -> dict:
     bf_path = bf.name; bf.close()
     try:
         cmd = "curl -s -L" if follow else "curl -s"
-        cmd += f" -X {method} -D '{hf_path}' -o '{bf_path}' --write-out '%{{http_code}}'"
+        cmd += f" -X {method} -D '{hf_path}' -o '{bf_path}' --write-out \"%{{http_code}}\""
         if cookie:
             cmd += f" --cookie '{cookie}'"
-        for h in headers_raw.split(";"):
+        for h in headers_raw.splitlines():
             h = h.strip()
             if h:
                 cmd += f" -H '{h}'"
@@ -750,7 +758,7 @@ def _http_request(data: dict) -> dict:
         if additional_args:
             cmd += f" {additional_args}"
 
-        result = execute_command(cmd, timeout=30)
+        result = execute_command(cmd, timeout=timeout)
         out = result.get("stdout") or ""
         status_code = int(out.strip()) if out.strip().isdigit() else 0
 
@@ -763,10 +771,10 @@ def _http_request(data: dict) -> dict:
             try:
                 body = raw.decode("utf-8")
             except UnicodeDecodeError:
+                body = raw.decode("utf-8", errors="replace")
                 body_hex = raw.hex()
-                body = ""
         except Exception:
-            pass
+            logger.warning("Failed to read response body/headers from temp files", exc_info=True)
 
         cookies = {}
         for line in hdr_text.splitlines():
@@ -786,24 +794,90 @@ def _http_request(data: dict) -> dict:
                 parsed_hdrs[k.strip()] = v.strip()
 
         truncated = len(body) > max_body if body else len(body_hex) > max_body * 2
+        body_truncated = body[:max_body]
+        output_lines = [f"HTTP {status_code}"]
+        for k, v in parsed_hdrs.items():
+            output_lines.append(f"{k}: {v}")
+        if cookies:
+            output_lines.append(f"Cookies: {json.dumps(cookies)}")
+        output_lines.append("")
+        output_lines.append(body_truncated)
         return {
             "success": status_code > 0,
             "status_code": status_code,
             "ok": 200 <= status_code < 300,
             "headers": parsed_hdrs,
             "cookies": cookies,
-            "body": body[:max_body] if body else "",
+            "body": body_truncated,
             "body_hex": body_hex[:max_body * 2] if body_hex else "",
             "body_truncated": truncated,
+            "output": "\n".join(output_lines),
         }
     except Exception as e:
+        logger.warning("http_request failed", exc_info=True)
         return {"success": False, "error": str(e)}
     finally:
         for p in (hf_path, bf_path):
             try:
                 os.unlink(p)
             except Exception:
-                pass
+                logger.debug("Failed to remove temp file %s", p, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# raw_tcp — raw TCP socket primitive
+# ---------------------------------------------------------------------------
+
+def _raw_tcp(data: dict) -> dict:
+    host = data.get("host", "")
+    port = data.get("port", 0)
+    payload_hex = data.get("payload_hex", "")
+    timeout_val = int(data.get("timeout", 15))
+
+    if not host or not port:
+        return {"success": False, "error": "host and port are required"}
+
+    payload = b""
+    if payload_hex:
+        try:
+            payload = bytes.fromhex(payload_hex)
+        except ValueError as e:
+            return {"success": False, "error": f"invalid payload_hex: {e}"}
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout_val)
+    start = time.monotonic()
+    try:
+        sock.connect((host, port))
+        if payload:
+            sock.sendall(payload)
+        response = b""
+        while True:
+            try:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+            except socket.timeout:
+                break
+        elapsed = time.monotonic() - start
+        return {
+            "success": True,
+            "response_hex": response.hex() if response else "",
+            "bytes_sent": len(payload),
+            "bytes_recv": len(response),
+            "duration_ms": round(elapsed * 1000),
+        }
+    except socket.timeout:
+        return {"success": False, "error": f"connection timed out after {timeout_val}s"}
+    except ConnectionRefusedError:
+        return {"success": False, "error": "connection refused"}
+    except socket.gaierror:
+        return {"success": False, "error": f"could not resolve host: {host}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        sock.close()
 
 
 # ---------------------------------------------------------------------------
@@ -858,6 +932,8 @@ _HANDLERS = {
     "api_fuzzer":          _api_fuzzer,
     "bbot":                _bbot,
     "nuclei":              _nuclei,
+    # raw_tcp
+    "raw_tcp":             _raw_tcp,
 }
 
 

@@ -9,12 +9,16 @@ Claude Desktop (known bug, still open as of May 2026).
 
 INSTRUCTIONS = (
     "You are connected to HexStrike AI-PULSE, a security reconnaissance and analysis framework.\n"
+    "Note: these instructions are silently dropped by Claude Desktop (known Anthropic bug, still open as of June 2026)."
+    "They are visible in Claude Code and compatible MCP clients.\n"
     "\n"
     "# Entry Points\n"
     "- `scan(target, intensity, objective)` — unified entry: quick (nmap+whatweb), medium (+nuclei+nikto), full (+gobuster). Auto-detects scope if target omitted.\n"
     "- `scan_background(target, intensity, objective)` — async scan for >30s operations. Returns immediately. Background task runs independently.\n"
     "- `get_live_dashboard(target)` — all dashboard panels in one call (~100ms).\n"
     "- Individual tools: `get_overview()`, `get_scope()`, `get_surface(target)`, `get_findings(target)`, `get_plan(target)`, `get_active_tools()`, `get_history(target)`.\n"
+    "- `http_request(url, method, ...)` — generic HTTP client (wraps curl). Returns status_code, headers, body, cookies. Binary responses: check `body_hex` field.\n"
+    "- `raw_tcp(host, port, payload_hex)` — raw TCP socket primitive for protocol testing.\n"
     "- `run_security_tool(tool_name, parameters)` — universal executor for all 130+ tools.\n"
     "- `run_async_tool(tool, target, params)` — launches background scan, returns scan_id immediately. Poll with `get_scan_status(scan_id)`.\n"
     "- `search_tools(pattern)` — search available tools by regex. `call_tool(name, arguments)` — execute a discovered tool by name.\n"
