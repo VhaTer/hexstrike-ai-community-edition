@@ -16,6 +16,8 @@ import fcntl
 import atexit
 from mcp_core.server_setup import setup_mcp_server_standalone, _scan_cache
 
+logger = logging.getLogger(__name__)
+
 _LOCK_PATH = "/tmp/hexstrike_mcp.lock"
 _LOCK_TTL = 5
 _lock_fh = None
@@ -173,7 +175,7 @@ def _release_lock():
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
             _lock_fh.close()
         except Exception:
-            pass
+            logger.warning("mcp_entry: failed to release lock file", exc_info=True)
     try:
         os.unlink(_LOCK_PATH)
     except FileNotFoundError:

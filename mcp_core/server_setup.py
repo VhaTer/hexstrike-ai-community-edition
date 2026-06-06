@@ -28,8 +28,49 @@ from server_core.telemetry_pipeline import _pipeline
 _DIRECT_TOOLS_CACHE: dict = {}
 
 def get_direct_tools() -> dict:
-    """Return DIRECT_TOOLS (tool exec functions) built during server setup."""
+    """Return DIRECT_TOOLS (tool exec functions), lazy-populated on first call."""
+    if not _DIRECT_TOOLS_CACHE:
+        _populate_direct_tools()
     return _DIRECT_TOOLS_CACHE
+
+def _populate_direct_tools() -> None:
+    """Populate _DIRECT_TOOLS_CACHE from TOOL_ROUTES — safe to call any time, idempotent."""
+    global _DIRECT_TOOLS_CACHE
+    if _DIRECT_TOOLS_CACHE:
+        return
+    from mcp_core.wifi_direct import wifi_exec
+    from mcp_core.recon_direct import recon_exec
+    from mcp_core.net_scan_direct import net_scan_exec
+    from mcp_core.web_scan_direct import web_scan_exec
+    from mcp_core.web_fuzz_direct import web_fuzz_exec
+    from mcp_core.password_cracking_direct import pwdcrack_exec
+    from mcp_core.smb_enum_direct import smb_enum_exec
+    from mcp_core.exploit_framework_direct import exploit_exec
+    from mcp_core.web_recon_direct import web_recon_exec
+    from mcp_core.security_direct import security_exec
+    from mcp_core.misc_direct import misc_exec
+    from mcp_core.osint_direct import osint_exec
+    from mcp_core.active_directory_direct import ad_exec
+    from mcp_core.testssl_direct import testssl_exec
+    from mcp_core.web_probe_direct import web_probe_exec
+    from mcp_core.vuln_intel_direct import vuln_intel_exec
+    from mcp_core.exec_direct import exec_direct
+    from mcp_core.browser_direct import browser_exec
+    _exec_by_name = {
+        "wifi_exec": wifi_exec, "recon_exec": recon_exec,
+        "net_scan_exec": net_scan_exec, "web_scan_exec": web_scan_exec,
+        "web_fuzz_exec": web_fuzz_exec, "pwdcrack_exec": pwdcrack_exec,
+        "smb_enum_exec": smb_enum_exec, "exploit_exec": exploit_exec,
+        "web_recon_exec": web_recon_exec, "security_exec": security_exec,
+        "misc_exec": misc_exec, "osint_exec": osint_exec,
+        "ad_exec": ad_exec, "testssl_exec": testssl_exec,
+        "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
+        "exec_direct": exec_direct, "browser_exec": browser_exec,
+    }
+    for tool_name, (_mod_path, func_name, binary) in TOOL_ROUTES.items():
+        ef = _exec_by_name.get(func_name)
+        if ef:
+            _DIRECT_TOOLS_CACHE[tool_name] = (ef, binary)
 
 try:
     from fastmcp.server.providers.skills import SkillsDirectoryProvider
@@ -1128,47 +1169,9 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     _register_skills(mcp, logger)
 
-    # Import all direct execution modules
-    from mcp_core.wifi_direct import wifi_exec
-    from mcp_core.recon_direct import recon_exec
-    from mcp_core.net_scan_direct import net_scan_exec
-    from mcp_core.web_scan_direct import web_scan_exec
-    from mcp_core.web_fuzz_direct import web_fuzz_exec
-    from mcp_core.password_cracking_direct import pwdcrack_exec
-    from mcp_core.smb_enum_direct import smb_enum_exec
-    from mcp_core.exploit_framework_direct import exploit_exec
-    from mcp_core.web_recon_direct import web_recon_exec
-    from mcp_core.security_direct import security_exec
-    from mcp_core.misc_direct import misc_exec
-    from mcp_core.osint_direct import osint_exec
-    from mcp_core.active_directory_direct import ad_exec
-    from mcp_core.testssl_direct import testssl_exec
-    from mcp_core.web_probe_direct import web_probe_exec
-    from mcp_core.vuln_intel_direct import vuln_intel_exec
-    from mcp_core.exec_direct import exec_direct
-    from mcp_core.browser_direct import browser_exec
-
-    # Build DIRECT_TOOLS from shared TOOL_ROUTES
-    _exec_by_name = {
-        "wifi_exec": wifi_exec, "recon_exec": recon_exec,
-        "net_scan_exec": net_scan_exec, "web_scan_exec": web_scan_exec,
-        "web_fuzz_exec": web_fuzz_exec, "pwdcrack_exec": pwdcrack_exec,
-        "smb_enum_exec": smb_enum_exec, "exploit_exec": exploit_exec,
-        "web_recon_exec": web_recon_exec, "security_exec": security_exec,
-        "misc_exec": misc_exec, "osint_exec": osint_exec,
-        "ad_exec": ad_exec, "testssl_exec": testssl_exec,
-        "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
-        "exec_direct": exec_direct, "browser_exec": browser_exec,
-    }
-    DIRECT_TOOLS = {}
-    for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
-        ef = _exec_by_name.get(func_name)
-        if ef:
-            DIRECT_TOOLS[tool_name] = (ef, binary)
-
-    # Cache DIRECT_TOOLS so pulse_app can access exec functions
-    global _DIRECT_TOOLS_CACHE
-    _DIRECT_TOOLS_CACHE = DIRECT_TOOLS
+    # Populate DIRECT_TOOLS cache from shared TOOL_ROUTES
+    _populate_direct_tools()
+    DIRECT_TOOLS = _DIRECT_TOOLS_CACHE
 
     @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
     async def run_security_tool(
@@ -1300,7 +1303,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     services    = tech_dict.get("services", []),
                 )
             except Exception:
-                pass
+                logger.debug("Failed to build TechProfile from whatweb output", exc_info=True)
         else:
             # Auto-detect: session state first, then scan cache
             if target:
@@ -1320,7 +1323,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                         _telemetry["session_state"] = True
                         await ctx.info(f"🧠 Tech profile restored from session: {tech_profile.summary()}")
                 except Exception:
-                    pass
+                    logger.debug("Failed to restore tech profile from session state", exc_info=True)
 
                 # 2. Fall back to scan cache if no session state
                 if tech_profile is None:
@@ -1339,7 +1342,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                                 "services":    tech_profile.services,
                             })
                         except Exception:
-                            pass  # session state unavailable — no-op
+                            logger.debug("Failed to persist tech profile to session state", exc_info=True)
 
         # ctx.get_prompt() — suggest workflow prompt based on TechProfile
         if tech_profile:
@@ -1364,7 +1367,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                             await ctx.info(f"💡 Workflow suggestion [{prompt_name}]: {hint[:120]}")
                             _telemetry["prompt_suggested"] = True
                 except Exception:
-                    pass  # prompt unavailable — no-op
+                    logger.debug("Failed to suggest workflow prompt", exc_info=True)
 
         # Rate limit profile from session state — override normal profile
         if not opt_profile or opt_profile == "normal":
@@ -1375,7 +1378,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     _telemetry["opt_profile"] = opt_profile
                     await ctx.info(f"⚡ Rate limit profile restored: {opt_profile}")
             except Exception:
-                pass
+                logger.debug("Failed to restore rate limit profile from session state", exc_info=True)
 
         _telemetry["opt_profile"] = opt_profile
 
@@ -1467,7 +1470,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 try:
                     await ctx.set_state(f"ratelimit:{target}", recommended)
                 except Exception:
-                    pass
+                    logger.debug("Failed to persist rate limit profile to session state", exc_info=True)
 
             if target:
                 exec_time = result.get("execution_time", 0.0)
@@ -1519,7 +1522,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                         result["ai_suggestion"] = suggestion
                         _telemetry["ai_suggested"] = True
                 except Exception:
-                    pass  # sampling not supported by client or failed — no-op
+                    logger.debug("ctx.sample not supported by client or failed", exc_info=True)
 
         return finalize(result)
 
@@ -1686,7 +1689,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 await ctx.info(f"⚡ Target profile restored from session — skipping re-analysis")
                 await ctx.report_progress(50, 100)
         except Exception:
-            pass
+            logger.debug("Failed to restore target profile from session", exc_info=True)
 
         if profile is None:
             profile = await loop.run_in_executor(None, lambda: _ide.analyze_target(target))
@@ -1701,7 +1704,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             try:
                 await ctx.set_state(f"ide_profile:{target}", profile.to_dict())
             except Exception:
-                pass
+                logger.debug("Failed to persist target profile to session state", exc_info=True)
         else:
             # Even when restoring from session state, check for newer cached scans
             cached_scans = _collect_cached_scans(ctx.session_id, target)
@@ -2158,7 +2161,22 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         intensity: str = "quick",
         objective: str = "comprehensive",
     ) -> Dict[str, Any]:
-        """Background scan — returns task_id immediately, agent can poll."""
+        """Run a scan in the background — returns task_id immediately, agent can poll.
+
+        Unlike scan() which blocks until complete, scan_background() returns a task_id
+        right away and runs tools sequentially in a background FastMCP task.
+        Uses ctx.report_progress() to show progress between tools.
+        Best for intensity=medium/full, CIDR ranges, or any scan >30s.
+
+        Returns: task_id (for polling), target, intensity, tools_to_run, status.
+        Poll with get_scan_status() or check get_active_tools() for running tasks.
+
+        Do NOT use for quick scans (<30s) — use scan() which blocks and returns faster.
+        Do NOT use when you need results immediately — use scan() with intensity=quick instead.
+
+        Example: scan_background('192.168.1.165', intensity='full')
+        Next: check get_active_tools() to monitor, or continue with other work
+        """
         # Lazy imports to avoid circular dependency (pulse_app imports from us)
         from pulse_app import (
             get_scope, get_surface, get_findings, get_plan,

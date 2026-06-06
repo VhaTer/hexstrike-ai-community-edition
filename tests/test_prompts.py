@@ -11,7 +11,7 @@ What we test:
   4 simple prompts: bug_bounty_recon, wifi_attack_chain, smb_lateral_movement, cloud_security_audit
   2 CTF prompts:    ctf_web_challenge, ctf_challenge
 
-Simple prompts:  len ≥ 2, run_security_tool present, first message role == "user"
+Simple prompts:  len ≥ 2, call_tool present, first message role == "user"
 CTF prompts:     len ≥ 3, "ctf" context injected, mock CTFWorkflowManager
 
 Run:
@@ -99,12 +99,12 @@ class TestSimplePrompts:
     """
 
     def test_bug_bounty_recon_structure(self):
-        """Message count ≥ 2, first role user, run_security_tool present."""
+        """Message count ≥ 2, first role user, call_tool present."""
         messages = run(bug_bounty_recon(target="example.com"))
         assert len(messages) >= 2
         assert messages[0].role == "user"
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_bug_bounty_recon_tools(self):
         """All expected tools mentioned."""
@@ -125,17 +125,17 @@ class TestSimplePrompts:
             bug_bounty_recon(target="example.com")
         )
         assert isinstance(result, PromptResult)
-        assert result.meta["version"] == "0.10.1"
+        assert result.meta["version"] == "0.11.0"
         assert result.meta["tools_count"] >= 8
         assert result.description == "Bug bounty recon workflow for example.com"
 
     def test_wifi_attack_chain_structure(self):
-        """Message count ≥ 2, first role user, run_security_tool present."""
+        """Message count ≥ 2, first role user, call_tool present."""
         messages = run(wifi_attack_chain(interface="wlan0", bssid="AA:BB:CC:DD:EE:FF"))
         assert len(messages) >= 2
         assert messages[0].role == "user"
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_wifi_attack_chain_tools(self):
         """All expected tools mentioned."""
@@ -160,12 +160,12 @@ class TestSimplePrompts:
         assert result.meta["tools_count"] == 4
 
     def test_smb_lateral_movement_structure(self):
-        """Message count ≥ 2, first role user, run_security_tool present."""
+        """Message count ≥ 2, first role user, call_tool present."""
         messages = run(smb_lateral_movement(target="10.10.10.10"))
         assert len(messages) >= 2
         assert messages[0].role == "user"
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_smb_lateral_movement_tools(self):
         """All expected tools mentioned."""
@@ -190,12 +190,12 @@ class TestSimplePrompts:
         assert result.meta["tools_count"] == 6
 
     def test_cloud_security_audit_structure(self):
-        """Message count ≥ 2, first role user, run_security_tool present."""
+        """Message count ≥ 2, first role user, call_tool present."""
         messages = run(cloud_security_audit(provider="aws"))
         assert len(messages) >= 2
         assert messages[0].role == "user"
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_cloud_security_audit_tools(self):
         """All expected tools mentioned."""
@@ -279,7 +279,7 @@ class TestCtfPrompts:
     # -- ctf_web_challenge --
 
     def test_ctf_web_structure(self):
-        """Message len ≥ 3, CTF context, run_security_tool."""
+        """Message len ≥ 3, CTF context, call_tool."""
         with patch("server_core.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             messages = run(ctf_web_challenge(**self.CTF_WEB_KWARGS))
@@ -289,14 +289,14 @@ class TestCtfPrompts:
         combined = " ".join(str(m) for m in messages)
         assert "CTF" in combined
 
-    def test_ctf_web_run_security_tool(self):
-        """Messages contain run_security_tool references."""
+    def test_ctf_web_call_tool(self):
+        """Messages contain call_tool references."""
         with patch("server_core.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             messages = run(ctf_web_challenge(**self.CTF_WEB_KWARGS))
 
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_ctf_web_final_message(self):
         """Final message references flag/validation."""
@@ -324,12 +324,12 @@ class TestCtfPrompts:
         assert len(messages) >= 3
         combined = " ".join(str(m) for m in messages)
         assert "CTF" in combined
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     # -- ctf_challenge (universal) --
 
     def test_ctf_challenge_structure(self):
-        """Message len ≥ 3, CTF context, run_security_tool."""
+        """Message len ≥ 3, CTF context, call_tool."""
         with patch("server_core.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
@@ -341,8 +341,8 @@ class TestCtfPrompts:
         combined = " ".join(str(m) for m in messages)
         assert "CTF" in combined
 
-    def test_ctf_challenge_run_security_tool(self):
-        """Messages contain run_security_tool from workflow steps."""
+    def test_ctf_challenge_call_tool(self):
+        """Messages contain call_tool from workflow steps."""
         with patch("server_core.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
@@ -350,7 +350,7 @@ class TestCtfPrompts:
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
         combined = " ".join(str(m) for m in messages)
-        assert "run_security_tool" in combined
+        assert "call_tool" in combined
 
     def test_ctf_challenge_category_in_first_message(self):
         """First message includes category marker (e.g. [WEB])."""
@@ -420,7 +420,7 @@ class TestCtfPrompts:
         assert "500 pts" in first
 
     def test_ctf_challenge_target_used_in_step_calls(self):
-        """Target parameter is used in run_security_tool calls within steps."""
+        """Target parameter is used in call_tool calls within steps."""
         with patch("server_core.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
