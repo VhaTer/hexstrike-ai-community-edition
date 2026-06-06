@@ -11,8 +11,11 @@ Usage:
     )
 """
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from typing import Any, Dict
 from server_core.command_executor import execute_command
 
@@ -106,7 +109,7 @@ def _pacu(data: dict) -> dict:
     try:
         os.remove(command_file)
     except Exception:
-        pass
+        logger.warning("security_direct: failed to remove temp file %s", command_file, exc_info=True)
     return result
 
 

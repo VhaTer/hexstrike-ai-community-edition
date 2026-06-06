@@ -177,7 +177,7 @@ class ProcessPool:
                         self.performance_metrics["memory_usage"] = memory_info.percent
 
                 except Exception:
-                    pass  # Ignore psutil errors
+                    logger.debug("ProcessPool: psutil monitoring error", exc_info=True)
 
             except Exception as e:
                 logger.error(f"💥 Pool monitor error: {str(e)}")

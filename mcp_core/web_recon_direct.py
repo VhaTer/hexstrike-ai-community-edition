@@ -11,8 +11,11 @@ Usage:
     )
 """
 
+import logging
 from typing import Any, Dict
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 import shutil
 
 from server_core.command_executor import execute_command
@@ -125,7 +128,7 @@ def _resolve_httpx() -> str:
             if "projectdiscovery" in r.stdout.lower():
                 return p
         except Exception:
-            pass
+            logger.debug("web_recon_direct: httpx binary check failed", exc_info=True)
     # Fall back to Go install path
     go_path = Path.home() / "go" / "bin" / "httpx"
     if go_path.exists():

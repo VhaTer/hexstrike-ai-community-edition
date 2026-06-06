@@ -12,9 +12,11 @@ import math
 import os
 import re
 import struct
+import logging
 from collections import Counter
 from typing import Any
 
+logger = logging.getLogger(__name__)
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ def _decode_input(data: str = "", file_path: str = "") -> bytes:
             try:
                 return base64.b64decode(data)
             except Exception:
-                pass
+                logger.debug("crypto_direct: base64 decode failed", exc_info=True)
     # fallback: raw string as bytes
     return data.encode("latin-1")
 
@@ -527,9 +529,9 @@ def rsa_attack(
                     "latin-1", errors="replace"
                 )
             except Exception:
-                pass
+                logger.debug("crypto_direct: plaintext decode failed", exc_info=True)
         except (TypeError, ValueError):
-            pass
+            logger.debug("crypto_direct: type/value error in RSA attack", exc_info=True)
 
     return result
 

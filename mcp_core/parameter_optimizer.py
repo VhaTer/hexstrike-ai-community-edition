@@ -314,7 +314,7 @@ class ParameterOptimizer:
                             f"→ {thread_key} {original}→{params[thread_key]}"
                         )
         except Exception:
-            pass  # psutil errors are non-fatal
+            logger.debug("ParameterOptimizer: psutil error reading system load", exc_info=True)
 
         return params
 

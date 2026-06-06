@@ -914,6 +914,7 @@ _HANDLERS = {
 
     # api_scan
     "http_request":        _http_request,
+    "curl":                _http_request,
     "api_schema_analyzer": _api_schema_analyzer,
     "graphql_scanner":     _graphql_scanner,
     "jwt_analyzer":        _jwt_analyzer,

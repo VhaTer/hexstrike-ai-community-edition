@@ -7,6 +7,9 @@ from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain, AttackStep
 from server_core.singletons import get_tool_stats_store
+import logging
+
+logger = logging.getLogger(__name__)
 
 class IntelligentDecisionEngine:
     """AI-powered tool selection and parameter optimization engine"""
@@ -326,7 +329,7 @@ class IntelligentDecisionEngine:
                 finally:
                     socket.setdefaulttimeout(old)
         except Exception:
-            pass
+            logger.debug("IDE: DNS resolution failed for %s", hostname, exc_info=True)
         return []
 
     def _detect_technologies(self, target: str) -> List[TechnologyStack]:

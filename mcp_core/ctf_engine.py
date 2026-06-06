@@ -195,15 +195,30 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         points: int = 0,
     ) -> Dict[str, Any]:
         """
-        Analyze a CTF challenge and return a full workflow plan.
+        Analyze a CTF challenge and generate a full workflow plan with tool selection.
+
+        Call FIRST when starting a CTF challenge — before scanning or solving.
+        Uses CTFWorkflowManager to select tools and estimate time/success probability
+        based on challenge category, description, and difficulty.
+
+        Returns: success, challenge name, category, difficulty, workflow {
+          tools[], workflow_steps[][], estimated_time, success_probability,
+          parallel_groups, fallback_strategies
+        }
 
         Args:
-            name:        Challenge name
+            name:        Challenge name (e.g. 'Dynamic Paths')
             category:    web | crypto | pwn | forensics | rev | misc | osint
-            description: Challenge description (drives tool selection)
+            description: Challenge description text — drives keyword-based tool selection
             difficulty:  easy | medium | hard | insane | unknown
-            target:      URL, IP, or binary path (optional)
-            points:      Point value (optional)
+            target:      URL, IP, or binary path (optional, can be set later via scan)
+            points:      Point value (optional, for scoring)
+
+        Do NOT use for non-CTF targets — use scan() + get_plan() instead.
+        Do NOT skip this step — ctf_analyze() is required before ctf_solve() for optimal results.
+
+        Example: ctf_analyze('Dynamic Paths', 'web', 'Bypass path restrictions...', 'easy', 'http://target:8080')
+        Next: scan(target) for recon, then ctf_solve(name, ...) for exploitation
         """
         ctx = get_context()
         await ctx.info(f"🧠 CTFWorkflowManager analyzing [{category.upper()}] {name}")
@@ -237,8 +252,10 @@ def register_ctf_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="ctf_tools",
         description=(
-            "Get the complete CTF tool arsenal for a category with optimized commands. "
-            "Returns executable commands from CTFToolManager for a given challenge type."
+            "Get the tool arsenal and executable commands for a CTF challenge category. "
+            "Returns suggested tools with their CLI commands from CTFToolManager, "
+            "plus the full category arsenal. Useful for understanding what tools are "
+            "available before running ctf_solve()."
         ),
         timeout=10.0,
     )
@@ -248,12 +265,21 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         target: str = "",
     ) -> Dict[str, Any]:
         """
-        Get CTF tool arsenal and optimized commands for a category.
+        Get the complete CTF tool arsenal and optimized commands for a category.
+
+        Returns suggested tools (keyword-matched to description), their executable commands,
+        and the full category arsenal listing. Use to preview tools before running ctf_solve().
 
         Args:
             category:    web | crypto | pwn | forensics | rev | misc | osint
-            description: Challenge description for context-aware tool selection
-            target:      Target for command generation (optional)
+            description: Challenge description for context-aware tool selection (keyword-driven)
+            target:      Target IP/URL for command generation (optional, appended to tool commands)
+
+        Call AFTER ctf_analyze() to review available tools for the challenge.
+        Do NOT use for non-CTF recon — use scan() or search_tools() instead.
+
+        Example: ctf_tools('web', 'Bypass path restrictions and access admin panel', 'http://target:8080')
+        Next: ctf_solve() to execute the workflow with these tools
         """
         ctx = get_context()
         tool_mgr = get_ctf_tools()
@@ -285,10 +311,11 @@ def register_ctf_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="ctf_solve",
         description=(
-            "Attempt to auto-solve a CTF challenge by executing the V6 workflow steps "
-            "with real HexStrike tools. Each step runs actual pentesting tools via "
-            "run_security_tool() and flags are extracted from real output. "
-            "Set dry_run=true to plan without executing."
+            "Execute the CTF workflow and attempt to solve a challenge using real tools. "
+            "Runs the workflow steps from CTFWorkflowManager through Pulse's execution "
+            "bridge — each step runs an actual security tool, flag is extracted from real "
+            "output. Set dry_run=True to preview without executing. "
+            "Call AFTER ctf_analyze() for best results — standalone also works with description."
         ),
         timeout=600.0,  # CTF solving can take up to 10 minutes
     )
@@ -303,17 +330,33 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         max_steps: int = 8,
     ) -> Dict[str, Any]:
         """
-        Execute the CTF workflow and attempt to solve the challenge.
+        Execute the CTF workflow and attempt to solve the challenge using real security tools.
+
+        Each workflow step runs an actual tool via Pulse's execution bridge — not simulated.
+        Flags are extracted from real tool output using regex patterns. Returns solved status,
+        flag candidates, step-by-step results, and confidence score.
+
+        Returns: success, challenge, category, status (solved/in_progress/manual),
+        steps_executed[], steps_planned[], flag_candidates[], flag (if found),
+        confidence (0-1), manual_guidance[], summary.
 
         Args:
-            name:        Challenge name
+            name:        Challenge name (any string, used for logging)
             category:    web | crypto | pwn | forensics | rev | misc | osint
-            description: Challenge description
+            description: Challenge description text — drives tool selection
             difficulty:  easy | medium | hard | insane | unknown
-            target:      URL, IP, or binary path
-            points:      Point value
-            dry_run:     If True, plan only — no tool execution
-            max_steps:   Maximum workflow steps to execute (default 8)
+            target:      URL, IP, or binary path for tool execution
+            points:      Point value (optional)
+            dry_run:     If True, plan only — no tool execution (default: False)
+            max_steps:   Maximum workflow steps to execute (default: 8)
+
+        Call AFTER ctf_analyze() for optimal tool selection.
+        Do NOT use for non-CTF targets — use scan() + get_findings() + get_plan() instead.
+        dry_run=True is recommended first to preview before executing potentially destructive steps.
+
+        Example: ctf_solve('Dynamic Paths', 'web', 'Bypass path restrictions...', 'easy', 'http://target:8080')
+        Example: ctf_solve('crypto100', 'crypto', 'RSA with small e...', 'medium', dry_run=True)
+        Next: check flag in response. If not found, review manual_guidance[] for next steps.
         """
         ctx = get_context()
 
@@ -434,12 +477,26 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         challenges: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
-        Optimize CTF team strategy.
+        Optimize CTF team strategy — assign members to challenges for max score.
+
+        Uses CTFTeamCoordinator with Hungarian algorithm approximation to assign
+        team members to challenges based on their skills. Returns assignments,
+        coverage gaps, collaboration opportunities, and estimated score.
+
+        Returns: success, strategy{assignments{}, coverage_gaps[], expected_score,
+        collaboration_opportunities[]}.
 
         Args:
             team_skills: {"alice": ["web", "crypto"], "bob": ["pwn", "rev"], ...}
             challenges:  [{"name": "...", "category": "...", "description": "...",
                            "difficulty": "...", "points": 100}, ...]
+
+        Call after ctf_analyze() on all challenges to plan team workflow.
+        Do NOT use for solo CTF — just use ctf_analyze() + ctf_solve() directly.
+
+        Example: ctf_team({"alice": ["web", "crypto"], "bob": ["pwn", "rev"]},
+                          [{"name": "Web100", "category": "web", "points": 100}])
+        Next: team members run ctf_solve() on their assigned challenges
         """
         ctx = get_context()
         coordinator = get_ctf_coordinator()

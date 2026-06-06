@@ -55,6 +55,15 @@ from server_core.singletons import enhanced_process_manager, error_handler, get_
 from server_core.exploit_rules import suggest_exploit, ESTIMATED_TIMES, compute_layer2_score
 from tool_registry import TOOLS
 from mcp_core.tool_registry_v2 import _registry
+from server_core.dashboard_sections import (
+    SectionConfig,
+    build_registry,
+    detect_workflow_state as _ds_detect_workflow,
+    auto_detect_sections,
+    load_section as _ds_load_section,
+    cost_for_sections,
+    cache_for_target as _ds_cache_for_target,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +75,12 @@ _TECH_KEYWORDS = {
     "nginx": "Nginx", "apache": "Apache", "php": "PHP",
     "python": "Python", "node.js": "Node.js", "java": "Java",
     "react": "React", "angular": "Angular", "vue": "Vue.js",
+    "bootstrap": "Bootstrap", "jquery": "jQuery",
 }
+_WHATWEB_TECH_RE = re.compile(r"([A-Za-z][A-Za-z0-9_.-]*)\[")
+_WHATWEB_META_FIELDS = frozenset({
+    "country", "ip", "meta-author", "script", "title", "httpserver",
+})
 
 # ── Rx aliases used in UI (must be module-level for Prefab to detect) ─────────
 
@@ -284,15 +298,15 @@ rx_missing_count = MISSING_COUNT
 
 @app.tool(model=True)
 def get_overview() -> dict:
-    """PULSE dashboard overview: version, uptime, RAM, disk, CPU, tools count, server health.
+    """Discover the Pulse environment: version, uptime, RAM, disk, CPU, tools count, server health.
 
-    Call FIRST when starting a fresh session to discover the HexStrike environment.
-    Returns system resources and server status — no target required.
-
+    Call FIRST when starting a fresh session. No target required — returns system-level info.
     Returns: version_display, uptime_display, ram_display (avail/total GB),
     cpu_percent, cpu_history (for sparklines), disk_percent, tools_count,
     server_status ('healthy' or 'limited'), total_runs, total_errors.
 
+    Do NOT use for target-specific data — use get_scope() or get_live_dashboard(target) instead.
+    Call BEFORE get_scope() to establish environment baseline.
     Example: get_overview()
     Next: get_scope() to see active target
     """
@@ -311,7 +325,7 @@ def get_overview() -> dict:
         recent = rm.usage_history[-10:] if hasattr(rm, "usage_history") else []
         cpu_history = [u.get("cpu_percent", 0) for u in recent if "cpu_percent" in u]
     except Exception:
-        pass
+        logger.debug("Failed to extract cpu_history from resource monitor", exc_info=True)
 
     return {
         "version":               app_config["VERSION"],
@@ -350,7 +364,20 @@ def _guess_target_type(target_str: str) -> str:
 
 @app.tool()
 def get_scope(target: str | None = None) -> dict:
-    """Detect current scope from recent scan cache entries or explicit target."""
+    """Detect current active target from recent scan cache or explicit input.
+
+    Auto-discovers the most recently scanned target when called without args.
+    Pass an explicit target to set scope without scanning.
+    Returns: active_target, target_type (ip/domain/url), tools_used, tools_count,
+    last_seen_ago, scope_summary.
+
+    Call AFTER get_overview() to see what target Pulse is currently focused on.
+    Call BEFORE get_surface() to ensure a target is selected.
+    Do NOT use for scanning — use scan() or scan_background() instead.
+    Example: get_scope()
+    Example: get_scope('192.168.1.165')
+    Next: get_surface() for port/tech data, or scan() to run recon tools
+    """
     now = time.time()
 
     # Explicit target takes precedence
@@ -426,19 +453,21 @@ def get_scope(target: str | None = None) -> dict:
 
 @app.tool(model=True)
 def get_surface(target: str | None = None) -> dict:
-    """Open ports, services, and technology detection for a target.
+    """Assess attack surface: open ports, services, and technology detection for a target.
 
-    Parses cached nmap ports + whatweb tech detections. Auto-uses active
-    scope target if none provided. Risk level: high (>5 ports), medium (>2),
-    low (>0), unknown.
+    Parses cached nmap scan results for open ports/services + whatweb output for tech
+    detection. Auto-uses active scope target if none provided.
+    Risk levels: high (>5 open ports), medium (>2), low (>0), unknown.
+    Also returns next_suggested_tool based on detected ports and technologies.
 
-    Returns: target, risk_level, ports (list with port/service/state),
-    port_count, technologies (list), ports_display, risk_variant.
+    Returns: target, risk_level, ports[] (port/service/state), port_count,
+    technologies[], ports_display, risk_variant, next_suggested_tool{}.
 
-    Use AFTER get_scope() to assess attack surface.
+    Call AFTER get_scope() or scan() to assess attack surface.
+    Do NOT use for targets that haven't been scanned yet — run scan() first.
     Example: get_surface() — uses current scope target
     Example: get_surface('scanme.nmap.org')
-    Next: get_findings() for vulnerabilities
+    Next: get_findings() for vulnerability analysis
     """
     if not target:
         scope = get_scope()
@@ -466,6 +495,7 @@ def get_surface(target: str | None = None) -> dict:
                     pass
 
     techs = set()
+    app_name = ""
     for e in entries:
         if e.get("tool") != "whatweb":
             continue
@@ -474,6 +504,15 @@ def get_surface(target: str | None = None) -> dict:
         for keyword, label in _TECH_KEYWORDS.items():
             if keyword in output:
                 techs.add(label)
+        # Secondary parser: extract any WhatWeb Name[value] tech names
+        for m in _WHATWEB_TECH_RE.finditer(output):
+            name = m.group(1)
+            if name.lower() not in _WHATWEB_META_FIELDS and len(name) > 2:
+                techs.add(name.capitalize())
+        # Extract app name from Title field
+        tm = re.search(r"title\[([^\]]+)\]", output)
+        if tm:
+            app_name = tm.group(1).strip()
 
     port_count = len(ports)
     if port_count > 5:
@@ -494,6 +533,7 @@ def get_surface(target: str | None = None) -> dict:
         "ports":          sorted(ports, key=lambda p: p["port"]),
         "ports_count":    port_count,
         "technologies":   sorted(techs),
+        "app_name":       app_name,
         "risk_level":     risk,
         "risk_variant":   "destructive" if risk == "high" else "warning" if risk == "medium" else "default",
         "ports_display":  f"{port_count} open port{'s' if port_count != 1 else ''}" if port_count else "No ports detected",
@@ -505,16 +545,21 @@ def get_surface(target: str | None = None) -> dict:
 
 @app.tool(model=True)
 def get_findings(target: str | None = None) -> list[dict]:
-    """Vulnerabilities and issues for a target from nuclei + nikto scan cache.
+    """Get vulnerabilities and security issues for a target from nuclei + nikto scan cache.
 
-    Returns findings sorted by severity (critical→high→medium→low→info).
-    Each finding: tool, severity, finding (ID or URL), details.
+    Each finding is enriched with Couche 1 exploit suggestion (which tool to use)
+    and Layer 2 score (0.0-1.0 based on severity, location, tool reliability, complexity).
+    Returns findings sorted by Layer 2 score descending — highest priority first.
+
+    Each finding: tool, severity, finding (ID or URL), details, exploit{tool, confidence},
+    layer2{score, label, factors}, score (display string).
+
     Auto-uses active scope target if none provided.
-
-    Use AFTER get_surface() to find actual vulnerabilities.
+    Call AFTER get_surface() to identify actual vulnerabilities on open ports.
+    Do NOT use if no scan has been run — call scan(intensity='medium' or 'full') first.
     Example: get_findings()
     Example: get_findings('scanme.nmap.org')
-    Next: get_plan() for attack chain
+    Next: get_plan() for attack chain, or follow next_suggested_tool from findings
     """
     if not target:
         scope = get_scope()
@@ -579,7 +624,16 @@ def get_findings(target: str | None = None) -> list[dict]:
 
 @app.tool()
 def get_tool_intelligence() -> list[dict]:
-    """Return baseline vs live effectiveness for all tools with recorded runs."""
+    """Compare baseline vs live effectiveness for all tools with recorded runs.
+
+    Returns per-tool: tool name, baseline effectiveness (0-1), live effectiveness,
+    blended score, runs count, successes. Useful for understanding which tools
+    perform best in your environment.
+
+    No target required — shows global statistics across all sessions.
+    Call for tool selection guidance — prefer tools with high blended scores.
+    Example: get_tool_intelligence()
+    """
     tool_stats = get_tool_stats_store()
     all_stats = tool_stats.get_all_stats()
     result = []
@@ -601,7 +655,17 @@ def get_tool_intelligence() -> list[dict]:
 
 @app.tool()
 def get_rate_limit_status(target: str | None = None) -> dict:
-    """Rate limit detection state per target. Shows current profile, confidence, indicators."""
+    """Check rate limit detection state for a target.
+
+    Shows current profile (aggressive/normal/conservative/stealth), confidence level,
+    detection indicators, event history, and recommended timing parameters.
+    Profiles adapt based on observed WAF/rate-limiting behavior.
+
+    No target needed for global state. Pass target to filter by specific host.
+    Call BEFORE running aggressive tools to avoid getting blocked.
+    Example: get_rate_limit_status()
+    Example: get_rate_limit_status('192.168.1.165')
+    """
     events = list(_rate_limit_events)
     if target:
         events = [e for e in events if e.get("target") == target]
@@ -627,6 +691,18 @@ _RL_PROFILES = {
 
 @app.tool()
 def get_errors_and_failures() -> dict:
+    """Get error classification, failure trends, and tool-specific error counts.
+
+    Aggregates data from IntelligentErrorHandler (error types per tool, alternatives)
+    and OperationalMetricsStore (error/timeout counts by tool, slowest tools).
+    Useful for diagnosing tool failures and tuning timeouts.
+
+    No target required — shows global error statistics across all sessions.
+    Call when tools are failing unexpectedly to identify patterns.
+    Returns: error_types[], error_counts_by_tool[], timeout_counts_by_tool[],
+    slowest_tools[], summary.
+    Example: get_errors_and_failures()
+    """
     """Error and failure statistics. Per-tool error/timeout counts, slowest tools, error type distribution, recent errors."""
     ops = _op_metrics.summary()
     error_by_tool = _op_metrics.error_count_by_tool()
@@ -638,7 +714,7 @@ def get_errors_and_failures() -> dict:
     try:
         err_stats = error_handler.get_error_statistics()
     except Exception:
-        pass
+        logger.debug("Failed to get error statistics", exc_info=True)
 
     recent_errors = []
     for e in err_stats.get("recent_errors", []):
@@ -679,17 +755,24 @@ def get_errors_and_failures() -> dict:
 
 @app.tool(model=True)
 def get_plan(target: str | None = None, objective: str = "comprehensive") -> dict:
-    """Attack chain for a target from the IntelligentDecisionEngine.
+    """Generate an attack chain for a target from the IntelligentDecisionEngine.
 
-    Generates ordered steps with tool, expected outcome, success probability,
-    and estimated time. Auto-uses active scope target if none provided.
+    Produces ordered steps with tool name, expected outcome, success probability,
+    and estimated execution time. Useful for planning exploitation after recon is complete.
+    Auto-uses active scope target if none provided.
 
-    Returns: target, steps (list with num/tool/outcome/probability/ETA),
-    step_count, estimated_time, risk_level, summary.
+    Returns: target, steps[] (num, tool, expected_outcome, success_probability,
+    execution_time_estimate, prob_display, eta_display, outcome_short),
+    step_count, estimated_time (seconds), risk_level, summary.
 
-    Use AFTER get_findings() to plan the attack workflow.
+    objective: comprehensive (default, full chain) | quick (fastest path) | stealth (low-noise).
+    Falls back to empty steps if no target or IDE unavailable.
+
+    Call AFTER get_findings() to plan exploitation based on discovered vulnerabilities.
+    Do NOT use before recon — call get_surface() + get_findings() first.
     Example: get_plan()
-    Example: get_plan('scanme.nmap.org')
+    Example: get_plan('scanme.nmap.org', objective='stealth')
+    Next: execute the first step(s) via scan() or run_security_tool()
     """
     if not target:
         scope = get_scope()
@@ -724,7 +807,16 @@ def get_plan(target: str | None = None, objective: str = "comprehensive") -> dic
 
 @app.tool()
 def get_active_tools() -> dict:
-    """Currently running / active processes from process manager."""
+    """Show currently running processes, worker pool stats, and resource usage.
+
+    Returns active_processes count, active_workers, queue_size, pool_stats,
+    resource_usage, auto_scaling status, and a human-readable summary.
+
+    No target required — shows system-wide process state.
+    Call before launching new scans to check if capacity is available.
+    Call when scan_background() tasks are running to monitor progress.
+    Example: get_active_tools()
+    """
     try:
         stats = enhanced_process_manager.get_comprehensive_stats()
         pool = stats.get("process_pool", {})
@@ -750,7 +842,18 @@ def get_active_tools() -> dict:
 
 @app.tool()
 def get_history(target: str | None = None, limit: int = 50) -> list[dict]:
-    """Scan history, optionally filtered by target. Replaces get_recent_scans."""
+    """Get scan history from cache, optionally filtered by target.
+
+    Returns recent scan entries sorted by timestamp (newest first).
+    Each entry: tool, target, timestamp, age (human-readable), status, execution_time,
+    execution_display, error.
+
+    No target needed for all history. Pass target to filter by specific host.
+    limit: max entries to return (default 50).
+    Call BEFORE get_surface() or get_findings() to see what data is already cached.
+    Example: get_history()
+    Example: get_history('192.168.1.165', limit=10)
+    """
     now = time.time()
     try:
         entries = sorted(
@@ -783,7 +886,16 @@ def get_history(target: str | None = None, limit: int = 50) -> list[dict]:
 
 @app.tool()
 def get_tool_performance() -> dict:
-    """Per-tool success rates and timeout counts. Shows worst performers first."""
+    """Compare per-tool success rates, error counts, and timeout frequencies.
+
+    Shows worst performers first (lowest success rate). Each entry: tool name,
+    runs count, successes, errors, rate_display (percentage), timeouts.
+    Also returns a separate timeouts list and overall summary.
+
+    No target required — shows global statistics across all sessions.
+    Call when diagnosing tool reliability issues or tuning timeouts.
+    Example: get_tool_performance()
+    """
     sr = _op_metrics.success_rate_by_tool()
     to = _op_metrics.timeout_count_by_tool()
     to_map = {e["tool"]: e["timeouts"] for e in to}
@@ -812,7 +924,16 @@ def get_tool_performance() -> dict:
 
 @app.tool()
 def get_cache_status() -> dict:
-    """Cache hit/miss statistics and per-tool cache hits."""
+    """Get scan cache hit/miss statistics and per-tool cache performance.
+
+    Returns total hits, misses, hit_ratio, cache_size, max_size, utilization,
+    hit_rate, and per-tool cache_hits breakdown. Useful for understanding
+    how effectively the scan cache is serving repeated targets.
+
+    No target required — shows global cache statistics.
+    Call after repeated scans to verify cache is working as expected.
+    Example: get_cache_status()
+    """
     cs = _op_metrics.cache_summary()
     tool_hits = _op_metrics.cache_hits_by_tool()
 
@@ -821,7 +942,7 @@ def get_cache_status() -> dict:
         from server_core.singletons import cache
         adv_stats = cache.get_stats()
     except Exception:
-        pass
+        logger.debug("Failed to get cache stats", exc_info=True)
 
     return {
         "hits":        cs.get("hits", 0),
@@ -865,7 +986,16 @@ def get_cache_intelligence() -> dict:
 
 @app.tool()
 def get_system_trends() -> dict:
-    """System resource trends over time. CPU/memory averages, history for sparklines."""
+    """Get CPU, memory, and disk usage trends over time.
+
+    Returns cpu_avg (10-period), memory_avg, measurements count, period_minutes,
+    cpu_history (30-point), mem_history (30-point), disk_display.
+    Useful for monitoring system load during long-running scans.
+
+    No target required — shows system-wide resource trends.
+    Call when system feels slow to check if resources are constrained.
+    Example: get_system_trends()
+    """
     try:
         rm = enhanced_process_manager.resource_monitor
         trends = rm.get_usage_trends() if hasattr(rm, "get_usage_trends") else {}
@@ -894,13 +1024,15 @@ def get_system_trends() -> dict:
 
 @app.tool()
 def get_sessions() -> dict:
-    """Active and completed session summaries from SessionStore.
+    """Get active and completed scan session summaries.
 
-    Returns counts and lists of recent sessions for the dashboard.
-    No target required — shows all sessions across targets.
+    Returns counts of active vs completed sessions, with lists of recent sessions.
+    Each completed session includes: session_id, target, findings count,
+    tools_executed (list), timestamps, age_display.
 
-    Returns: active_count, completed_count, active (list of session IDs),
-    completed (list with session_id, target, findings, tools_executed, timestamps).
+    No target required — shows all sessions across all targets.
+    Call to understand current workload and past session history.
+    Example: get_sessions()
     """
     try:
         from server_core.singletons import get_session_store
@@ -931,12 +1063,13 @@ def get_sessions() -> dict:
 
 @app.tool()
 def get_confirmations() -> dict:
-    """Confirmation event statistics (accepted/denied/skipped).
+    """Get user confirmation statistics for dangerous operations.
 
-    Tracks user confirmations for dangerous operations.
-    No target required — global statistics.
+    Shows count of accepted, denied, and skipped confirmation prompts.
+    Useful for understanding which operations users approve vs reject.
 
-    Returns: accepted, denied, skipped, total, summary.
+    No target required — global statistics across all sessions.
+    Example: get_confirmations()
     """
     conf = _op_metrics.confirmation_summary()
     total = sum(conf.values())
@@ -959,13 +1092,13 @@ def get_confirmations() -> dict:
 
 @app.tool()
 def get_network_io() -> dict:
-    """Network I/O statistics (bytes sent/received) from ResourceMonitor.
+    """Get network I/O statistics — bytes sent and received since server start.
 
-    Shows current cumulative counters and rate estimation.
+    Shows cumulative counters with human-readable formatting (B/KB/MB/GB).
+    Useful for monitoring bandwidth usage during large scans or data transfers.
+
     No target required — system-wide network stats.
-
-    Returns: bytes_sent, bytes_recv, bytes_sent_display, bytes_recv_display,
-    total_display.
+    Example: get_network_io()
     """
     try:
         rm = enhanced_process_manager.resource_monitor
@@ -1002,6 +1135,68 @@ def get_network_io() -> dict:
         "bytes_recv_display":  _fmt_bytes(recv),
         "total_display":       _fmt_bytes(sent + recv),
     }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Section registry — dashboard_sections integration
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def _get_async_data(target: str | None = None) -> dict:
+    """Return async scan data for the async section (no scan_id needed)."""
+    with _async_scans_lock:
+        running = [
+            {"scan_id": sid, "tool": s["tool"], "target": s.get("target", "?"),
+             "status": s["status"]}
+            for sid, s in _async_scans.items()
+            if s.get("status") in ("starting", "running")
+        ][-10:]
+        completed = [
+            {"scan_id": sid, "tool": s["tool"], "target": s.get("target", "?"),
+             "status": s["status"]}
+            for sid, s in _async_scans.items()
+            if s.get("status") in ("completed", "failed")
+        ][-20:]
+    return {
+        "running": running,
+        "completed": completed,
+        "running_count": len(running),
+        "completed_count": len(completed),
+    }
+
+
+def _has_async_scans() -> bool:
+    """Check if any async scans exist."""
+    with _async_scans_lock:
+        return len(_async_scans) > 0
+
+
+def _has_errors() -> bool:
+    """Check if any errors have been recorded."""
+    try:
+        return _op_metrics.summary().get("total_errors", 0) > 0
+    except Exception:
+        return False
+
+
+_SECTION_REGISTRY = build_registry([
+    SectionConfig("header",       "HEADER",       get_overview,            cost_est=500,  always=True),
+    SectionConfig("scope",        "SCOPE",        get_scope,               cost_est=300,  always=True),
+    SectionConfig("surface",      "SURFACE",      get_surface,             cost_est=2000, requires_target=True, depends="scope"),
+    SectionConfig("findings",     "FINDINGS",     get_findings,            cost_est=3000, requires_target=True, depends="findings"),
+    SectionConfig("plan",         "PLAN IDE",     get_plan,                cost_est=1500, requires_target=True, depends="plan"),
+    SectionConfig("history",      "HISTORY",      get_history,             cost_est=1500, condition=lambda: len(_scan_cache) > 0),
+    SectionConfig("active",       "ACTIVE TOOLS", get_active_tools,        cost_est=300,  condition=_has_async_scans),
+    SectionConfig("async",        "ASYNC SCANS",  _get_async_data,         cost_est=300,  condition=_has_async_scans),
+    SectionConfig("errors",       "ERRORS",       get_errors_and_failures, cost_est=1000, condition=_has_errors),
+    SectionConfig("performance",  "PERFORMANCE",  get_tool_performance,    cost_est=800,  condition=lambda: len(_scan_cache) > 5),
+    SectionConfig("cache",        "CACHE",        get_cache_status,        cost_est=800,  condition=lambda: len(_scan_cache) > 0),
+    SectionConfig("intel",        "INTEL",        get_tool_intelligence,   cost_est=500,  always=True),
+    SectionConfig("trends",       "TRENDS",       get_system_trends,       cost_est=500,  always=True),
+    SectionConfig("sessions",     "SESSIONS",     get_sessions,            cost_est=500),
+    SectionConfig("confirmations","CONFIRMATIONS",get_confirmations,       cost_est=300),
+    SectionConfig("netio",        "NETWORK I/O",  get_network_io,          cost_est=200),
+])
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1097,7 +1292,7 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
                     "duration": elapsed, "timed_out": False, "cache_hit": False,
                 })
             except Exception:
-                pass
+                logger.debug("Failed to record async scan metrics for %s", tool, exc_info=True)
 
         except Exception as e:
             with _async_scans_lock:
@@ -1114,6 +1309,20 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
 
 @app.tool()
 def get_scan_status(scan_id: str) -> dict:
+    """Poll the status of an async scan launched via run_async_tool().
+
+    Returns current state: running (with elapsed time), completed (with output + duration),
+    or failed (with error message). Each call is idempotent and lightweight (~0ms).
+
+    Returns: status (running/completed/failed/not_found), tool, target, start_time,
+    end_time, duration_display, output (truncated), error.
+
+    Call AFTER run_async_tool() to retrieve results.
+    Poll every 2-5 seconds for running scans.
+    Returns 'not_found' for invalid or expired scan_ids.
+
+    Example: get_scan_status('async_scan_abc123')
+    """
     """Poll status of an async scan started by run_async_tool.
 
     Returns current status, elapsed time, and result when complete.
@@ -1186,7 +1395,7 @@ _TOOLS_NEED_URL_AS_TARGET = {"nuclei", "httpx", "katana"}
 _TOOLS_NEED_HOST = {"nmap", "nmap_advanced"}
 
 
-def _suggest_next_from_context(surface: dict, findings: list) -> dict:
+def _suggest_next_from_context(surface: dict, findings: list, exclude: set = frozenset()) -> dict:
     """Suggest next tool based on structured surface + findings data.
 
     Primary signal: highest layer2.score ≥ 0.3 with exploit tool.
@@ -1291,6 +1500,8 @@ def _suggest_next_from_context(surface: dict, findings: list) -> dict:
         if "smb" in services_str or "microsoft-ds" in services_str:
             return {"tool": "smbmap", "reason": "SMB service detected — enumerate shares", "expected_time": _EST.get("smbmap", "10-30s"), "priority": "high"}
         if "http" in services_str or "ssl" in services_str:
+            if techs_lower:
+                return {"tool": "gobuster", "reason": f"Tech identified ({', '.join(techs_lower[:3])}) — discover hidden paths", "expected_time": "1-5 min", "priority": "high"}
             return {"tool": "whatweb", "reason": "Web service detected — fingerprint technologies", "expected_time": "10-30s", "priority": "high"}
 
     # Fallback: low-severity findings with no port context
@@ -1398,7 +1609,7 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
                 tools_used=list({h.get("tool", "?") for h in history}),
             )
     except Exception:
-        pass
+        logger.debug("Failed to record scan in TargetStore for %s", active_target, exc_info=True)
 
     return {
         # Raw data objects
@@ -1447,11 +1658,25 @@ def _collect_dashboard_state(target: str | None = None) -> dict:
 
 @app.tool(model=True)
 def get_live_dashboard(target: str | None = None) -> dict:
-    """Full Pulse dashboard state in one call. Returns all panels: Overview, Scope, Surface, Findings, Plan, Active Tools, History, Rate Limit, Errors & Failures, Tool Performance, Cache Status, System Trends, Sessions, Confirmations, Network I/O, Async Scans, Intelligence.
+    """Full Pulse dashboard state in one call — replaces 15+ individual get_* calls.
 
-    No target needed for system-wide stats. Pass target to filter scope/surface/findings/history/plan to a specific host. Use this INSTEAD of calling 15+ individual get_* tools — one call gives you everything. ~100ms typical response.
+    Returns all 18 panels in a single response: Overview, Scope, Surface, Findings,
+    Plan, Active Tools, History, Rate Limit, Errors & Failures, Tool Performance,
+    Cache Status, System Trends, Sessions, Confirmations, Network I/O, Async Scans,
+    Intelligence, next_suggested_tool. ~100ms typical response.
 
-    Returns {overview, scope, surface, findings, plan, active_tools, history, rate_limit, errors, tool_performance, cache_status, system_trends, sessions, confirmations, network_io, async_scans, intelligence} with pre-formatted display strings.
+    Each panel contains pre-formatted display strings and raw data for agent processing.
+
+    Call this INSTEAD of calling individual get_* tools when you need a full picture.
+    No target needed for system-wide stats. Pass target to filter scope/surface/findings
+    to a specific host.
+
+    Do NOT use for single-tool operations — use scan() or individual tools instead.
+    Do NOT use before any scan has run — panels will be empty.
+
+    Example: get_live_dashboard() — all targets
+    Example: get_live_dashboard('192.168.1.165') — filtered to one target
+    Next: check next_suggested_tool in response, then follow the recommendation
     """
     st = _collect_dashboard_state(target)
     return {
@@ -1481,26 +1706,201 @@ def get_live_dashboard(target: str | None = None) -> dict:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Section-based dashboard — lightweight, auto-detected sections
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@app.tool(model=True)
+def get_dashboard(
+    sections: str | list[str] | None = None,
+    target: str | None = None,
+) -> dict:
+    """Pulse dashboard with auto-detected sections — lightweight alternative to get_live_dashboard().
+
+    Uses session state to determine which panels are relevant, then loads only
+    those panels. Token cost scales with number of sections loaded (~300-3000
+    tokens per section).
+
+    sections: comma-separated or list of section names. If None, auto-detect.
+    target: optional target to filter scope/surface/findings.
+
+    Available sections: header, scope, surface, findings, plan, history, active,
+    async, errors, performance, cache, intel, trends, sessions, confirmations, netio.
+
+    Example: get_dashboard() → auto-detect
+    Example: get_dashboard("header,scope,surface") → explicit sections
+    Example: get_dashboard(["header", "scope"], "192.168.1.165") → filtered
+    """
+    _registry_ref = _SECTION_REGISTRY
+
+    if sections is None:
+        selected = auto_detect_sections(
+            _registry_ref, _scan_cache, get_scope,
+            has_async_scans_fn=_has_async_scans,
+            has_failures_fn=_has_errors,
+        )
+    elif isinstance(sections, str):
+        selected = [s.strip() for s in sections.split(",") if s.strip() in _registry_ref]
+    else:
+        selected = [s for s in sections if s in _registry_ref]
+
+    if not selected:
+        selected = ["header", "scope"]
+
+    cost_info = cost_for_sections(selected, _registry_ref)
+
+    section_data = {}
+    for name in selected:
+        section_data[name] = _ds_load_section(name, _registry_ref, target)
+
+    return {
+        "sections": selected,
+        "section_count": len(selected),
+        "total_cost_est": cost_info["total_cost"],
+        "data": section_data,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Phase 3.5 — Pulse workflow guide (agent-agnostic entry point)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_WORKFLOW_STEPS = {
+    "overview": {
+        "label": "Environment Overview",
+        "description": "Establish baseline — check Pulse version, resources, and server health",
+        "tools": ["get_overview()"],
+    },
+    "scope": {
+        "label": "Target Selection",
+        "description": "Select or detect active target for scanning",
+        "tools": ["get_scope()", "scan(target, intensity='quick')", "scan_background(target, intensity='medium')"],
+    },
+    "surface": {
+        "label": "Surface Analysis",
+        "description": "Discover open ports, services, and technologies",
+        "tools": ["get_surface()", "get_history()", "get_live_dashboard()"],
+    },
+    "findings": {
+        "label": "Vulnerability Detection",
+        "description": "Find vulnerabilities through nuclei/nikto scan results",
+        "tools": ["get_findings()", "get_live_dashboard()"],
+    },
+    "plan": {
+        "label": "Attack Planning",
+        "description": "Generate attack chain with success probabilities and ETAs",
+        "tools": ["get_plan()", "get_plan(objective='stealth')"],
+    },
+    "exploit": {
+        "label": "Exploitation",
+        "description": "Execute attack: suggested tools, CTF solving, or manual primitives",
+        "tools": ["ctf_analyze()", "ctf_solve()", "raw_tcp()", "execute_code()", "http_request()", "run_security_tool()", "run_async_tool()"],
+    },
+}
+
+_WORKFLOW_ORDER = ["overview", "scope", "surface", "findings", "plan", "exploit"]
+
+
+def _detect_workflow_state() -> tuple[str | None, str, dict]:
+    """Detect current workflow state (delegates to dashboard_sections)."""
+    return _ds_detect_workflow(_scan_cache, get_scope)
+
+
+@app.tool(model=True)
+def pulse_guide(step: str | None = None) -> dict:
+    """Guide the agent through the Pulse workflow — tells you what to do next.
+
+    Detects current session state from scan cache and returns the recommended
+    next step. Call without arguments for full workflow status with your current
+    position. Pass a step name (overview|scope|surface|findings|plan|exploit)
+    to drill into available tools for that phase.
+
+    Workflow: overview → scope → surface → findings → plan → exploit
+
+    Returns: workflow[], current_step, next_step, tools_available[],
+    context{active_target, tools_run, tools_count, reason}.
+
+    Call FIRST when connecting to Pulse — tells you exactly where to start.
+    Do NOT use during an active scan — use get_scan_status() or get_active_tools() instead.
+
+    Example: pulse_guide()
+    Example: pulse_guide('surface')  — tools for surface analysis
+    Example: pulse_guide('exploit')  — exploitation primitives
+    """
+    if step:
+        step = step.lower()
+        if step in _WORKFLOW_STEPS:
+            info = _WORKFLOW_STEPS[step]
+            idx = _WORKFLOW_ORDER.index(step)
+            return {
+                "step": step,
+                "label": info["label"],
+                "description": info["description"],
+                "tools_available": info["tools"],
+                "previous_step": _WORKFLOW_ORDER[idx - 1] if idx > 0 else None,
+                "next_step": _WORKFLOW_ORDER[idx + 1] if idx < len(_WORKFLOW_ORDER) - 1 else None,
+            }
+        return {"error": f"Unknown step '{step}'. Valid steps: {', '.join(_WORKFLOW_ORDER)}"}
+
+    current, nxt, ctx = _detect_workflow_state()
+    workflow = []
+    for i, s in enumerate(_WORKFLOW_ORDER):
+        info = _WORKFLOW_STEPS[s]
+        workflow.append({
+            "step": s,
+            "label": info["label"],
+            "active": s == current or (current is None and s == "overview"),
+            "completed": _WORKFLOW_ORDER.index(s) < _WORKFLOW_ORDER.index(current) if current else False,
+            "tools": info["tools"],
+        })
+
+    return {
+        "workflow": workflow,
+        "current_step": current,
+        "next_step": nxt,
+        "summary": f"Current: {current or 'not started'} → Next: {nxt}",
+        "context": ctx,
+        "quick_start": {
+            "no_target": "scan('target-ip')",
+            "with_target": "scan() → get_surface() → get_findings() → get_plan()",
+            "ctf": "ctf_analyze() → scan(target) → ctf_solve()",
+            "pwn": "execute_code(pwntools) → raw_tcp() for binary exploitation",
+        },
+        "exploit_hint": ctx.get("reason", ""),
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Phase 1 — Unified scan entry point
 # ═════════════════════════════════════════════════════════════════════════════
 
 @app.tool(model=True)
 def scan(target: str = "", intensity: str = "quick", objective: str = "comprehensive") -> dict:
-    """Full reconnaissance scan on a target. Runs appropriate security tools based on intensity, then returns surface analysis + vulnerability findings + attack plan in one response.
+    """Run reconnaissance scan on a target — the primary entry point for target analysis.
 
-    Intensity levels:
-    - quick (default): nmap + whatweb — open ports and technology detection. ~30s when uncached.
-    - medium: + nuclei + nikto — adds vulnerability scanning. ~2-3 min.
-    - full: + gobuster (web targets) — complete recon. ~5-10 min.
-
+    Executes security tools based on intensity level, returns surface analysis,
+    vulnerability findings, attack plan, and next_suggested_tool in one response.
     Uses scan cache — recently scanned targets return instantly.
 
-    For scans that may take >30s (intensity=medium/full, CIDR ranges, multiple tools),
-    use scan_background() instead — it returns a task_id immediately and runs in the
-    background, allowing the agent to continue working while the scan progresses.
+    Intensity levels:
+    - quick (default): nmap + whatweb — open ports and tech detection. ~30s uncached.
+    - medium: + nuclei + nikto — adds vulnerability scanning. ~2-3 min.
+    - full: + gobuster (web targets) — complete recon with directory busting. ~5-10 min.
 
-    Returns {target, intensity, tools, surface, findings, plan, summary}.
-    Pass `objective` to guide the attack planner (default: comprehensive).
+    Returns: target, intensity, tools{} (per-tool status/duration/cached),
+    surface{} (ports, technologies, risk_level), findings[] (enriched with exploit+layer2),
+    plan{} (attack chain steps), next_suggested_tool{}, summary, cache_age.
+
+    objective: comprehensive (default) | quick | stealth — guides the attack planner.
+    target: IP, URL, or hostname. Auto-detects from scope if left empty.
+
+    Call FIRST for any new target — replaces separate nmap/whatweb/nuclei calls.
+    Do NOT use for background tasks >30s — use scan_background() instead (returns task_id).
+    Do NOT use for single-tool debugging — use run_security_tool() directly.
+
+    Example: scan('192.168.1.165')
+    Example: scan('http://example.com', intensity='full')
+    Next: get_findings() for detailed vulnerability analysis, or follow next_suggested_tool
     """
     # Resolve target
     scope_data = get_scope(target) if target else get_scope()
@@ -1539,9 +1939,19 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             findings=findings_data,
         )
     except Exception:
-        pass
+        logger.debug("Failed to record scan in TargetStore for %s", resolved, exc_info=True)
 
     suggestion = _suggest_next_from_context(surface_data, findings_data)
+
+    # Don't re-suggest a tool that just ran
+    if suggestion and suggestion.get("tool") in tools_to_run:
+        completed_names = {t for t, d in tool_results.items() if d.get("status") in ("completed", "cached")}
+        if not findings_data and intensity == "quick":
+            suggestion = {"tool": "scan", "reason": "Quick scan complete — run medium intensity for vulnerability detection", "expected_time": "2-5 min", "priority": "high"}
+        elif not findings_data:
+            suggestion = {"tool": "http_request", "reason": "Web app detected — probe endpoints manually", "expected_time": "1-5 min", "priority": "medium"}
+        else:
+            suggestion = {"tool": "get_findings", "reason": "Review findings before next step", "expected_time": "0s", "priority": "medium"}
 
     # ── cache_age ────────────────────────────────────────────────────────
     tool_statuses = {t: v.get("status") for t, v in tool_results.items()}
@@ -2186,11 +2596,8 @@ def pulse_dashboard() -> PrefabApp:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _cache_for_target(target: str) -> list[dict]:
-    """Return all scan cache entries for a given target."""
-    try:
-        return [v for v in _scan_cache.values() if v.get("target") == target]
-    except Exception:
-        return []
+    """Return all scan cache entries for a given target (delegates to dashboard_sections)."""
+    return _ds_cache_for_target(_scan_cache, target)
 
 
 def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
@@ -2225,8 +2632,12 @@ def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
             else:
                 params = {"url": resolved, "target": resolved}
         elif tool_name in _TOOLS_NEED_HOST:
-            host = urlparse(resolved).hostname or resolved
+            parsed = urlparse(resolved)
+            host = parsed.hostname or resolved
+            port = parsed.port
             params = {"target": host, "scan_type": "-sTV"}
+            if port:
+                params["ports"] = str(port)
 
         # Parameter optimizer: adds --host-timeout, --timeout, threads, additional_args
         # Additive only — caller_keys protected, never overrides scan() built params

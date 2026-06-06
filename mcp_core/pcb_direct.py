@@ -8,6 +8,9 @@ import os
 import re
 import base64
 from collections import Counter, defaultdict
+import logging
+
+logger = logging.getLogger(__name__)
 
 _COORD_RE = re.compile(r"X(\d+)Y(-?\d+)")
 _DCODE_RE = re.compile(r"D(\d+)\*")
@@ -677,7 +680,7 @@ def _pcb_analyze(data: dict) -> dict:
             try:
                 text_analysis[layer_name] = _analyze_layer_text(fpath, layer_name)
             except Exception:
-                pass
+                logger.debug("pcb_direct: _analyze_layer_text failed for %s", layer_name, exc_info=True)
 
         # Search for flag patterns in raw content
         if search_flag:
