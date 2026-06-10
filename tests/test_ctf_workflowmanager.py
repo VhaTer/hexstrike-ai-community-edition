@@ -647,3 +647,31 @@ class TestCTFWorkflowManager:
         assert isinstance(steps, list)
         assert len(steps) == 6
         assert steps[0]["action"] == "analysis"
+
+    def test_advanced_workflow_rev_cached_triage_removes_ghidra_ida(self, workflow_manager):
+        """Cache triage hit for rev binary should remove ghidra/ida from workflow steps"""
+        from mcp_core.server_setup import _scan_cache
+        c = CTFChallenge("test_binary", "rev", "test", 100, "easy", target="test_binary")
+        key = "test:binary_triage:test_binary:hash"
+        _scan_cache.set(key, {
+            "tool": "binary_triage",
+            "target": "test_binary",
+            "result": {
+                "not_stripped": True,
+                "protections": {"canary": True, "nx": True, "pie": True}
+            },
+            "timestamp": 1000.0,
+            "execution_time": 5.0
+        })
+        try:
+            steps = workflow_manager._create_advanced_category_workflow(c)
+            assert isinstance(steps, list)
+            assert len(steps) > 0
+            step_tools = [t.lower() for step in steps for t in step.get("tools", [])]
+            assert "ghidra" not in step_tools
+            assert "ida" not in step_tools
+            assert "radare2" not in step_tools
+            assert "strings" in step_tools
+            assert "file" in step_tools or "checksec" in step_tools
+        finally:
+            _scan_cache.delete(key)

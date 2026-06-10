@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain, AttackStep
-from server_core.singletons import get_tool_stats_store
+from server_core.singletons import get_tool_stats_store, get_target_store
 import logging
 
 logger = logging.getLogger(__name__)
@@ -282,6 +282,47 @@ class IntelligentDecisionEngine:
 
         # Set confidence score
         profile.confidence_score = self._calculate_confidence(profile)
+
+        # Enrich with _scan_cache data (session-aware via _collect_cached_scans)
+        # Note: no session_id available here, so we use a session-agnostic fallback
+        # that mirrors _enrich_profile_from_cache logic directly
+        try:
+            from mcp_core.server_setup import _scan_cache, _enrich_profile_from_cache
+            cached_scans = {}
+            for k, v in _scan_cache.items():
+                if v.get("target") == target and v.get("tool"):
+                    tool = v["tool"]
+                    if tool not in cached_scans:
+                        cached_scans[tool] = v.get("result", {})
+            if cached_scans:
+                profile = _enrich_profile_from_cache(profile, cached_scans)
+        except Exception:
+            logger.debug("IDE: cache enrichment failed for %s", target, exc_info=True)
+
+        # Enrich with TargetStore persisted data
+        try:
+            ts = get_target_store()
+            stored = ts.get_target(target)
+            if stored:
+                findings = stored.get("findings", {})
+                # Merge ports (Option A: port->service from findings["ports"])
+                for p in findings.get("ports", []):
+                    port = p.get("port")
+                    svc = p.get("service", "")
+                    if port and port not in profile.open_ports:
+                        profile.open_ports.append(port)
+                    if port and svc and port not in profile.services:
+                        profile.services[port] = svc
+                # Merge technologies
+                for t in findings.get("technologies", []):
+                    if t and t not in profile.technologies:
+                        profile.technologies.append(t)
+                # Boost confidence based on vuln count
+                vuln_count = len(findings.get("vulnerabilities", []))
+                if vuln_count:
+                    profile.confidence_score = min(1.0, profile.confidence_score + 0.1 * min(vuln_count, 5))
+        except Exception:
+            logger.debug("IDE: TargetStore enrichment failed for %s", target, exc_info=True)
 
         return profile
 

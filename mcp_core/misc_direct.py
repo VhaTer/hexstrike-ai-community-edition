@@ -234,6 +234,15 @@ def _xxd(data: dict) -> dict:
     return execute_command(command)
 
 
+def _file_type(data: dict) -> dict:
+    if "file_path" not in data and "file" in data:
+        data["file_path"] = data["file"]
+    err = _require(data, "file_path")
+    if err: return err
+    file_path = data["file_path"].strip()
+    return execute_command(f"file {file_path}")
+
+
 def _checksec(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "binary"
     if "binary" not in data and "file" in data:
@@ -896,6 +905,7 @@ _HANDLERS = {
     "gdb":                 _gdb,
     "radare2":             _radare2,
     # binary_analysis
+    "file":                _file_type,
     "strings":             _strings,
     "objdump":             _objdump,
     "libc":                _libc,

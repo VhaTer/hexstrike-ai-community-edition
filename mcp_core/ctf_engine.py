@@ -27,12 +27,17 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+import json
+import os
+import re
+
 from fastmcp import FastMCP, Context
 from fastmcp.server.dependencies import get_context
 
 from server_core.workflows.ctf.CTFChallenge import CTFChallenge
 from server_core.workflows.ctf.toolManager import CTFToolManager
 from server_core.singletons import get_ctf_manager, get_ctf_tools, get_ctf_automator, get_ctf_coordinator
+from mcp_core.server_setup import _scan_cache
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +174,270 @@ async def _execute_ctf_step_real(
 
 
 # ---------------------------------------------------------------------------
+# Binary triage — file + checksec + strings in parallel
+# ---------------------------------------------------------------------------
+
+async def _triage_binary(file_path: str) -> Dict[str, Any]:
+    """
+    Run binary triage: file type, checksec protections, strings analysis.
+
+    Returns a dict with binary characteristics:
+      binary_type, architecture, stripped, not_stripped, debug_info,
+      protections{canary,nx,pie,relro}, flags_in_strings,
+      interesting_keywords[], raw{file, checksec, strings}.
+    """
+    result = {
+        "binary_type": "",
+        "architecture": "",
+        "stripped": None,
+        "not_stripped": None,
+        "debug_info": None,
+        "protections": {},
+        "flags_in_strings": False,
+        "flag_value": None,
+        "interesting_keywords": [],
+        "raw": {},
+    }
+
+    if not file_path or not os.path.isfile(file_path):
+        result["error"] = f"File not found: {file_path}"
+        return result
+
+    async def _run(cmd: str) -> str:
+        loop = asyncio.get_running_loop()
+        try:
+            proc = await loop.run_in_executor(
+                None, lambda: __import__("subprocess").run(
+                    cmd, shell=True, capture_output=True, text=True, timeout=15
+                )
+            )
+            return proc.stdout.strip()
+        except Exception as exc:
+            logger.warning("Triage subprocess failed: %s", exc)
+            return ""
+
+    file_out, strings_out = await asyncio.gather(
+        _run(f"file {file_path}"),
+        _run(f"strings -n 4 {file_path}"),
+    )
+
+    result["raw"]["file"] = file_out
+    result["raw"]["strings"] = strings_out[:2000] if strings_out else ""
+
+    # Parse file output
+    if file_out:
+        result["binary_type"] = file_out
+        arch_match = re.search(r"(x86-?64|i386|ARM\b|AArch64|MIPS)", file_out)
+        if arch_match:
+            result["architecture"] = arch_match.group(1)
+        result["stripped"] = "not stripped" not in file_out
+        result["not_stripped"] = "not stripped" in file_out
+
+    # Parse checksec output — try JSON first, fallback to text
+    loop = asyncio.get_running_loop()
+    prots = {}
+    checksec_raw = ""
+    try:
+        proc = await loop.run_in_executor(
+            None, lambda: __import__("subprocess").run(
+                f"checksec --file={file_path} --format=json",
+                shell=True, capture_output=True, text=True, timeout=15,
+            )
+        )
+        checksec_raw = proc.stdout.strip()
+        if checksec_raw:
+            data = json.loads(checksec_raw)
+            if isinstance(data, dict):
+                prots = {k.lower(): v for k, v in data.items()
+                         if k.lower() in ("canary", "nx", "pie", "relro", "rpath", "fortified")}
+            elif isinstance(data, list) and data:
+                prots = {k.lower(): v for k, v in data[0].items()
+                         if k.lower() in ("canary", "nx", "pie", "relro", "rpath", "fortified")}
+    except Exception:
+        prots = {}
+
+    if not prots:
+        try:
+            proc = await loop.run_in_executor(
+                None, lambda: __import__("subprocess").run(
+                    f"checksec --file={file_path}",
+                    shell=True, capture_output=True, text=True, timeout=15,
+                )
+            )
+            checksec_raw = proc.stdout.strip()
+            if checksec_raw:
+                for line in checksec_raw.split("\n"):
+                    line = line.strip().lower()
+                    if "canary" in line:
+                        prots["canary"] = "yes" in line or "true" in line
+                    elif "nx" in line:
+                        prots["nx"] = "yes" in line or "true" in line
+                    elif "pie" in line:
+                        prots["pie"] = "yes" in line or "true" in line
+                    elif "relro" in line:
+                        if "full" in line:
+                            prots["relro"] = "full"
+                        elif "partial" in line:
+                            prots["relro"] = "partial"
+                        else:
+                            prots["relro"] = "no"
+                    elif "rpath" in line:
+                        prots["rpath"] = "yes" in line
+                    elif "fortified" in line:
+                        prots["fortified"] = "yes" in line or "true" in line
+        except Exception:
+            pass
+
+    result["raw"]["checksec"] = checksec_raw
+    result["protections"] = prots
+
+    # Parse strings output for flags and keywords
+    if strings_out:
+        flag_match = re.search(r"HTB\{[^}]+\}|flag\{[^}]+\}|FLAG\{[^}]+\}|CTF\{[^}]+\}", strings_out)
+        if flag_match:
+            result["flags_in_strings"] = True
+            result["flag_value"] = flag_match.group(0)
+
+        keywords = [w for w in ("HTB", "flag", "win", "shell", "admin",
+                                 "password", "secret", "key", "root")
+                    if w.lower() in strings_out.lower()]
+        result["interesting_keywords"] = keywords
+
+    # Seed _scan_cache with triage results for future ctf_analyze/get_plan calls
+    try:
+        import time
+        import uuid
+        from mcp_core.server_setup import _scan_cache, _cache_key_for
+        session_id = f"ctf_triage_{uuid.uuid4().hex[:8]}"
+        for tool_name, raw_output in (("file", result["raw"].get("file", "")),
+                                       ("checksec", result["raw"].get("checksec", "")),
+                                       ("strings", result["raw"].get("strings", ""))):
+            if raw_output:
+                cache_key = _cache_key_for(session_id, tool_name, file_path, {})
+                _scan_cache.set(cache_key, {
+                    "tool": tool_name,
+                    "target": file_path,
+                    "result": {"success": True, "output": raw_output, "stdout": raw_output, "stderr": "", "returncode": 0},
+                    "timestamp": time.time(),
+                    "execution_time": 0.1
+                }, ttl=7200)
+    except Exception:
+        logger.debug("Failed to seed _scan_cache with triage results", exc_info=True)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Workflow refinement — adjust plan based on triage data
+# ---------------------------------------------------------------------------
+
+def _refine_workflow_with_triage(
+    workflow: Dict[str, Any],
+    triage: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Adjust the workflow plan based on binary triage results."""
+
+    refined = dict(workflow)
+    refined["triage_refined"] = True
+    refined["triage_notes"] = []
+
+    # Rule 1: flag already in strings → immediate return
+    if triage.get("flags_in_strings") and triage.get("flag_value"):
+        flag = triage["flag_value"]
+        refined["estimated_time"] = 60
+        refined["success_probability"] = 1.0
+        refined["triage_notes"].append(f"Flag found in strings: {flag}")
+        refined["workflow_steps"] = [{
+            "step": 1, "action": "flag_immediate",
+            "description": f"Flag already visible in binary strings: {flag}",
+            "parallel": False, "tools": ["strings"],
+            "estimated_time": 10,
+        }]
+        return refined
+
+    stripped = triage.get("stripped")
+    not_stripped = triage.get("not_stripped")
+    prots = triage.get("protections", {})
+
+    # Rule 2: not stripped + has debug info → remove ghidra/ida, reduce time
+    heavy_re = re.compile(r"\b(ghidra|ida\b|radare2)\b", re.IGNORECASE)
+    heavy_tools = {"ghidra", "ida", "radare2"}
+
+    if not_stripped:
+        refined["triage_notes"].append(
+            "Binary not stripped — ghidra/ida removed, estimated time reduced"
+        )
+        # Remove heavy RE tools from workflow_steps
+        new_steps = []
+        for step in workflow.get("workflow_steps", []):
+            step_tools = step.get("tools", [])
+            filtered = [t for t in step_tools if t.lower() not in heavy_tools]
+            if not filtered:
+                continue
+            step["tools"] = filtered
+            step["estimated_time"] = max(60, int(step.get("estimated_time", 300) * 0.3))
+            new_steps.append(step)
+        refined["workflow_steps"] = new_steps or [{
+            "step": 1, "action": "binary_analysis",
+            "description": "Binary analysis (not stripped, ghidra skipped)",
+            "parallel": True,
+            "tools": ["strings", "objdump", "checksec"],
+            "estimated_time": 180,
+        }]
+        # Reduce overall estimate
+        base_time = workflow.get("estimated_time", 3600)
+        refined["estimated_time"] = max(120, int(base_time * 0.3))
+        refined["success_probability"] = min(
+            0.95, workflow.get("success_probability", 0.5) + 0.25
+        )
+
+    # Rule 3: stripped + PIE + canary → suggest gdb/ltrace before ghidra
+    elif stripped and prots.get("pie") and prots.get("canary"):
+        refined["triage_notes"].append(
+            "Stripped + PIE + canary — suggesting gdb/ltrace before heavy RE"
+        )
+        # Insert a lightweight step before heavy RE
+        existing = workflow.get("workflow_steps", [])
+        lightweight = {
+            "step": 1, "action": "lightweight_binary_recon",
+            "description": "Lightweight recon before heavy RE: gdb, ltrace, execute_code extraction",
+            "parallel": True,
+            "tools": ["gdb", "ltrace", "strings", "objdump"],
+            "estimated_time": 300,
+        }
+        refined["workflow_steps"] = [lightweight] + [
+            {**s, "step": s["step"] + 1} for s in existing
+        ]
+        refined["success_probability"] = min(
+            0.95, workflow.get("success_probability", 0.5) + 0.1
+        )
+
+    # Rule 4: fewer protections → higher success proba
+    weak_count = sum(
+        1 for k in ("canary", "nx", "pie") if prots.get(k) is False
+    )
+    if weak_count >= 2:
+        refined["success_probability"] = min(
+            0.95, refined.get("success_probability", 0.5) + 0.2
+        )
+        refined["triage_notes"].append(
+            f"{weak_count} protections absent — success probability boosted"
+        )
+
+    # Rule 5: ELF binary → remove PE-specific tools
+    if "ELF" in triage.get("binary_type", ""):
+        pe_tools = {"peid", "upx", "pe-sieve", "pedumper"}
+        new_steps = []
+        for step in refined.get("workflow_steps", []):
+            step["tools"] = [t for t in step.get("tools", [])
+                             if t.lower() not in pe_tools]
+            new_steps.append(step)
+        refined["workflow_steps"] = new_steps
+
+    return refined
+
+
+# ---------------------------------------------------------------------------
 # MCP tool registration
 # ---------------------------------------------------------------------------
 
@@ -182,7 +451,8 @@ def register_ctf_tools(mcp: FastMCP) -> None:
             "tool selection, strategies, time estimate, success probability, "
             "resource requirements, parallel task groups, and validation steps. "
             "Uses the V6 CTFWorkflowManager intelligence layer. "
-            "Does NOT execute tools — use ctf_solve for real execution."
+            "Does NOT execute tools — use ctf_solve for real execution. "
+            "Provide file_path for binary challenges (rev/pwn) to get triage-based refinement."
         ),
         timeout=30.0,
     )
@@ -193,6 +463,7 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         difficulty: str = "unknown",
         target: str = "",
         points: int = 0,
+        file_path: str = "",
     ) -> Dict[str, Any]:
         """
         Analyze a CTF challenge and generate a full workflow plan with tool selection.
@@ -200,24 +471,28 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         Call FIRST when starting a CTF challenge — before scanning or solving.
         Uses CTFWorkflowManager to select tools and estimate time/success probability
         based on challenge category, description, and difficulty.
+        When file_path is provided (rev/pwn categories), runs binary triage
+        (file, checksec, strings) and refines the workflow accordingly.
 
-        Returns: success, challenge name, category, difficulty, workflow {
-          tools[], workflow_steps[][], estimated_time, success_probability,
-          parallel_groups, fallback_strategies
-        }
+        Returns: success, challenge name, category, difficulty, triage (if file_path),
+        triage_refined (bool), workflow { tools[], workflow_steps[][],
+        estimated_time, success_probability, parallel_groups, fallback_strategies }
 
         Args:
-            name:        Challenge name (e.g. 'Dynamic Paths')
+            name:        Challenge name (e.g. 'Don't Panic')
             category:    web | crypto | pwn | forensics | rev | misc | osint
             description: Challenge description text — drives keyword-based tool selection
             difficulty:  easy | medium | hard | insane | unknown
             target:      URL, IP, or binary path (optional, can be set later via scan)
             points:      Point value (optional, for scoring)
+            file_path:   Path to the challenge binary (rev/pwn only). Triggers triage + refinement.
 
         Do NOT use for non-CTF targets — use scan() + get_plan() instead.
         Do NOT skip this step — ctf_analyze() is required before ctf_solve() for optimal results.
+        For rev/pwn challenges, always provide file_path for triage-based accuracy.
 
-        Example: ctf_analyze('Dynamic Paths', 'web', 'Bypass path restrictions...', 'easy', 'http://target:8080')
+        Example: ctf_analyze('Don\\'t Panic', 'pwn', 'Reverse a Rust binary...', 'medium', file_path='./dontpanic')
+        Example: ctf_analyze('Web100', 'web', 'SQL injection...', 'easy', 'http://target:8080')
         Next: scan(target) for recon, then ctf_solve(name, ...) for exploitation
         """
         ctx = get_context()
@@ -235,19 +510,75 @@ def register_ctf_tools(mcp: FastMCP) -> None:
         ctf = get_ctf_manager()
         workflow = ctf.create_ctf_challenge_workflow(challenge)
 
-        await ctx.info(
-            f"✅ Analysis complete — {len(workflow.get('tools', []))} tools selected | "
-            f"~{workflow.get('estimated_time', 0)//60} min | "
-            f"success: {workflow.get('success_probability', 0):.0%}"
-        )
-
-        return {
+        result = {
             "success":     True,
             "challenge":   name,
             "category":    category,
             "difficulty":  difficulty,
             "workflow":    workflow,
         }
+
+        # Binary triage if file_path provided
+        triage_result = {}
+        triage_refined = False
+
+        # If no explicit file_path, check for cached binary triage in _scan_cache
+        if not file_path:
+            target = challenge.target or challenge.url or challenge.name
+            if target and category in ("rev", "pwn"):
+                cached_triage = None
+                for k, v in _scan_cache.items():
+                    if v.get("target") == target and v.get("tool") in ("file", "checksec", "strings", "binary_triage"):
+                        cached_triage = v.get("result", {})
+                        break
+                if cached_triage:
+                    await ctx.info(f"🔍 Using cached binary triage for {target}")
+                    workflow = _refine_workflow_with_triage(workflow, cached_triage)
+                    triage_refined = True
+                    result["triage"] = cached_triage
+                    result["triage_refined"] = True
+                    result["workflow"] = workflow
+
+        if file_path:
+            await ctx.info(f"🔍 Running binary triage on: {file_path}")
+            triage_result = await _triage_binary(file_path)
+
+            if triage_result.get("flags_in_strings") and triage_result.get("flag_value"):
+                workflow = _refine_workflow_with_triage(workflow, triage_result)
+                triage_refined = True
+                await ctx.info(
+                    f"🚩 Flag found in strings: {triage_result['flag_value']} — "
+                    f"returning immediate solve"
+                )
+            elif triage_result.get("not_stripped"):
+                workflow = _refine_workflow_with_triage(workflow, triage_result)
+                triage_refined = True
+                await ctx.info(
+                    f"✅ Binary not stripped — workflow refined, "
+                    f"estimated time reduced to ~{workflow.get('estimated_time', 0)//60} min"
+                )
+            elif triage_result.get("stripped") and \
+                 triage_result.get("protections", {}).get("pie") and \
+                 triage_result.get("protections", {}).get("canary"):
+                workflow = _refine_workflow_with_triage(workflow, triage_result)
+                triage_refined = True
+                await ctx.info(
+                    f"🔧 Binary stripped + PIE + canary — lightweight recon step added"
+                )
+
+            result["triage"] = triage_result
+            result["triage_refined"] = triage_refined
+            if triage_refined:
+                result["workflow"] = workflow
+
+        await ctx.info(
+            f"✅ Analysis complete — {len(workflow.get('tools', []))} tools selected | "
+            f"~{workflow.get('estimated_time', 0)//60} min | "
+            f"success: {workflow.get('success_probability', 0):.0%}"
+            + (" | triage: refined" if triage_refined else "")
+        )
+
+        return result
 
     @mcp.tool(
         name="ctf_tools",

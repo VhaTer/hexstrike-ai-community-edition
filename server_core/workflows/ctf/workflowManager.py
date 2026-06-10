@@ -426,6 +426,10 @@ class CTFWorkflowManager:
 
     def _create_advanced_category_workflow(self, challenge: CTFChallenge) -> List[Dict[str, Any]]:
         """Create advanced category-specific workflow with parallel execution support"""
+        # Check for cached binary triage data for rev/pwn targets
+        from mcp_core.server_setup import _scan_cache
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+
         advanced_workflows = {
             "web": [
                 {"step": 1, "action": "automated_reconnaissance", "description": "Automated web reconnaissance and technology detection", "parallel": True, "tools": ["httpx", "whatweb", "katana"], "estimated_time": 300},
@@ -496,6 +500,18 @@ class CTFWorkflowManager:
                 {"step": 7, "action": "verification", "description": "Verify findings and extract flag", "parallel": False, "tools": ["manual"], "estimated_time": 600}
             ]
         }
+
+        target = challenge.target or challenge.url or challenge.name
+        if target and challenge.category in ("rev", "pwn"):
+            triage = {}
+            for k, v in _scan_cache.items():
+                if v.get("target") == target and v.get("tool") in ("file", "checksec", "strings", "binary_triage"):
+                    triage = v.get("result", {})
+                    break
+            if triage:
+                base_workflow = advanced_workflows.get(challenge.category, [])
+                refined = _refine_workflow_with_triage({"workflow_steps": base_workflow}, triage)
+                return refined.get("workflow_steps", base_workflow)
 
         return advanced_workflows.get(challenge.category, [
             {"step": 1, "action": "analysis", "description": "Analyze the challenge", "parallel": False, "tools": ["manual"], "estimated_time": 600},

@@ -606,3 +606,230 @@ class TestCtfTeam:
             )
 
         assert result["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Binary triage tests
+# ---------------------------------------------------------------------------
+
+class TestTriageBinary:
+    """Tests for _triage_binary()"""
+
+    @pytest.mark.asyncio
+    async def test_file_not_found(self):
+        from mcp_core.ctf_engine import _triage_binary
+        result = await _triage_binary("/nonexistent/binary.elf")
+        assert "error" in result
+        assert "File not found" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_elf_not_stripped(self, tmp_path):
+        bin_path = tmp_path / "test.elf"
+        bin_path.write_bytes(
+            b"\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x02\x00\x3e\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        )
+        from mcp_core.ctf_engine import _triage_binary
+        result = await _triage_binary(str(bin_path))
+        assert "error" not in result
+        assert "ELF" in result.get("binary_type", "")
+        assert "64-bit" in result.get("binary_type", "")
+
+    @pytest.mark.asyncio
+    async def test_binary_with_htb_flag_in_strings(self, tmp_path):
+        bin_path = tmp_path / "hasflag.bin"
+        bin_path.write_bytes(
+            b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 50 +
+            b"HTB{t3st_fl4g_1n_str1ngs}" +
+            b"random_data_here" * 10
+        )
+        from mcp_core.ctf_engine import _triage_binary
+        result = await _triage_binary(str(bin_path))
+        assert result.get("flags_in_strings") is True
+        assert result.get("flag_value") == "HTB{t3st_fl4g_1n_str1ngs}"
+
+    @pytest.mark.asyncio
+    async def test_binary_without_flag(self, tmp_path):
+        bin_path = tmp_path / "noflag.bin"
+        bin_path.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 60 + b"just_some_text\x00")
+        from mcp_core.ctf_engine import _triage_binary
+        result = await _triage_binary(str(bin_path))
+        assert result.get("flags_in_strings") is False
+        assert result.get("flag_value") is None
+
+
+class TestRefineWorkflow:
+    """Tests for _refine_workflow_with_triage()"""
+
+    @pytest.fixture
+    def sample_workflow(self):
+        return {
+            "estimated_time": 3600,
+            "success_probability": 0.5,
+            "tools": ["checksec", "strings", "objdump", "ghidra", "ida"],
+            "workflow_steps": [
+                {"step": 1, "action": "binary_triage", "tools": ["file", "strings", "checksec"],
+                 "parallel": True, "estimated_time": 300},
+                {"step": 2, "action": "deep_analysis", "tools": ["ghidra", "ida"],
+                 "parallel": True, "estimated_time": 1200},
+                {"step": 3, "action": "exploit", "tools": ["pwntools"],
+                 "parallel": False, "estimated_time": 600},
+            ],
+        }
+
+    def test_flag_immediate(self, sample_workflow):
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+        triage = {"flags_in_strings": True, "flag_value": "HTB{test_flag}"}
+        result = _refine_workflow_with_triage(sample_workflow, triage)
+
+        assert result["estimated_time"] == 60
+        assert result["success_probability"] == 1.0
+        assert len(result["workflow_steps"]) == 1
+        assert result["workflow_steps"][0]["action"] == "flag_immediate"
+        assert "HTB{test_flag}" in result["workflow_steps"][0]["description"]
+
+    def test_not_stripped_removes_ghidra_ida(self, sample_workflow):
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+        triage = {"not_stripped": True, "stripped": False,
+                  "protections": {}, "binary_type": "ELF 64-bit"}
+        result = _refine_workflow_with_triage(sample_workflow, triage)
+
+        assert result["estimated_time"] <= 3600 * 0.3 + 1
+        for step in result["workflow_steps"]:
+            for tool in step.get("tools", []):
+                assert tool.lower() not in ("ghidra", "ida", "radare2")
+
+    def test_stripped_pie_canary_adds_lightweight(self, sample_workflow):
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+        triage = {"stripped": True, "not_stripped": False,
+                  "protections": {"canary": True, "nx": True, "pie": True, "relro": "full"},
+                  "binary_type": "ELF 64-bit"}
+        result = _refine_workflow_with_triage(sample_workflow, triage)
+
+        assert len(result["workflow_steps"]) > len(sample_workflow["workflow_steps"])
+        assert result["workflow_steps"][0]["action"] == "lightweight_binary_recon"
+        assert "gdb" in result["workflow_steps"][0]["tools"]
+
+    def test_weak_protections_boost_success(self, sample_workflow):
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+        triage = {"not_stripped": False, "stripped": False,
+                  "protections": {"canary": False, "nx": False, "pie": True, "relro": "no"},
+                  "binary_type": "ELF 64-bit"}
+        wf = dict(sample_workflow)
+        wf["success_probability"] = 0.4
+        result = _refine_workflow_with_triage(wf, triage)
+        assert result["success_probability"] >= 0.6
+
+    def test_elf_removes_pe_tools(self, sample_workflow):
+        from mcp_core.ctf_engine import _refine_workflow_with_triage
+        wf = dict(sample_workflow)
+        wf["workflow_steps"] = [
+            {"step": 1, "tools": ["file", "peid", "upx", "strings"],
+             "parallel": True, "estimated_time": 300},
+        ]
+        triage = {"not_stripped": False, "stripped": False,
+                  "protections": {}, "binary_type": "ELF 64-bit LSB executable"}
+        result = _refine_workflow_with_triage(wf, triage)
+        step_tools = result["workflow_steps"][0]["tools"]
+        assert "peid" not in step_tools
+        assert "upx" not in step_tools
+        assert "file" in step_tools
+        assert "strings" in step_tools
+
+
+class TestCtfAnalyzeWithTriage:
+    """Integration tests: ctf_analyze() with file_path triggers triage"""
+
+    @pytest.mark.asyncio
+    async def test_analyze_with_triage_attached(self, mock_ctx, tmp_path):
+        bin_path = tmp_path / "chall.elf"
+        bin_path.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 60 + b"test\x00")
+
+        mcp = FastMCP("test")
+        from mcp_core.ctf_engine import register_ctf_tools
+        register_ctf_tools(mcp)
+
+        mock_manager = MagicMock()
+        mock_manager.create_ctf_challenge_workflow.return_value = {
+            "estimated_time": 3600, "success_probability": 0.5,
+            "tools": ["checksec", "strings"], "workflow_steps": [],
+        }
+
+        with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
+             patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager):
+            tool = await mcp.get_tool("ctf_analyze")
+            result = await tool.fn(
+                name="Test Challenge",
+                category="rev",
+                description="Reverse a binary",
+                difficulty="medium",
+                file_path=str(bin_path),
+            )
+
+        assert result["success"] is True
+        assert "triage" in result
+        assert result["triage"]["binary_type"]
+        assert "triage_refined" in result
+
+    @pytest.mark.asyncio
+    async def test_analyze_skip_triage_no_file_path(self, mock_ctx):
+        mcp = FastMCP("test")
+        from mcp_core.ctf_engine import register_ctf_tools
+        register_ctf_tools(mcp)
+
+        mock_manager = MagicMock()
+        mock_manager.create_ctf_challenge_workflow.return_value = {
+            "estimated_time": 3600, "success_probability": 0.5,
+            "tools": ["checksec"], "workflow_steps": [],
+        }
+
+        with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
+             patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager):
+            tool = await mcp.get_tool("ctf_analyze")
+            result = await tool.fn(
+                name="Test", category="web", description="A web challenge", difficulty="easy",
+            )
+
+        assert "triage" not in result
+        assert "triage_refined" not in result
+
+    @pytest.mark.asyncio
+    async def test_analyze_flag_in_strings_immediate(self, mock_ctx, tmp_path):
+        bin_path = tmp_path / "flag_bin"
+        bin_path.write_bytes(
+            b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 40 +
+            b"HTB{qu1ck_fl4g}"
+        )
+
+        mcp = FastMCP("test")
+        from mcp_core.ctf_engine import register_ctf_tools
+        register_ctf_tools(mcp)
+
+        mock_manager = MagicMock()
+        mock_manager.create_ctf_challenge_workflow.return_value = {
+            "estimated_time": 3600, "success_probability": 0.3,
+            "tools": ["ghidra", "strings"], "workflow_steps": [
+                {"step": 1, "action": "binary_triage", "tools": ["strings"],
+                 "parallel": True, "estimated_time": 300},
+                {"step": 2, "action": "deep_analysis", "tools": ["ghidra"],
+                 "parallel": False, "estimated_time": 1800},
+            ],
+        }
+
+        with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
+             patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager):
+            tool = await mcp.get_tool("ctf_analyze")
+            result = await tool.fn(
+                name="Flag Challenge", category="rev",
+                description="Find the flag", difficulty="easy",
+                file_path=str(bin_path),
+            )
+
+        assert result["success"] is True
+        assert result["triage_refined"] is True
+        assert result["workflow"]["estimated_time"] == 60
+        assert result["workflow"]["success_probability"] == 1.0
+        assert result["workflow"]["workflow_steps"][0]["action"] == "flag_immediate"

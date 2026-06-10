@@ -100,6 +100,7 @@ TOOL_ROUTES = {
     "volatility3":       ("mcp_core.misc_direct", "misc_exec", "volatility3"),
     "gdb":               ("mcp_core.misc_direct", "misc_exec", "gdb"),
     "radare2":           ("mcp_core.misc_direct", "misc_exec", "radare2"),
+    "file":              ("mcp_core.misc_direct", "misc_exec", "file"),
     "strings":           ("mcp_core.misc_direct", "misc_exec", "strings"),
     "objdump":           ("mcp_core.misc_direct", "misc_exec", "objdump"),
     "checksec":          ("mcp_core.misc_direct", "misc_exec", "checksec"),
