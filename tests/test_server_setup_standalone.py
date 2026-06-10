@@ -57,17 +57,15 @@ def make_mcp():
 
 
 async def call_run_security_tool(mcp, tool_name, parameters):
-    tool = await mcp.get_tool("run_security_tool")
-    assert tool is not None
+    from mcp_core.server_setup import run_security_tool as _run_security_tool
     ctx = make_mock_context()
     payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
-    return await tool.fn(ctx, tool_name=tool_name, parameters=payload)
+    return await _run_security_tool(ctx, tool_name=tool_name, parameters=payload)
 
 
-def test_run_security_tool_registered():
-    mcp = make_mcp()
-    tool = run(mcp.get_tool("run_security_tool"))
-    assert tool is not None
+def test_run_security_tool_available():
+    from mcp_core.server_setup import run_security_tool
+    assert callable(run_security_tool)
 
 
 def test_aireplay_mode_9_skips_confirmation():
@@ -408,7 +406,7 @@ def test_ai_suggest_calls_ctx_sample_on_success():
     }
 
     async def run_with_sample():
-        tool = await make_mcp().get_tool("run_security_tool")
+        from mcp_core.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
@@ -416,7 +414,7 @@ def test_ai_suggest_calls_ctx_sample_on_success():
         sample_result.text = "Next tool: nikto — HTTP port 80 found, web vuln scan recommended."
         ctx.sample = AsyncMock(return_value=sample_result)
         payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
-        return await tool.fn(ctx, tool_name="nmap", parameters=payload), ctx
+        return await _run_security_tool(ctx, "nmap", payload), ctx
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         result, ctx = run(run_with_sample())
@@ -435,13 +433,13 @@ def test_ai_suggest_silent_when_sampling_unsupported():
     }
 
     async def run_with_failing_sample():
-        tool = await make_mcp().get_tool("run_security_tool")
+        from mcp_core.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
         ctx.sample = AsyncMock(side_effect=RuntimeError("Client does not support sampling"))
         payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
-        return await tool.fn(ctx, tool_name="nmap", parameters=payload)
+        return await _run_security_tool(ctx, "nmap", payload)
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         result = run(run_with_failing_sample())
@@ -458,13 +456,13 @@ def test_ai_suggest_skipped_when_not_requested():
     }
 
     async def run_without_suggest():
-        tool = await make_mcp().get_tool("run_security_tool")
+        from mcp_core.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
         ctx.sample = AsyncMock()
         payload = json.dumps({"target": "10.0.0.1"})
-        return await tool.fn(ctx, tool_name="nmap", parameters=payload), ctx
+        return await _run_security_tool(ctx, "nmap", payload), ctx
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
         result, ctx = run(run_without_suggest())

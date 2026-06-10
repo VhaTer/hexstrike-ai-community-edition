@@ -260,31 +260,37 @@ class TestPlanAttackStandard:
 
 
 # =========================================================================
-# Group B — run_security_tool branches
+# Group B — run_security_tool branches (module-level function, not MCP tool)
 #
-# DIRECT_TOOLS is a closure variable captured by run_security_tool inside
-# setup_mcp_server_standalone(). The module-level mcp() caches the server,
-# so we modify DIRECT_TOOLS in-place through the closure to inject mocks
-# without recreating the server each time (avoids ~14s boot per test).
+# run_security_tool is now a module-level async function. Tests call it
+# directly with a mock context. _DIRECT_TOOLS_CACHE is patched by assigning
+# mock executors directly (no closure traversal needed).
 # =========================================================================
 
+from contextlib import contextmanager
 
+from mcp_core.server_setup import run_security_tool as _run_security_tool, _DIRECT_TOOLS_CACHE, _MOCK_EXECUTORS
+from unittest.mock import MagicMock
+
+
+@contextmanager
 def _patch_dt_entry(tool_name, result):
-    """Replace a DIRECT_TOOLS executor with a mock returning `result`."""
-    fn = run(mcp().get_tool("run_security_tool")).fn
-    for cell in fn.__closure__:
-        try:
-            val = cell.cell_contents
-            if isinstance(val, dict) and tool_name in val:
-                val[tool_name] = (MagicMock(return_value=dict(result)), val[tool_name][1])
-                return
-        except NameError:
-            pass
+    """Context manager: replace a DIRECT_TOOLS executor with a mock returning `result`, restores original on exit."""
+    original = _DIRECT_TOOLS_CACHE.get(tool_name)
+    mod_path, func_name, binary = _DIRECT_TOOLS_CACHE[tool_name]
+    mock_key = f"_mock_{tool_name}"
+    _MOCK_EXECUTORS[mock_key] = MagicMock(return_value=dict(result))
+    _DIRECT_TOOLS_CACHE[tool_name] = (mod_path, mock_key, binary)
+    try:
+        yield
+    finally:
+        _MOCK_EXECUTORS.pop(mock_key, None)
+        if original is not None:
+            _DIRECT_TOOLS_CACHE[tool_name] = original
 
 
 class TestRunSecurityToolExec:
     def test_destructive_denied(self):
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
 
         async def go():
@@ -292,7 +298,7 @@ class TestRunSecurityToolExec:
                 "mcp_core.server_setup.confirm_destructive_action",
                 new=AsyncMock(return_value=False),
             ):
-                return await tool.fn(
+                return await _run_security_tool(
                     ctx,
                     tool_name="metasploit",
                     parameters=json.dumps({
@@ -307,6 +313,11 @@ class TestRunSecurityToolExec:
 
     _MOCK_RESULTS: dict = {}
 
+    def _saved(self):
+        if not hasattr(self, '_saved_entries'):
+            self._saved_entries = {}
+        return self._saved_entries
+
     @classmethod
     def setup_class(cls):
         cls._MOCK_RESULTS = {
@@ -317,38 +328,42 @@ class TestRunSecurityToolExec:
             "metasploit": {"success": True, "stdout": "ok",                      "return_code": 0, "timed_out": False, "execution_time": 0.5, "stderr": ""},
         }
 
+    def teardown_method(self):
+        """Restore all _DIRECT_TOOLS_CACHE entries patched by _patch_tool."""
+        saved = getattr(self, '_saved_entries', None)
+        if saved is None:
+            return
+        for tool_name, original in list(saved.items()):
+            _MOCK_EXECUTORS.pop(f"_mock_{tool_name}", None)
+            _DIRECT_TOOLS_CACHE[tool_name] = original
+        saved.clear()
+
     def _patch_tool(self, tool_name, result):
-        """Replace a DIRECT_TOOLS executor via closure access."""
-        fn = run(mcp().get_tool("run_security_tool")).fn
-        for cell in fn.__closure__:
-            try:
-                val = cell.cell_contents
-                if isinstance(val, dict) and tool_name in val:
-                    val[tool_name] = (MagicMock(return_value=dict(result)), val[tool_name][1])
-                    return
-            except NameError:
-                pass
+        """Replace a cache entry with a mock; restored by teardown_method()."""
+        mod_path, func_name, binary = _DIRECT_TOOLS_CACHE[tool_name]
+        self._saved()[tool_name] = (mod_path, func_name, binary)
+        mock_key = f"_mock_{tool_name}"
+        _MOCK_EXECUTORS[mock_key] = MagicMock(return_value=dict(result))
+        _DIRECT_TOOLS_CACHE[tool_name] = (mod_path, mock_key, binary)
 
     def _fast_exec(self, tool_name):
         return self._MOCK_RESULTS.get(tool_name, {"success": False, "stdout": "", "return_code": 1, "timed_out": False, "execution_time": 0.5, "stderr": ""})
 
     def test_skill_injection(self):
         self._patch_tool("nmap", self._fast_exec("nmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.read_resource = AsyncMock(
             return_value=SimpleNamespace(
                 contents=[SimpleNamespace(content="# Nmap Recon\nStep 1: scan ports")]
             )
         )
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.55"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.55"})))
         assert result["success"] is True
 
     def test_tech_dict_explicit(self):
         self._patch_tool("nmap", self._fast_exec("nmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({
             "target": "10.0.0.56",
             "_tech": {"web_servers": ["nginx"], "frameworks": ["django"]},
         })))
@@ -356,128 +371,115 @@ class TestRunSecurityToolExec:
 
     def test_get_state_exception(self):
         self._patch_tool("nmap", self._fast_exec("nmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(side_effect=RuntimeError("state fail"))
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.57"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.57"})))
         assert result["success"] is True
 
     def test_optimizer_forced_stealth(self):
         self._patch_tool("nmap", self._fast_exec("nmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         async def go():
             with patch("mcp_core.server_setup._optimizer.optimize", return_value={
                 "target": "10.0.0.58",
                 "_optimizer": {"forced_stealth": True, "profile": "stealth"},
             }):
-                return await tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.58"}))
+                return await _run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.58"}))
         result = run(go())
         assert result["success"] is True
 
     def test_rate_limit_profile_restored(self):
         self._patch_tool("nmap", self._fast_exec("nmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         async def side_effect(k):
             return "stealth" if k.startswith("ratelimit") else None
         ctx.get_state = AsyncMock(side_effect=side_effect)
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.59"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.59"})))
         assert result["success"] is True
 
     def test_set_state_exception_tech_profile(self):
         self._patch_tool("whatweb", self._fast_exec("whatweb"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.set_state = AsyncMock(side_effect=RuntimeError("set_state fail"))
-        result = run(tool.fn(ctx, tool_name="whatweb", parameters=json.dumps({"url": "http://example.com"})))
+        result = run(_run_security_tool(ctx, "whatweb", json.dumps({"url": "http://example.com"})))
         assert result["success"] is True
 
     def test_ai_suggest_full_flow(self):
         self._patch_tool("nmap", {"success": True, "stdout": "22/tcp open ssh\n80/tcp open http", "return_code": 0, "timed_out": False, "execution_time": 0.5, "stderr": ""})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         sample_result = MagicMock()
         sample_result.text = "Next tool: nikto — web vuln scan"
         ctx.sample = AsyncMock(return_value=sample_result)
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.60", "_ai_suggest": True})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.60", "_ai_suggest": True})))
         assert result["success"] is True
         assert "ai_suggestion" in result
         assert "nikto" in result["ai_suggestion"]
 
     def test_ai_suggest_exception_swallowed(self):
         self._patch_tool("nmap", {"success": True, "stdout": "scan done", "return_code": 0, "timed_out": False, "execution_time": 0.5, "stderr": ""})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.sample = AsyncMock(side_effect=RuntimeError("unsupported"))
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.61", "_ai_suggest": True})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.61", "_ai_suggest": True})))
         assert result["success"] is True
         assert "ai_suggestion" not in result
 
     def test_ai_suggest_not_requested(self):
         self._patch_tool("nmap", {"success": True, "stdout": "scan done", "return_code": 0, "timed_out": False, "execution_time": 0.5, "stderr": ""})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.62"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.62"})))
         assert result["success"] is True
         assert "ai_suggestion" not in result
 
     def test_ai_suggest_empty_output_skips(self):
         self._patch_tool("nmap", {"success": True, "stdout": "", "return_code": 0, "timed_out": False, "execution_time": 0.5, "stderr": ""})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         sample_result = MagicMock()
         sample_result.text = "Next tool: test"
         ctx.sample = AsyncMock(return_value=sample_result)
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.63", "_ai_suggest": True})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.63", "_ai_suggest": True})))
         assert result["success"] is True
         assert "ai_suggestion" not in result
 
     def test_alternative_tool_suggestion(self):
         self._patch_tool("nmap", {"success": False, "stdout": "", "stderr": "connection refused: port 22", "return_code": 1, "timed_out": False, "execution_time": 0.5})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.64"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.64"})))
         assert result["success"] is False
 
     def test_prompt_suggestion_wp(self):
         self._patch_tool("whatweb", self._fast_exec("whatweb"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         msg = MagicMock()
         msg.content.text = "Try WordPress scanning"
         ctx.get_prompt = AsyncMock(return_value=SimpleNamespace(messages=[msg]))
-        result = run(tool.fn(ctx, tool_name="whatweb", parameters=json.dumps({"url": "http://example.com"})))
+        result = run(_run_security_tool(ctx, "whatweb", json.dumps({"url": "http://example.com"})))
         assert result["success"] is True
 
     def test_prompt_suggestion_waf(self):
         self._patch_tool("wafw00f", self._fast_exec("wafw00f"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         msg = MagicMock()
         msg.content.text = "WAF bypass techniques"
         ctx.get_prompt = AsyncMock(return_value=SimpleNamespace(messages=[msg]))
-        result = run(tool.fn(ctx, tool_name="wafw00f", parameters=json.dumps({"url": "http://example.com"})))
+        result = run(_run_security_tool(ctx, "wafw00f", json.dumps({"url": "http://example.com"})))
         assert result["success"] is True
 
     def test_prompt_suggestion_smb(self):
         self._patch_tool("smbmap", self._fast_exec("smbmap"))
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         msg = MagicMock()
         msg.content.text = "SMB lateral movement"
         ctx.get_prompt = AsyncMock(return_value=SimpleNamespace(messages=[msg]))
-        result = run(tool.fn(ctx, tool_name="smbmap", parameters=json.dumps({"target": "10.0.0.65"})))
+        result = run(_run_security_tool(ctx, "smbmap", json.dumps({"target": "10.0.0.65"})))
         assert result["success"] is True
 
     def test_error_handler_alternative_tool(self):
         self._patch_tool("nmap", {"success": False, "stdout": "", "stderr": "Permission denied", "return_code": 1, "timed_out": False, "execution_time": 0.5})
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.66"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.66"})))
         assert result["success"] is False
 
     def test_cache_hit_returned(self):
@@ -486,9 +488,8 @@ class TestRunSecurityToolExec:
         s = "test-unit"
         key = _cache_key_for(s, "nmap", "10.0.0.67", {"target": "10.0.0.67"})
         _scan_cache.set(key, {"tool": "nmap", "target": "10.0.0.67", "result": {"success": True, "output": "cached result"}, "timestamp": 999999.0}, ttl=3600)
-        tool = run(mcp().get_tool("run_security_tool"))
         ctx = make_mock_context()
-        result = run(tool.fn(ctx, tool_name="nmap", parameters=json.dumps({"target": "10.0.0.67"})))
+        result = run(_run_security_tool(ctx, "nmap", json.dumps({"target": "10.0.0.67"})))
         assert result["success"] is True
         assert result.get("output") == "cached result"
 

@@ -33,11 +33,10 @@ def make_mcp():
 
 
 async def call_run_security_tool(mcp, tool_name, parameters):
-    tool = await mcp.get_tool("run_security_tool")
-    assert tool is not None
+    from mcp_core.server_setup import run_security_tool as _run_security_tool
     ctx = make_mock_context()
     payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
-    return await tool.fn(ctx, tool_name=tool_name, parameters=payload)
+    return await _run_security_tool(ctx, tool_name, payload)
 
 
 def test_confirmation_accepted_executes_and_records_telemetry():
@@ -89,10 +88,10 @@ def test_rate_limit_sets_state_and_records_telemetry():
 
     # Use a custom ctx directly in call to verify set_state
     async def _call_with_ctx(mcp):
-        tool = await mcp.get_tool("run_security_tool")
+        from mcp_core.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         payload = json.dumps({"target": "ratelimit.example"})
-        return await tool.fn(ctx, tool_name="nmap", parameters=payload), ctx
+        return await _run_security_tool(ctx, "nmap", payload), ctx
 
     with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output), \
          patch("mcp_core.server_setup._rate_limiter.detect_rate_limiting",

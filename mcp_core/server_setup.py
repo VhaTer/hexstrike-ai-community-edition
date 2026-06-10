@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import logging
 import os
 import threading
 import time
@@ -24,8 +25,22 @@ from mcp_core.tool_routes import TOOL_ROUTES
 from mcp_core.tool_registry_v2 import _registry
 from server_core.telemetry_pipeline import _pipeline
 
-# Module-level cache for DIRECT_TOOLS — populated by setup_mcp_server_standalone()
+import importlib
+
+# Module-level cache for DIRECT_TOOLS — stores (mod_path, func_name, binary) tuples
 _DIRECT_TOOLS_CACHE: dict = {}
+_MOCK_EXECUTORS: dict = {}
+
+def _resolve_exec_func(module_path: str, func_name: str):
+    """Dynamically resolve an executor function — enables mock patching at call time."""
+    mock = _MOCK_EXECUTORS.get(func_name)
+    if mock is not None:
+        return mock
+    try:
+        mod = importlib.import_module(module_path)
+        return getattr(mod, func_name, None)
+    except ImportError:
+        return None
 
 def get_direct_tools() -> dict:
     """Return DIRECT_TOOLS (tool exec functions), lazy-populated on first call."""
@@ -38,39 +53,9 @@ def _populate_direct_tools() -> None:
     global _DIRECT_TOOLS_CACHE
     if _DIRECT_TOOLS_CACHE:
         return
-    from mcp_core.wifi_direct import wifi_exec
-    from mcp_core.recon_direct import recon_exec
-    from mcp_core.net_scan_direct import net_scan_exec
-    from mcp_core.web_scan_direct import web_scan_exec
-    from mcp_core.web_fuzz_direct import web_fuzz_exec
-    from mcp_core.password_cracking_direct import pwdcrack_exec
-    from mcp_core.smb_enum_direct import smb_enum_exec
-    from mcp_core.exploit_framework_direct import exploit_exec
-    from mcp_core.web_recon_direct import web_recon_exec
-    from mcp_core.security_direct import security_exec
-    from mcp_core.misc_direct import misc_exec
-    from mcp_core.osint_direct import osint_exec
-    from mcp_core.active_directory_direct import ad_exec
-    from mcp_core.testssl_direct import testssl_exec
-    from mcp_core.web_probe_direct import web_probe_exec
-    from mcp_core.vuln_intel_direct import vuln_intel_exec
-    from mcp_core.exec_direct import exec_direct
-    from mcp_core.browser_direct import browser_exec
-    _exec_by_name = {
-        "wifi_exec": wifi_exec, "recon_exec": recon_exec,
-        "net_scan_exec": net_scan_exec, "web_scan_exec": web_scan_exec,
-        "web_fuzz_exec": web_fuzz_exec, "pwdcrack_exec": pwdcrack_exec,
-        "smb_enum_exec": smb_enum_exec, "exploit_exec": exploit_exec,
-        "web_recon_exec": web_recon_exec, "security_exec": security_exec,
-        "misc_exec": misc_exec, "osint_exec": osint_exec,
-        "ad_exec": ad_exec, "testssl_exec": testssl_exec,
-        "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
-        "exec_direct": exec_direct, "browser_exec": browser_exec,
-    }
-    for tool_name, (_mod_path, func_name, binary) in TOOL_ROUTES.items():
-        ef = _exec_by_name.get(func_name)
-        if ef:
-            _DIRECT_TOOLS_CACHE[tool_name] = (ef, binary)
+    for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
+        if _resolve_exec_func(mod_path, func_name) is not None:
+            _DIRECT_TOOLS_CACHE[tool_name] = (mod_path, func_name, binary)
 
 try:
     from fastmcp.server.providers.skills import SkillsDirectoryProvider
@@ -187,6 +172,9 @@ TOOL_TIMEOUTS: dict[str, int] = {
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
 _rate_limit_events: list[dict] = []  # appended by run_security_tool on detection
+_PRIMITIVE_TOOLS = {"execute_code", "http_request", "raw_tcp"}
+
+logger = logging.getLogger(__name__)
 
 
 def _cache_key_for(session_id: str, tool_name: str, target: str, params: Dict[str, Any]) -> str:
@@ -1129,6 +1117,340 @@ def _register_skills(mcp: FastMCP, logger) -> None:
     )
     logger.info("🤖 Skills initialized (main files visible, supporting files via template, reload enabled)")
 
+async def run_security_tool(
+    ctx: Context,
+    tool_name: str,
+    parameters: str | Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Execute any security tool from the HexStrike arsenal.
+
+    Args:
+        tool_name:  Tool name (e.g. 'nmap', 'sqlmap', 'sherlock')
+        parameters: JSON string or dict of parameters (e.g. '{"target": "example.com"}')
+
+    Returns:
+        Tool execution results
+    """
+    _t_start = time.time()
+    _request_id = get_request_id()
+    _telemetry: Dict[str, Any] = {
+        "tool":             tool_name,
+        "success":          False,
+        "duration":         0.0,
+        "timed_out":        False,
+        "cache_hit":        False,
+        "session_state":    False,
+        "confirmation":     None,
+        "opt_profile":      "normal",
+        "skill_injected":   False,
+        "prompt_suggested": False,
+        "target":           "",
+        "session_id":       "",
+        "request_id":       _request_id or "",
+    }
+    await ctx.info(f"🔍 Executing {tool_name}")
+
+    def finalize(result: Any) -> Dict[str, Any]:
+        normalized = _normalize_tool_result(result)
+        _telemetry["success"] = bool(normalized.get("success", False))
+        _telemetry["timed_out"] = bool(normalized.get("timed_out", False))
+        _telemetry["duration"] = round(time.time() - _t_start, 3)
+        logger.info("[telemetry] %s", json.dumps(_telemetry))
+        _op_metrics.record(_telemetry)
+        _telemetry["event"] = "tool_execution"
+        _pipeline.emit(_telemetry)
+        get_tool_stats_store().record(
+            tool_name,
+            success=_telemetry["success"],
+        )
+        suggestion = _suggest_next_tool(
+            tool_name,
+            normalized.get("output", ""),
+            _telemetry.get("target", ""),
+        )
+        if suggestion:
+            normalized["next_suggested_tool"] = suggestion
+        return normalized
+
+    try:
+        params = json.loads(parameters) if isinstance(parameters, str) else parameters
+    except json.JSONDecodeError as e:
+        await ctx.error(f"❌ Invalid JSON parameters: {e}")
+        return finalize({"success": False, "error": f"Invalid JSON: {e}"})
+
+    if not isinstance(params, dict):
+        await ctx.error("❌ Invalid parameters: expected JSON object")
+        return finalize({"success": False, "error": "Invalid parameters: expected JSON object"})
+
+    route = _DIRECT_TOOLS_CACHE.get(tool_name.lower())
+    if not route:
+        await ctx.error(f"❌ Unknown tool: {tool_name}")
+        return finalize({"success": False, "error": f"Unknown tool: {tool_name}"})
+
+    mod_path, func_name, tool_key = route
+    exec_func = _resolve_exec_func(mod_path, func_name)
+    if exec_func is None:
+        await ctx.error(f"❌ Executor not found: {func_name} in {mod_path}")
+        return finalize({"success": False, "error": f"Executor {func_name} not found in {mod_path}"})
+
+    target = (
+        params.get("target")
+        or params.get("url")
+        or params.get("domain")
+        or params.get("interface", "")
+    )
+    _telemetry["target"] = target or ""
+
+    destructive_request = _build_destructive_confirmation(tool_name, params)
+    if destructive_request:
+        confirmed = await confirm_destructive_action(
+            ctx,
+            action=destructive_request["action"],
+            detail=destructive_request["detail"],
+            warning=destructive_request["warning"],
+        )
+        if not confirmed:
+            _telemetry["confirmation"] = "denied"
+            return finalize({
+                "success": False,
+                "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
+            })
+        _telemetry["confirmation"] = "accepted"
+    else:
+        _telemetry["confirmation"] = "skipped"
+
+    skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
+    if skill_name:
+        skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
+        if skill_doc:
+            lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
+            header = "\n".join(lines[:4])
+            await ctx.info(f"📚 [{skill_name}] {header}")
+            _telemetry["skill_injected"] = True
+
+    opt_profile = params.pop("_profile", "normal")
+    tech_dict   = params.pop("_tech", None)
+    tech_profile: Optional[TechProfile] = None
+
+    if isinstance(tech_dict, dict):
+        try:
+            tech_profile = TechProfile(
+                web_servers = tech_dict.get("web_servers", []),
+                frameworks  = tech_dict.get("frameworks", []),
+                cms         = tech_dict.get("cms", []),
+                databases   = tech_dict.get("databases", []),
+                languages   = tech_dict.get("languages", []),
+                security    = tech_dict.get("security", []),
+                services    = tech_dict.get("services", []),
+            )
+        except Exception:
+            logger.debug("Failed to build TechProfile from whatweb output", exc_info=True)
+    else:
+        if target:
+            try:
+                cached_dict = await ctx.get_state(f"tech:{target}")
+                if cached_dict and isinstance(cached_dict, dict):
+                    tech_profile = TechProfile(
+                        web_servers = cached_dict.get("web_servers", []),
+                        frameworks  = cached_dict.get("frameworks", []),
+                        cms         = cached_dict.get("cms", []),
+                        databases   = cached_dict.get("databases", []),
+                        languages   = cached_dict.get("languages", []),
+                        security    = cached_dict.get("security", []),
+                        services    = cached_dict.get("services", []),
+                    )
+                    _telemetry["session_state"] = True
+                    await ctx.info(f"🧠 Tech profile restored from session: {tech_profile.summary()}")
+            except Exception:
+                logger.debug("Failed to restore tech profile from session state", exc_info=True)
+
+            if tech_profile is None:
+                tech_profile = _detect_from_cache(target)
+                if tech_profile:
+                    await ctx.info(f"🧠 Tech detected from cache: {tech_profile.summary()}")
+                    try:
+                        await ctx.set_state(f"tech:{target}", {
+                            "web_servers": tech_profile.web_servers,
+                            "frameworks":  tech_profile.frameworks,
+                            "cms":         tech_profile.cms,
+                            "databases":   tech_profile.databases,
+                            "languages":   tech_profile.languages,
+                            "security":    tech_profile.security,
+                            "services":    tech_profile.services,
+                        })
+                    except Exception:
+                        logger.debug("Failed to persist tech profile to session state", exc_info=True)
+
+    if tech_profile:
+        suggested_prompt = None
+        if tech_profile.cms and any(c in tech_profile.cms for c in ("wordpress", "joomla", "drupal")):
+            suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
+        elif tech_profile.security and any(s in tech_profile.security for s in ("cloudflare", "akamai", "aws_waf")):
+            suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
+        elif "smb" in (tech_profile.services or []) or "ldap" in (tech_profile.services or []):
+            suggested_prompt = ("smb_lateral_movement", {"target": target or "unknown"})
+        elif any(s in (tech_profile.services or []) for s in ("ssh", "rdp")) and not target:
+            pass
+
+        if suggested_prompt:
+            try:
+                prompt_name, prompt_args = suggested_prompt
+                prompt_result = await ctx.get_prompt(prompt_name, prompt_args)
+                if prompt_result and prompt_result.messages:
+                    first_msg = prompt_result.messages[0]
+                    hint = getattr(getattr(first_msg, 'content', None), 'text', '')
+                    if hint:
+                        await ctx.info(f"💡 Workflow suggestion [{prompt_name}]: {hint[:120]}")
+                        _telemetry["prompt_suggested"] = True
+            except Exception:
+                logger.debug("Failed to suggest workflow prompt", exc_info=True)
+
+    if not opt_profile or opt_profile == "normal":
+        try:
+            saved_rl = await ctx.get_state(f"ratelimit:{target}")
+            if saved_rl:
+                opt_profile = saved_rl
+                _telemetry["opt_profile"] = opt_profile
+                await ctx.info(f"⚡ Rate limit profile restored: {opt_profile}")
+        except Exception:
+            logger.debug("Failed to restore rate limit profile from session state", exc_info=True)
+
+    _telemetry["opt_profile"] = opt_profile
+
+    _session_id = ctx.session_id
+    _cache_key = _cache_key_for(_session_id, tool_name, target, params) if target else None
+    if _cache_key:
+        prior = _scan_cache.get(_cache_key)
+        if prior and prior.get("result", {}).get("success"):
+            _telemetry["cache_hit"] = True
+            _telemetry["success"] = True
+            await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
+            return finalize(prior["result"])
+        prior = _scan_cache.get(f"seed:{tool_name}:{target}")
+        if prior and prior.get("result", {}).get("success"):
+            _telemetry["cache_hit"] = True
+            _telemetry["success"] = True
+            await ctx.info(f"⚡ {tool_name} seed cache hit for {target}")
+            return finalize(prior["result"])
+
+    params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
+    optimizer_meta = params.pop("_optimizer", {})
+    if optimizer_meta.get("forced_stealth"):
+        await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
+    elif opt_profile != "normal":
+        await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
+
+    loop = asyncio.get_running_loop()
+    future = asyncio.ensure_future(
+        loop.run_in_executor(None, lambda: exec_func(tool_name.lower(), params))
+    )
+
+    try:
+        await ctx.report_progress(0, 100)
+        phases = [(25, "🔧 Preparing..."), (50, "⚙️  Running..."), (75, "📊 Processing results...")]
+        tick = 12
+        for progress, message in phases:
+            done, _ = await asyncio.wait([future], timeout=tick)
+            if done:
+                break
+            await ctx.report_progress(progress, 100)
+            await ctx.info(message)
+
+        pct = 80
+        while not future.done():
+            done, _ = await asyncio.wait([future], timeout=15)
+            if done:
+                break
+            await ctx.report_progress(pct, 100)
+            await ctx.info(f"⏳ Still running ({pct}%)")
+            pct = min(pct + 5, 98)
+
+        result = _normalize_tool_result(await future)
+        await ctx.report_progress(100, 100)
+    except asyncio.CancelledError:
+        result = {"success": False, "error": "Tool execution timed out", "timed_out": True}
+        await ctx.report_progress(100, 100)
+    except Exception as exc:
+        result = {"success": False, "error": str(exc)[:500], "timed_out": False}
+
+    _telemetry["timed_out"] = result.get("timed_out", False)
+
+    if result.get("success"):
+        await ctx.info(f"✅ {tool_name} completed")
+        _telemetry["success"] = True
+
+        output = str(result.get("output", "") or result.get("data", ""))
+        status_code = result.get("returncode", 0) or 0
+        rl = _rate_limiter.detect_rate_limiting(output, status_code)
+        if rl["detected"]:
+            recommended = rl["recommended_profile"]
+            _telemetry["rate_limit"] = recommended
+            _rate_limit_events.append({
+                "target":    target or "",
+                "tool":      tool_name,
+                "profile":   recommended,
+                "confidence": rl["confidence"],
+                "indicators": rl.get("indicators", []),
+                "timestamp":  time.time(),
+            })
+            await ctx.info(f"⚠️ Rate limit detected (confidence={rl['confidence']:.0%}) → switching to {recommended}")
+            try:
+                await ctx.set_state(f"ratelimit:{target}", recommended)
+            except Exception:
+                logger.debug("Failed to persist rate limit profile to session state", exc_info=True)
+
+        if target:
+            exec_time = result.get("execution_time", 0.0)
+            _scan_cache.set(_cache_key or _cache_key_for(_session_id, tool_name, target or "unknown", params), {
+                "tool": tool_name, "target": target,
+                "result": result, "timestamp": time.time(),
+            }, execution_time=exec_time)
+            _telemetry["cache_hit"] = False
+    else:
+        await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
+        error_msg = str(result.get("error", "") or result.get("stderr", "") or "")
+        if error_msg:
+            from server_core.singletons import error_handler as _eh
+            error_type = _eh.classify_error(error_msg)
+            result["error_type"] = error_type.value
+            _telemetry["error_type"] = error_type.value
+            _eh.handle_tool_failure(
+                tool_name,
+                Exception(error_msg[:500]),
+                {"target": target or "unknown", "parameters": params},
+            )
+            alternative = _eh.get_alternative_tool(tool_name, {})
+            if alternative:
+                result["suggested_alternative"] = alternative
+                await ctx.info(f"💡 Try: {alternative} (error: {error_type.value})")
+
+    if params.get("_ai_suggest") and result.get("success"):
+        output_text = str(result.get("output", ""))[:2000]
+        if output_text.strip():
+            try:
+                sample_result = await ctx.sample(
+                    messages=(
+                        f"You are a penetration testing assistant analyzing tool output.\n"
+                        f"Tool: {tool_name}\nTarget: {target or 'unknown'}\n"
+                        f"Output (truncated to 2000 chars):\n{output_text}\n\n"
+                        f"Based on this output, suggest the single most valuable next "
+                        f"HexStrike tool to run and why. Be concise (2-3 sentences max). "
+                        f"Format: 'Next tool: <tool_name> — <reason>'"
+                    ),
+                    max_tokens=120,
+                )
+                suggestion = sample_result.text.strip() if sample_result else ""
+                if suggestion:
+                    await ctx.info(f"🤖 AI suggestion: {suggestion}")
+                    result["ai_suggestion"] = suggestion
+                    _telemetry["ai_suggested"] = True
+            except Exception:
+                logger.debug("ctx.sample not supported by client or failed", exc_info=True)
+
+    return finalize(result)
+
+
 def setup_mcp_server_standalone(logger=None) -> FastMCP:
     """
     Set up the MCP server in standalone mode (Phase 3).
@@ -1151,7 +1473,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     transforms = [RegexSearchTransform(
         max_results=10,
         search_result_serializer=serialize_tools_for_output_markdown,
-        always_visible=["scan", "get_live_dashboard", "scan_background", "pulse_dashboard", "http_request", "execute_code", "raw_tcp", "run_security_tool"],
+        always_visible=["scan", "get_live_dashboard", "scan_background", "pulse_dashboard"],
     )] if RegexSearchTransform else []
     from mcp_core.instructions import INSTRUCTIONS
     mcp = FastMCP(
@@ -1173,358 +1495,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     _populate_direct_tools()
     DIRECT_TOOLS = _DIRECT_TOOLS_CACHE
 
-    @mcp.tool(description="Execute any HexStrike security tool by name with JSON parameters")
-    async def run_security_tool(
-        ctx: Context,
-        tool_name: str,
-        parameters: str | Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Execute any security tool from the HexStrike arsenal.
-
-        Args:
-            tool_name:  Tool name (e.g. 'nmap', 'sqlmap', 'sherlock')
-            parameters: JSON string or dict of parameters (e.g. '{"target": "example.com"}')
-
-        Returns:
-            Tool execution results
-        """
-        _t_start = time.time()
-        _request_id = get_request_id()
-        _telemetry: Dict[str, Any] = {
-            "tool":             tool_name,
-            "success":          False,
-            "duration":         0.0,
-            "timed_out":        False,
-            "cache_hit":        False,   # True when _scan_cache returns a prior result
-            "session_state":    False,   # True when tech profile restored from ctx.get_state
-            "confirmation":     None,    # None | "accepted" | "denied" | "skipped"
-            "opt_profile":      "normal",
-            "skill_injected":   False,
-            "prompt_suggested": False,
-            "target":           "",      # normalized target identity (populated after parse)
-            "session_id":       str(ctx.session_id) if hasattr(ctx, 'session_id') else "",
-            "request_id":       _request_id or "",
-        }
-        await ctx.info(f"🔍 Executing {tool_name}")
-
-        def finalize(result: Any) -> Dict[str, Any]:
-            normalized = _normalize_tool_result(result)
-            _telemetry["success"] = bool(normalized.get("success", False))
-            _telemetry["timed_out"] = bool(normalized.get("timed_out", False))
-            _telemetry["duration"] = round(time.time() - _t_start, 3)
-            logger.info("[telemetry] %s", json.dumps(_telemetry))
-            _op_metrics.record(_telemetry)
-            _telemetry["event"] = "tool_execution"
-            _pipeline.emit(_telemetry)
-            get_tool_stats_store().record(
-                tool_name,
-                success=_telemetry["success"],
-            )
-            suggestion = _suggest_next_tool(
-                tool_name,
-                normalized.get("output", ""),
-                _telemetry.get("target", ""),
-            )
-            if suggestion:
-                normalized["next_suggested_tool"] = suggestion
-            return normalized
-
-        try:
-            params = json.loads(parameters) if isinstance(parameters, str) else parameters
-        except json.JSONDecodeError as e:
-            await ctx.error(f"❌ Invalid JSON parameters: {e}")
-            return finalize({"success": False, "error": f"Invalid JSON: {e}"})
-
-        if not isinstance(params, dict):
-            await ctx.error("❌ Invalid parameters: expected JSON object")
-            return finalize({"success": False, "error": "Invalid parameters: expected JSON object"})
-
-        route = DIRECT_TOOLS.get(tool_name.lower())
-        if not route:
-            await ctx.error(f"❌ Unknown tool: {tool_name}")
-            return finalize({"success": False, "error": f"Unknown tool: {tool_name}"})
-
-        exec_func, tool_key = route
-
-        # 1. Resolve target once — needed by elicitation, tech detect, get_prompt, and cache
-        target = (
-            params.get("target")
-            or params.get("url")
-            or params.get("domain")
-            or params.get("interface", "")
-        )
-        _telemetry["target"] = target or ""
-
-        # 2. Elicitation — destructive tools require explicit user confirmation
-        destructive_request = _build_destructive_confirmation(tool_name, params)
-        if destructive_request:
-            confirmed = await confirm_destructive_action(
-                ctx,
-                action=destructive_request["action"],
-                detail=destructive_request["detail"],
-                warning=destructive_request["warning"],
-            )
-            if not confirmed:
-                _telemetry["confirmation"] = "denied"
-                return finalize({
-                    "success": False,
-                    "error": f"Action cancelled - {destructive_request['action']} requires explicit confirmation",
-                })
-            _telemetry["confirmation"] = "accepted"
-        else:
-            _telemetry["confirmation"] = "skipped" if not destructive_request else None
-        # 3. Skill guidance
-        skill_name = _TOOL_SKILL_MAP.get(tool_name.lower())
-        if skill_name:
-            skill_doc = await _read_skill_document(ctx, skill_name, "SKILL.md")
-            if skill_doc:
-                lines = [l for l in skill_doc.splitlines() if l.strip() and not l.startswith("---")]
-                header = "\n".join(lines[:4])
-                await ctx.info(f"📚 [{skill_name}] {header}")
-                _telemetry["skill_injected"] = True
-
-        # ParameterOptimizer — enrich params before execution
-        # Caller can pass _profile (stealth/normal/aggressive) and _tech (dict) in params
-        opt_profile = params.pop("_profile", "normal")
-        tech_dict   = params.pop("_tech", None)
-        tech_profile: Optional[TechProfile] = None
-
-        if isinstance(tech_dict, dict):
-            # Caller passed explicit tech info
-            try:
-                tech_profile = TechProfile(
-                    web_servers = tech_dict.get("web_servers", []),
-                    frameworks  = tech_dict.get("frameworks", []),
-                    cms         = tech_dict.get("cms", []),
-                    databases   = tech_dict.get("databases", []),
-                    languages   = tech_dict.get("languages", []),
-                    security    = tech_dict.get("security", []),
-                    services    = tech_dict.get("services", []),
-                )
-            except Exception:
-                logger.debug("Failed to build TechProfile from whatweb output", exc_info=True)
-        else:
-            # Auto-detect: session state first, then scan cache
-            if target:
-                # 1. Try session-persisted TechProfile (fastest — no recompute)
-                try:
-                    cached_dict = await ctx.get_state(f"tech:{target}")
-                    if cached_dict and isinstance(cached_dict, dict):
-                        tech_profile = TechProfile(
-                            web_servers = cached_dict.get("web_servers", []),
-                            frameworks  = cached_dict.get("frameworks", []),
-                            cms         = cached_dict.get("cms", []),
-                            databases   = cached_dict.get("databases", []),
-                            languages   = cached_dict.get("languages", []),
-                            security    = cached_dict.get("security", []),
-                            services    = cached_dict.get("services", []),
-                        )
-                        _telemetry["session_state"] = True
-                        await ctx.info(f"🧠 Tech profile restored from session: {tech_profile.summary()}")
-                except Exception:
-                    logger.debug("Failed to restore tech profile from session state", exc_info=True)
-
-                # 2. Fall back to scan cache if no session state
-                if tech_profile is None:
-                    tech_profile = _detect_from_cache(target)
-                    if tech_profile:
-                        await ctx.info(f"🧠 Tech detected from cache: {tech_profile.summary()}")
-                        # Persist to session state for subsequent calls
-                        try:
-                            await ctx.set_state(f"tech:{target}", {
-                                "web_servers": tech_profile.web_servers,
-                                "frameworks":  tech_profile.frameworks,
-                                "cms":         tech_profile.cms,
-                                "databases":   tech_profile.databases,
-                                "languages":   tech_profile.languages,
-                                "security":    tech_profile.security,
-                                "services":    tech_profile.services,
-                            })
-                        except Exception:
-                            logger.debug("Failed to persist tech profile to session state", exc_info=True)
-
-        # ctx.get_prompt() — suggest workflow prompt based on TechProfile
-        if tech_profile:
-            suggested_prompt = None
-            if tech_profile.cms and any(c in tech_profile.cms for c in ("wordpress", "joomla", "drupal")):
-                suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
-            elif tech_profile.security and any(s in tech_profile.security for s in ("cloudflare", "akamai", "aws_waf")):
-                suggested_prompt = ("bug_bounty_recon", {"target": target or tool_name})
-            elif "smb" in (tech_profile.services or []) or "ldap" in (tech_profile.services or []):
-                suggested_prompt = ("smb_lateral_movement", {"target": target or "unknown"})
-            elif any(s in (tech_profile.services or []) for s in ("ssh", "rdp")) and not target:
-                pass  # not enough context
-
-            if suggested_prompt:
-                try:
-                    prompt_name, prompt_args = suggested_prompt
-                    prompt_result = await ctx.get_prompt(prompt_name, prompt_args)
-                    if prompt_result and prompt_result.messages:
-                        first_msg = prompt_result.messages[0]
-                        hint = getattr(getattr(first_msg, 'content', None), 'text', '')
-                        if hint:
-                            await ctx.info(f"💡 Workflow suggestion [{prompt_name}]: {hint[:120]}")
-                            _telemetry["prompt_suggested"] = True
-                except Exception:
-                    logger.debug("Failed to suggest workflow prompt", exc_info=True)
-
-        # Rate limit profile from session state — override normal profile
-        if not opt_profile or opt_profile == "normal":
-            try:
-                saved_rl = await ctx.get_state(f"ratelimit:{target}")
-                if saved_rl:
-                    opt_profile = saved_rl
-                    _telemetry["opt_profile"] = opt_profile
-                    await ctx.info(f"⚡ Rate limit profile restored: {opt_profile}")
-            except Exception:
-                logger.debug("Failed to restore rate limit profile from session state", exc_info=True)
-
-        _telemetry["opt_profile"] = opt_profile
-
-        # 4b. Scan cache — compute key from ORIGINAL params (before optimizer enriches with defaults)
-        _session_id = ctx.session_id
-        _cache_key = _cache_key_for(_session_id, tool_name, target, params) if target else None
-        if _cache_key:
-            prior = _scan_cache.get(_cache_key)
-            if prior and prior.get("result", {}).get("success"):
-                _telemetry["cache_hit"] = True
-                _telemetry["success"] = True
-                await ctx.info(f"⚡ {tool_name} cache hit for {target} — returning cached result")
-                return finalize(prior["result"])
-            # Fallback: check seed cache (seed:{tool}:{target})
-            prior = _scan_cache.get(f"seed:{tool_name}:{target}")
-            if prior and prior.get("result", {}).get("success"):
-                _telemetry["cache_hit"] = True
-                _telemetry["success"] = True
-                await ctx.info(f"⚡ {tool_name} seed cache hit for {target}")
-                return finalize(prior["result"])
-
-        # Enrich params with optimizer defaults AFTER cache key computation
-        params = _optimizer.optimize(tool_name.lower(), params, tech_profile, opt_profile)
-        optimizer_meta = params.pop("_optimizer", {})
-        if optimizer_meta.get("forced_stealth"):
-            await ctx.info(f"🛡️ WAF detected → stealth mode forced for {tool_name}")
-        elif opt_profile != "normal":
-            await ctx.info(f"⚙️ Profile: {optimizer_meta.get('profile', opt_profile)}")
-
-        loop = asyncio.get_running_loop()
-        future = asyncio.ensure_future(
-            loop.run_in_executor(None, lambda: exec_func(tool_name.lower(), params))
-        )
-
-        try:
-            await ctx.report_progress(0, 100)
-            phases = [(25, "🔧 Preparing..."), (50, "⚙️  Running..."), (75, "📊 Processing results...")]
-            tick = 12
-            for progress, message in phases:
-                done, _ = await asyncio.wait([future], timeout=tick)
-                if done:
-                    break
-                await ctx.report_progress(progress, 100)
-                await ctx.info(message)
-
-            # Keep polling with progress reports until done
-            pct = 80
-            while not future.done():
-                done, _ = await asyncio.wait([future], timeout=15)
-                if done:
-                    break
-                await ctx.report_progress(pct, 100)
-                await ctx.info(f"⏳ Still running ({pct}%)")
-                pct = min(pct + 5, 98)
-
-            result = _normalize_tool_result(await future)
-            await ctx.report_progress(100, 100)
-        except asyncio.CancelledError:
-            # FastMCP timeout reached — subprocess may still be running in the
-            # thread pool; we exit cleanly to avoid ClosedResourceError crashes.
-            result = {"success": False, "error": "Tool execution timed out", "timed_out": True}
-            await ctx.report_progress(100, 100)
-        except Exception as exc:
-            result = {"success": False, "error": str(exc)[:500], "timed_out": False}
-
-        # Copy result-level flags into telemetry
-        _telemetry["timed_out"] = result.get("timed_out", False)
-
-        if result.get("success"):
-            await ctx.info(f"✅ {tool_name} completed")
-            _telemetry["success"] = True
-
-            # Rate limit detection on successful results
-            output = str(result.get("output", "") or result.get("data", ""))
-            status_code = result.get("returncode", 0) or 0
-            rl = _rate_limiter.detect_rate_limiting(output, status_code)
-            if rl["detected"]:
-                recommended = rl["recommended_profile"]
-                _telemetry["rate_limit"] = recommended
-                _rate_limit_events.append({
-                    "target":    target or "",
-                    "tool":      tool_name,
-                    "profile":   recommended,
-                    "confidence": rl["confidence"],
-                    "indicators": rl.get("indicators", []),
-                    "timestamp":  time.time(),
-                })
-                await ctx.info(f"⚠️ Rate limit detected (confidence={rl['confidence']:.0%}) → switching to {recommended}")
-                try:
-                    await ctx.set_state(f"ratelimit:{target}", recommended)
-                except Exception:
-                    logger.debug("Failed to persist rate limit profile to session state", exc_info=True)
-
-            if target:
-                exec_time = result.get("execution_time", 0.0)
-                _scan_cache.set(_cache_key or _cache_key_for(_session_id, tool_name, target or "unknown", params), {
-                    "tool": tool_name, "target": target,
-                    "result": result, "timestamp": time.time(),
-                }, execution_time=exec_time)
-                _telemetry["cache_hit"] = False  # we just wrote it; hit = prior result served
-        else:
-            await ctx.error(f"❌ {tool_name} failed: {result.get('error', 'unknown')}")
-            # IntelligentErrorHandler — classify error, record history, suggest alternative
-            error_msg = str(result.get("error", "") or result.get("stderr", "") or "")
-            if error_msg:
-                from server_core.singletons import error_handler as _eh
-                error_type = _eh.classify_error(error_msg)
-                result["error_type"] = error_type.value
-                _telemetry["error_type"] = error_type.value
-                # Record to error history for statistics + monitoring
-                _eh.handle_tool_failure(
-                    tool_name,
-                    Exception(error_msg[:500]),
-                    {"target": target or "unknown", "parameters": params},
-                )
-                alternative = _eh.get_alternative_tool(tool_name, {})
-                if alternative:
-                    result["suggested_alternative"] = alternative
-                    await ctx.info(f"💡 Try: {alternative} (error: {error_type.value})")
-
-        # ctx.sample() — AI-powered next-step suggestion (opt-in via _ai_suggest=True)
-        # Advisory only: never blocks execution, silently skips if client lacks sampling support
-        if params.get("_ai_suggest") and result.get("success"):
-            output_text = str(result.get("output", ""))[:2000]  # cap to avoid large prompts
-            if output_text.strip():
-                try:
-                    sample_result = await ctx.sample(
-                        messages=(
-                            f"You are a penetration testing assistant analyzing tool output.\n"
-                            f"Tool: {tool_name}\nTarget: {target or 'unknown'}\n"
-                            f"Output (truncated to 2000 chars):\n{output_text}\n\n"
-                            f"Based on this output, suggest the single most valuable next "
-                            f"HexStrike tool to run and why. Be concise (2-3 sentences max). "
-                            f"Format: 'Next tool: <tool_name> — <reason>'"
-                        ),
-                        max_tokens=120,
-                    )
-                    suggestion = sample_result.text.strip() if sample_result else ""
-                    if suggestion:
-                        await ctx.info(f"🤖 AI suggestion: {suggestion}")
-                        result["ai_suggestion"] = suggestion
-                        _telemetry["ai_suggested"] = True
-                except Exception:
-                    logger.debug("ctx.sample not supported by client or failed", exc_info=True)
-
-        return finalize(result)
+    # run_security_tool is now defined at module level (above setup_mcp_server_standalone)
+    # It is NOT exposed as an @mcp.tool() — agents must use typed tools or scan/ctf entry points
 
     @mcp.tool(
         description="Return the local skill bundle associated with a HexStrike tool",
@@ -1885,6 +1857,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
 
     typed_tools_registered = 0
     for public_name in sorted(DIRECT_TOOLS):
+        if public_name in _PRIMITIVE_TOOLS:
+            continue
         tool_def = _get_registry_tool_definition(public_name)
         if not tool_def:
             continue

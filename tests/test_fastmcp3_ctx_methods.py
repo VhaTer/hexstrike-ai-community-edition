@@ -45,18 +45,16 @@ def make_mock_context():
 
 
 async def call_run_security_tool(mcp, tool_name, parameters, ctx=None):
-    """Invoke the run_security_tool registered on an MCP server.
+    """Invoke run_security_tool directly (module-level function, not MCP tool).
 
     Parameters can be a dict (auto-serialized to JSON) or a raw string
     (passed through as-is — useful for testing invalid JSON).
     """
-    tool = await mcp.get_tool("run_security_tool")
-    assert tool is not None, "run_security_tool not found on MCP server"
+    from mcp_core.server_setup import run_security_tool as _run_security_tool
     if ctx is None:
         ctx = make_mock_context()
-    # Pass through raw strings (invalid JSON tests), serialize dicts
     payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
-    return await tool.fn(ctx, tool_name=tool_name, parameters=payload), ctx
+    return await _run_security_tool(ctx, tool_name=tool_name, parameters=payload), ctx
 
 
 def run(coro):
