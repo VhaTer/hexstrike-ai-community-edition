@@ -42,7 +42,7 @@ def _resolve_exec_func(module_path: str, func_name: str):
     except ImportError:
         return None
 
-def get_direct_tools() -> dict:
+def _get_direct_tools() -> dict:
     """Return DIRECT_TOOLS (tool exec functions), lazy-populated on first call."""
     if not _DIRECT_TOOLS_CACHE:
         _populate_direct_tools()
@@ -1875,6 +1875,43 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         f"🚀 {len(DIRECT_TOOLS)} direct routes, {typed_tools_registered} typed MCP tools, + skill bundle helper"
     )
 
+    # ---- Primitive tools (skipped from typed registration, registered manually) ----
+    from mcp_core.misc_direct import _http_request
+
+    @mcp.tool(
+        name="http_request",
+        description="Generic HTTP client — GET/POST form login, cookie capture, API probing. Wraps curl for request execution.",
+        annotations={"readOnlyHint": False, "openWorldHint": True},
+    )
+    async def http_request_tool(
+        url: str,
+        method: str = "GET",
+        data: str = "",
+        cookie: str = "",
+        headers: str = "",
+        follow_redirects: bool = True,
+        max_body_size: int = 5000,
+        additional_args: str = "",
+        timeout: int = 60,
+    ) -> Dict[str, Any]:
+        """Send an HTTP request and return structured response.
+        
+        Returns dict with: success, status_code, ok (2xx boolean),
+        headers (dict), cookies (dict), body (str), body_truncated (bool),
+        body_hex (str, if binary).
+        """
+        return _http_request({
+            "url": url,
+            "method": method,
+            "data": data,
+            "cookie": cookie,
+            "headers": headers,
+            "follow_redirects": follow_redirects,
+            "max_body_size": max_body_size,
+            "additional_args": additional_args,
+            "timeout": timeout,
+        })
+
     # ========================================================================
     # Resources MCP — health + scan results + CLI feedback
     # ========================================================================
@@ -2171,11 +2208,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             intensity = "quick"
 
         tools_to_run = TOOLS_BY_INTENSITY[intensity]
-        _direct = get_direct_tools()
         tool_results: Dict[str, Any] = {}
         total = len(tools_to_run)
-
-        loop = asyncio.get_running_loop()
 
         await ctx.info(f"🎯 Scan {intensity} starting on {resolved} ({total} tools)")
 
@@ -2202,13 +2236,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                     await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — cached, skipping")
                     continue
 
-            entry = _direct.get(tool_name)
-            if not entry:
-                tool_results[tool_name] = {"status": "skipped", "error": f"Unknown tool: {tool_name}"}
-                await ctx.info(f"📊 [{idx+1}/{total}] {tool_name} — unknown, skipped")
-                continue
-
-            exec_func, binary = entry
             params: Dict[str, Any] = {"target": resolved}
             if tool_name in _TOOLS_NEED_URL:
                 if not resolved.startswith(("http://", "https://")):
@@ -2229,12 +2256,10 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
             params = _optimizer.optimize(tool_name, params)
 
             await ctx.info(f"🔨 Running {tool_name} on {resolved}")
-            tool_timeout = TOOL_TIMEOUTS.get(tool_name, 180)
             try:
-                out = await asyncio.wait_for(
-                    loop.run_in_executor(None, lambda: exec_func(binary, params)),
-                    timeout=tool_timeout,
-                )
+                from mcp_core.null_context import NullContext
+                null_ctx = NullContext()
+                out = await run_security_tool(null_ctx, tool_name, params)
                 ok = out.get("success", False)
                 tool_results[tool_name] = {
                     "status": "completed" if ok else "failed",
@@ -2242,21 +2267,6 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
                 }
                 if not ok:
                     tool_results[tool_name]["error"] = out.get("error", "Unknown error")
-                stdout_str = out.get("stdout", "") or out.get("output", "")
-                _scan_cache.set(f"bg:{tool_name}:{resolved}:{time.time()}", {
-                    "tool": tool_name,
-                    "target": resolved,
-                    "timestamp": time.time(),
-                    "status": "completed" if ok else "failed",
-                    "result": {
-                        "success": ok,
-                        "stdout": stdout_str,
-                        "output": stdout_str,
-                    },
-                })
-            except asyncio.TimeoutError:
-                tool_results[tool_name] = {"status": "timeout", "error": f"{tool_name} exceeded {tool_timeout}s"}
-                await ctx.warning(f"⏱️ {tool_name} timed out after {tool_timeout}s")
             except Exception as e:
                 tool_results[tool_name] = {"status": "error", "error": str(e)}
 

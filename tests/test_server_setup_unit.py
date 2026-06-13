@@ -656,7 +656,6 @@ class TestScanBackground:
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.get_direct_tools", return_value={}),
         ):
             result = run(tool.fn(ctx, intensity="extreme"))
 
@@ -666,12 +665,6 @@ class TestScanBackground:
         """Quick intensity runs the 2 tools defined in TOOLS_BY_INTENSITY['quick']."""
         tool = run(mcp().get_tool("scan_background"))
         ctx = make_mock_context()
-
-        def _make_exec(success=True, stdout=""):
-            return lambda b, p: {
-                "success": success, "output": stdout, "stdout": stdout,
-                "error": "", "returncode": 0 if success else 1,
-            }
 
         mock_pulse = MagicMock()
         mock_pulse.get_scope.return_value = {"active_target": "10.0.0.5"}
@@ -684,14 +677,14 @@ class TestScanBackground:
         mock_pulse._cache_for_target.return_value = []
         mock_pulse._suggest_next_from_context.return_value = {}
 
-        mock_tools = {
-            "nmap": (_make_exec(stdout="22/tcp open  ssh\n80/tcp open  http"), "nmap"),
-            "whatweb": (_make_exec(stdout="http://target [200 OK] nginx PHP"), "whatweb"),
-        }
+        mock_run = AsyncMock(side_effect=[
+            {"success": True, "output": "22/tcp open  ssh\n80/tcp open  http", "stdout": "22/tcp open  ssh\n80/tcp open  http", "returncode": 0},
+            {"success": True, "output": "http://target [200 OK] nginx PHP", "stdout": "http://target [200 OK] nginx PHP", "returncode": 0},
+        ])
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+            patch("mcp_core.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.5"))
 
@@ -718,14 +711,12 @@ class TestScanBackground:
         mock_pulse._TOOLS_NEED_URL = frozenset()
         mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
         mock_pulse._suggest_next_from_context.return_value = {}
-        mock_tools = {
-            "nmap": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "nmap"),
-            "whatweb": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "whatweb"),
-        }
+
+        mock_run = AsyncMock(return_value={"success": True, "output": "", "stdout": "", "returncode": 0})
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+            patch("mcp_core.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.10"))
 
@@ -748,15 +739,15 @@ class TestScanBackground:
         mock_pulse._TOOLS_NEED_URL = frozenset()
         mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
         mock_pulse._suggest_next_from_context.return_value = {}
-        mock_tools = {
-            "nmap": (lambda b, p: {"success": False, "error": "Timeout", "output": "",
-                                     "stdout": "", "returncode": 1}, "nmap"),
-            "whatweb": (lambda b, p: {"success": True, "stdout": "", "returncode": 0}, "whatweb"),
-        }
+
+        mock_run = AsyncMock(side_effect=[
+            {"success": False, "error": "Timeout", "output": "", "stdout": "", "returncode": 1},
+            {"success": True, "output": "", "stdout": "", "returncode": 0},
+        ])
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+            patch("mcp_core.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.20"))
 
@@ -779,13 +770,12 @@ class TestScanBackground:
         mock_pulse._TOOLS_NEED_URL = frozenset()
         mock_pulse._TOOLS_NEED_URL_AS_TARGET = frozenset()
         mock_pulse._suggest_next_from_context.return_value = {"tool": "whatweb"}
-        mock_tools = {
-            "nmap": (lambda b, p: {"success": True, "stdout": "22/tcp open  ssh", "returncode": 0}, "nmap"),
-        }
+
+        mock_run = AsyncMock(return_value={"success": True, "output": "22/tcp open  ssh", "stdout": "22/tcp open  ssh", "returncode": 0})
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.get_direct_tools", return_value=mock_tools),
+            patch("mcp_core.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.30"))
 

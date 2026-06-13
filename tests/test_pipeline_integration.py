@@ -123,53 +123,67 @@ def mock_cache():
 
 
 @pytest.fixture
-def mock_direct_tools():
-    """Replace get_direct_tools with controllable exec_funcs."""
-    def _make_exec(success=True, stdout="", error=""):
-        def _exec(binary, params):
-            return {
-                "success": success,
-                "output": stdout,
-                "stdout": stdout,
-                "error": error,
-                "returncode": 0 if success else 1,
-            }
-        return _exec
-
-    tools = {
-        "nmap":        (_make_exec(stdout=REAL_NMAP_OUTPUT), "nmap"),
-        "whatweb":     (_make_exec(stdout=REAL_WHATWEB_OUTPUT), "whatweb"),
-        "nuclei":      (_make_exec(stdout=REAL_NUCLEI_OUTPUT), "nuclei"),
-        "nikto":       (_make_exec(stdout=REAL_NIKTO_OUTPUT), "nikto"),
-        "gobuster":    (_make_exec(stdout=REAL_GOBUSTER_OUTPUT), "gobuster"),
+def mock_direct_tools(mock_cache):
+    """Patch run_security_tool with canned results, writing to _scan_cache."""
+    results = {
+        "nmap":    {"success": True, "stdout": REAL_NMAP_OUTPUT},
+        "whatweb": {"success": True, "stdout": REAL_WHATWEB_OUTPUT},
+        "nuclei":  {"success": True, "stdout": REAL_NUCLEI_OUTPUT},
+        "nikto":   {"success": True, "stdout": REAL_NIKTO_OUTPUT},
+        "gobuster": {"success": True, "stdout": REAL_GOBUSTER_OUTPUT},
     }
-    with patch.object(pulse_app, "get_direct_tools", return_value=tools):
-        yield tools
+
+    async def _mock(ctx, tool_name, params):
+        data = results.get(tool_name, {})
+        if not data:
+            return {"success": False, "error": f"Unknown: {tool_name}", "returncode": 1}
+        target = params.get("target") or params.get("url", "unknown")
+        try:
+            mock_cache[f"sess:{tool_name}:{target}"] = {
+                "tool": tool_name, "target": target,
+                "timestamp": time.time(),
+                "result": {"stdout": data.get("stdout", ""), "success": True},
+            }
+        except Exception:
+            pass
+        return {"success": True, "stdout": data.get("stdout", ""),
+                "output": data.get("stdout", ""), "error": "",
+                "returncode": 0, "duration": 0.1}
+
+    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+        yield results
 
 
 @pytest.fixture
-def mock_dvwa_direct_tools():
-    """DVWA-specific direct tools with SQLi/XSS nuclei output."""
-    def _make_exec(success=True, stdout="", error=""):
-        def _exec(binary, params):
-            return {
-                "success": success,
-                "output": stdout,
-                "stdout": stdout,
-                "error": error,
-                "returncode": 0 if success else 1,
-            }
-        return _exec
-
-    tools = {
-        "nmap":    (_make_exec(stdout=DVWA_NMAP_OUTPUT), "nmap"),
-        "whatweb": (_make_exec(stdout=DVWA_WHATWEB_OUTPUT), "whatweb"),
-        "nuclei":  (_make_exec(stdout=DVWA_NUCLEI_OUTPUT), "nuclei"),
-        "nikto":   (_make_exec(stdout=DVWA_NIKTO_OUTPUT), "nikto"),
-        "gobuster": (_make_exec(stdout=DVWA_GOBUSTER_OUTPUT), "gobuster"),
+def mock_dvwa_direct_tools(mock_cache):
+    """Patch run_security_tool with DVWA canned results."""
+    results = {
+        "nmap":    {"success": True, "stdout": DVWA_NMAP_OUTPUT},
+        "whatweb": {"success": True, "stdout": DVWA_WHATWEB_OUTPUT},
+        "nuclei":  {"success": True, "stdout": DVWA_NUCLEI_OUTPUT},
+        "nikto":   {"success": True, "stdout": DVWA_NIKTO_OUTPUT},
+        "gobuster": {"success": True, "stdout": DVWA_GOBUSTER_OUTPUT},
     }
-    with patch.object(pulse_app, "get_direct_tools", return_value=tools):
-        yield tools
+
+    async def _mock(ctx, tool_name, params):
+        data = results.get(tool_name, {})
+        if not data:
+            return {"success": False, "error": f"Unknown: {tool_name}", "returncode": 1}
+        target = params.get("target") or params.get("url", "unknown")
+        try:
+            mock_cache[f"sess:{tool_name}:{target}"] = {
+                "tool": tool_name, "target": target,
+                "timestamp": time.time(),
+                "result": {"stdout": data.get("stdout", ""), "success": True},
+            }
+        except Exception:
+            pass
+        return {"success": True, "stdout": data.get("stdout", ""),
+                "output": data.get("stdout", ""), "error": "",
+                "returncode": 0, "duration": 0.1}
+
+    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+        yield results
 
 
 # ── Fixture data for a single target ─────────────────────────────────────────

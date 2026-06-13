@@ -50,6 +50,7 @@ from prefab_ui.rx import Rx
 
 from config import _config as app_config
 from mcp_core.server_setup import _scan_cache, _rate_limit_events, _optimizer, TOOL_TIMEOUTS
+from mcp_core.null_context import NullContext
 from server_core.operational_metrics import _op_metrics
 from server_core.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store, get_ctf_manager
 from server_core.exploit_rules import suggest_exploit, ESTIMATED_TIMES, compute_layer2_score
@@ -1203,8 +1204,6 @@ _SECTION_REGISTRY = build_registry([
 # Async scan execution — Phase 3 (fix timeout 300s)
 # ═════════════════════════════════════════════════════════════════════════════
 
-from mcp_core.server_setup import get_direct_tools
-
 _async_scans: dict = {}
 _async_scans_lock = threading.Lock()
 
@@ -1260,17 +1259,16 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
 
     def _run():
         try:
-            entry = get_direct_tools().get(tool)
-            if not entry:
-                raise ValueError(f"Unknown tool: {tool}")
-
-            exec_func, binary_name = entry
+            import asyncio as _asyncio
+            from mcp_core.null_context import NullContext
+            from mcp_core.server_setup import run_security_tool
 
             with _async_scans_lock:
                 _async_scans[scan_id]["status"] = "running"
 
             start = time.time()
-            result = exec_func(tool, parsed_params)
+            null_ctx = NullContext()
+            result = _asyncio.run(run_security_tool(null_ctx, tool, parsed_params))
             elapsed = time.time() - start
 
             with _async_scans_lock:
@@ -1285,14 +1283,6 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
                         "returncode": result.get("returncode", -1),
                     },
                 })
-
-            try:
-                _op_metrics.record({
-                    "tool": tool, "success": result.get("success", False),
-                    "duration": elapsed, "timed_out": False, "cache_hit": False,
-                })
-            except Exception:
-                logger.debug("Failed to record async scan metrics for %s", tool, exc_info=True)
 
         except Exception as e:
             with _async_scans_lock:
@@ -1913,12 +1903,11 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
         intensity = "quick"
 
     tools_to_run = TOOLS_BY_INTENSITY[intensity]
-    _direct = get_direct_tools()
     tool_results = {}
 
     _workers = min(len(tools_to_run), 5)
     with ThreadPoolExecutor(max_workers=_workers) as pool:
-        futures = {pool.submit(_run_scan_tool, name, resolved, _direct): name
+        futures = {pool.submit(_run_scan_tool, name, resolved): name
                    for name in tools_to_run}
         for future in as_completed(futures):
             tr = future.result()
@@ -2024,7 +2013,8 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
             + (f" · {sev_display}" if sev_display else "")
             + (f" · next: {suggestion.get('tool')}" if suggestion else "")
         ),
-    } | ({"next_suggested_tool": suggestion} if suggestion else {})
+        "next_suggested_tool": suggestion or None,
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2600,25 +2590,34 @@ def _cache_for_target(target: str) -> list[dict]:
     return _ds_cache_for_target(_scan_cache, target)
 
 
-def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
-    """Run a single scan tool. Thread-safe — no shared state beyond _scan_cache (which is RLock-guarded).
+def _run_scan_tool(tool_name: str, resolved: str) -> dict:
+    """Run a single scan tool via run_security_tool. Thread-safe — runs in ThreadPoolExecutor.
 
     Returns {tool_name, status, error?, returncode?}.
+    Cache check is done first — cache hits return immediately without
+    calling run_security_tool().
     """
-    cache_entries = _cache_for_target(resolved)
-    cached = [c for c in cache_entries if str(c.get("tool", "")).lower() == tool_name]
+    import asyncio
+    from mcp_core.server_setup import run_security_tool
 
-    if cached:
-        if tool_name in _TOOLS_NEED_HOST and cached[0].get("result", {}).get("stdout", "").startswith("Starting Nmap") and "0 hosts up" in cached[0].get("result", {}).get("stdout", ""):
-            pass
-        else:
-            return {"tool_name": tool_name, "status": "cached", "cached": True}
+    cache_key = f"sess:{tool_name}:{resolved}"
+    try:
+        if cache_key in _scan_cache:
+            cached = _scan_cache[cache_key]
+            cached_stdout = cached.get("result", {}).get("stdout", "")
+            # Invalidate nmap cache entries with "0 hosts up"
+            if tool_name in _TOOLS_NEED_HOST and cached_stdout.lstrip().startswith("Starting"):
+                if "0 hosts up" in cached_stdout or "0 IP addresses" in cached_stdout:
+                    pass  # fall through to re-execute
+                else:
+                    return {"tool_name": tool_name, "status": "cached", "cached": True,
+                            "returncode": cached.get("result", {}).get("returncode")}
+            else:
+                return {"tool_name": tool_name, "status": "cached", "cached": True,
+                        "returncode": cached.get("result", {}).get("returncode")}
+    except Exception:
+        pass
 
-    entry = _direct.get(tool_name)
-    if not entry:
-        return {"tool_name": tool_name, "status": "skipped", "error": f"Unknown tool: {tool_name}"}
-
-    exec_func, binary = entry
     try:
         params = {"target": resolved}
         if tool_name in _TOOLS_NEED_URL:
@@ -2639,33 +2638,28 @@ def _run_scan_tool(tool_name: str, resolved: str, _direct: dict) -> dict:
             if port:
                 params["ports"] = str(port)
 
-        # Parameter optimizer: adds --host-timeout, --timeout, threads, additional_args
-        # Additive only — caller_keys protected, never overrides scan() built params
         params = _optimizer.optimize(tool_name, params)
 
-        out = exec_func(binary, params)
-        ok = out.get("success", False)
-        result = {
-            "tool_name": tool_name,
-            "status": "completed" if ok else "failed",
-            "returncode": out.get("returncode"),
-        }
-        if not ok:
-            result["error"] = out.get("error", "Unknown error")
+        null_ctx = NullContext()
+        result = asyncio.run(run_security_tool(null_ctx, tool_name, params))
 
-        stdout_str = out.get("stdout", "") or out.get("output", "")
-        _scan_cache.set(f"{tool_name}:{uuid.uuid4().hex[:8]}", {
-            "tool": tool_name,
-            "target": resolved,
-            "timestamp": time.time(),
-            "status": "completed" if ok else "failed",
-            "result": {
-                "success": ok,
-                "stdout": stdout_str,
-                "output": stdout_str,
-            },
-        })
-        return result
+        ok = result.get("success", False)
+        if ok:
+            _scan_cache[cache_key] = {
+                "tool": tool_name,
+                "target": resolved,
+                "timestamp": time.time(),
+                "result": {"stdout": result.get("stdout", ""),
+                           "output": result.get("output", ""),
+                           "success": True},
+            }
+            return {"tool_name": tool_name, "status": "completed",
+                    "returncode": result.get("returncode")}
+        timed_out = result.get("timed_out", False)
+        error = result.get("error", "")
+        if timed_out:
+            return {"tool_name": tool_name, "status": "timeout", "error": error}
+        return {"tool_name": tool_name, "status": "failed", "error": error}
     except Exception as e:
         return {"tool_name": tool_name, "status": "error", "error": str(e)}
 

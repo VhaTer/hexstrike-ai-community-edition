@@ -2,7 +2,7 @@
 tests/test_ctf_engine.py
 
 Unit tests for mcp_core/ctf_engine.py
-Covers: _execute_ctf_step_real(), register_ctf_tools(), and all 4 MCP tools
+Covers: _execute_ctf_step(), register_ctf_tools(), and all 4 MCP tools
 """
 
 import pytest
@@ -15,6 +15,13 @@ from server_core.workflows.ctf.CTFChallenge import CTFChallenge
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _clear_mock_executors():
+    from mcp_core.server_setup import _MOCK_EXECUTORS
+    _MOCK_EXECUTORS.clear()
+    yield
+    _MOCK_EXECUTORS.clear()
 
 @pytest.fixture
 def mock_ctx():
@@ -81,44 +88,53 @@ def parallel_step():
     }
 
 
-def _mock_direct_tools(results_map=None):
-    """Build mock DIRECT_TOOLS — _run_tool calls exec_func(tool_key, params) via run_in_executor.
+from contextlib import contextmanager
 
-    Each entry: (sync_callable, tool_key). The callable receives (tool_key, params)
-    and returns a dict compatible with _normalize_tool_result.
-    """
+
+@contextmanager
+def _patch_ctf_tools(results_map=None):
+    """Context manager: patches run_security_tool with canned per-tool results."""
     if results_map is None:
         results_map = {}
-    default = {"success": True, "output": "mock output"}
-    def _make_exec(result):
-        def _exec(tool, params):
-            return {**result, "tool": tool}
-        return _exec
-    all_tools = list(results_map.keys()) or ["nmap", "gobuster", "ffuf"]
-    return {t: (_make_exec(results_map.get(t, default)), t) for t in all_tools}
+
+    async def _mock(ctx, tool_name, params):
+        data = results_map.get(tool_name, {})
+        if not data:
+            return {"success": False, "error": f"Unknown tool: {tool_name}", "returncode": 1}
+        return {
+            "success": data.get("success", True),
+            "output": data.get("output", ""),
+            "stdout": data.get("output", ""),
+            "error": data.get("error", ""),
+            "returncode": 0 if data.get("success", True) else 1,
+            "duration": 0.1,
+            **data,
+        }
+
+    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+        yield
 
 
 # ---------------------------------------------------------------------------
-# Test _execute_ctf_step_real()
+# Test _execute_ctf_step()
 # ---------------------------------------------------------------------------
 
 class TestExecuteCtfStep:
 
     @pytest.mark.asyncio
     async def test_manual_step_returns_guidance(self, mock_ctx, challenge, manual_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        result = await _execute_ctf_step_real(manual_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        result = await _execute_ctf_step(manual_step, challenge, mock_ctx)
         assert result["success"] is True
         assert "[MANUAL]" in result["output"]
         assert "ida" in result["tools_skipped"]
 
     @pytest.mark.asyncio
     async def test_executable_step_runs_tools(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "nmap result"},
-                                                     "gobuster": {"success": True, "output": "gobuster result"}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "nmap result"},
+                                "gobuster": {"success": True, "output": "gobuster result"}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert result["success"] is True
         assert "nmap" in result["tools_executed"]
         assert "gobuster" in result["tools_executed"]
@@ -126,109 +142,101 @@ class TestExecuteCtfStep:
 
     @pytest.mark.asyncio
     async def test_tool_failure_sets_no_success(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": False, "error": "connection refused"},
-                                                     "gobuster": {"success": False, "error": "connection refused"}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": False, "error": "connection refused"},
+                                "gobuster": {"success": False, "error": "connection refused"}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_exception_during_tool_is_caught(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        def _crash_exec(tool, params):
+        from mcp_core.ctf_engine import _execute_ctf_step
+
+        async def _crash_mock(ctx, tool_name, params):
             raise RuntimeError("Tool crashed")
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value={"nmap": (_crash_exec, "nmap"),
-                                  "gobuster": (_crash_exec, "gobuster")}):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+
+        with patch("mcp_core.server_setup.run_security_tool", new=_crash_mock):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_parallel_execution(self, mock_ctx, challenge, parallel_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "nmap scan done"},
-                                                     "ffuf": {"success": True, "output": "ffuf scan done"},
-                                                     "gobuster": {"success": False, "error": "timeout"}})):
-            result = await _execute_ctf_step_real(parallel_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "nmap scan done"},
+                                "ffuf": {"success": True, "output": "ffuf scan done"},
+                                "gobuster": {"success": False, "error": "timeout"}}):
+            result = await _execute_ctf_step(parallel_step, challenge, mock_ctx)
         assert "nmap" in result["tools_executed"]
         assert "ffuf" in result["tools_executed"]
         assert "gobuster" not in result["tools_executed"]
 
     @pytest.mark.asyncio
     async def test_gather_exception_returns_error(self, mock_ctx, challenge, parallel_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
+        from mcp_core.ctf_engine import _execute_ctf_step
         async def fake_gather(*a, **kw):
             return [RuntimeError("tool crashed")]
         with patch("mcp_core.ctf_engine.asyncio.gather", fake_gather):
-            result = await _execute_ctf_step_real(parallel_step, challenge, mock_ctx)
+            result = await _execute_ctf_step(parallel_step, challenge, mock_ctx)
         assert "[ERROR]" in result["output"]
 
     @pytest.mark.asyncio
     async def test_flag_extraction_from_output(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "Found flag{hidden_flag_123} in response"},
-                                                     "gobuster": {"success": True, "output": "no flags"}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "Found flag{hidden_flag_123} in response"},
+                                "gobuster": {"success": True, "output": "no flags"}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert any("flag{hidden_flag_123}" in c for c in result["flag_candidates"])
 
     @pytest.mark.asyncio
     async def test_hex_string_flag_extraction(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
+        from mcp_core.ctf_engine import _execute_ctf_step
         hex_hash = "5d41402abc4b2a76b9719d911017c592"
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": f"Hash found: {hex_hash}"},
-                                                     "gobuster": {"success": True, "output": ""}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        with _patch_ctf_tools({"nmap": {"success": True, "output": f"Hash found: {hex_hash}"},
+                                "gobuster": {"success": True, "output": ""}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert any(hex_hash in c for c in result["flag_candidates"])
 
     @pytest.mark.asyncio
     async def test_output_truncated(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "A" * 5000},
-                                                     "gobuster": {"success": True, "output": ""}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "A" * 5000},
+                                "gobuster": {"success": True, "output": ""}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert len(result["output"]) < 10000
 
     @pytest.mark.asyncio
     async def test_empty_tools_returns_success(self, mock_ctx, challenge):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
+        from mcp_core.ctf_engine import _execute_ctf_step
         step = {"step": 1, "action": "noop", "description": "No tools", "tools": [], "parallel": False}
-        result = await _execute_ctf_step_real(step, challenge, mock_ctx)
+        result = await _execute_ctf_step(step, challenge, mock_ctx)
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_null_output_handled(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": ""},
-                                                     "gobuster": {"success": True, "output": ""}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": ""},
+                                "gobuster": {"success": True, "output": ""}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_ctf_format_flag(self, mock_ctx, challenge, sample_step):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "CTF{found_it}"},
-                                                     "gobuster": {"success": True, "output": ""}})):
-            result = await _execute_ctf_step_real(sample_step, challenge, mock_ctx)
+        from mcp_core.ctf_engine import _execute_ctf_step
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "CTF{found_it}"},
+                                "gobuster": {"success": True, "output": ""}}):
+            result = await _execute_ctf_step(sample_step, challenge, mock_ctx)
         assert any("CTF{found_it}" in c for c in result["flag_candidates"])
 
     @pytest.mark.asyncio
     async def test_mixed_manual_and_executable(self, mock_ctx, challenge):
-        from mcp_core.ctf_engine import _execute_ctf_step_real
+        from mcp_core.ctf_engine import _execute_ctf_step
         step = {
             "step": 1, "action": "mixed", "description": "Mixed tools",
             "tools": ["nmap", "manual", "gobuster", "wireshark"], "parallel": False,
         }
-        with patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "OK"},
-                                                     "gobuster": {"success": True, "output": "OK"}})):
-            result = await _execute_ctf_step_real(step, challenge, mock_ctx)
+        with _patch_ctf_tools({"nmap": {"success": True, "output": "OK"},
+                                "gobuster": {"success": True, "output": "OK"}}):
+            result = await _execute_ctf_step(step, challenge, mock_ctx)
         assert "nmap" in result["tools_executed"]
         assert "gobuster" in result["tools_executed"]
         assert "manual" in result["tools_skipped"]
@@ -449,8 +457,7 @@ class TestCtfSolve:
         with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager), \
              patch("mcp_core.ctf_engine.get_ctf_automator", return_value=mock_automator), \
-             patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "Found flag{solved_it}"}})):
+             _patch_ctf_tools({"nmap": {"success": True, "output": "Found flag{solved_it}"}}):
             tool = await mcp.get_tool("ctf_solve")
             result = await tool.fn(
                 name="Test", category="web", description="test", dry_run=False,
@@ -480,8 +487,7 @@ class TestCtfSolve:
         with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager), \
              patch("mcp_core.ctf_engine.get_ctf_automator", return_value=mock_automator), \
-             patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "No flags here"}})):
+             _patch_ctf_tools({"nmap": {"success": True, "output": "No flags here"}}):
             tool = await mcp.get_tool("ctf_solve")
             result = await tool.fn(
                 name="Test", category="web", description="test", dry_run=False,
@@ -512,8 +518,7 @@ class TestCtfSolve:
         with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager), \
              patch("mcp_core.ctf_engine.get_ctf_automator", return_value=mock_automator), \
-             patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": False, "error": "failed"}})):
+             _patch_ctf_tools({"nmap": {"success": False, "error": "failed"}}):
             tool = await mcp.get_tool("ctf_solve")
             result = await tool.fn(
                 name="Test", category="web", description="test",
@@ -545,8 +550,7 @@ class TestCtfSolve:
         with patch("mcp_core.ctf_engine.get_context", return_value=mock_ctx), \
              patch("mcp_core.ctf_engine.get_ctf_manager", return_value=mock_manager), \
              patch("mcp_core.ctf_engine.get_ctf_automator", return_value=mock_automator), \
-             patch("mcp_core.server_setup.get_direct_tools",
-                   return_value=_mock_direct_tools({"nmap": {"success": True, "output": "OK"}})):
+             _patch_ctf_tools({"nmap": {"success": True, "output": "OK"}}):
             tool = await mcp.get_tool("ctf_solve")
             result = await tool.fn(
                 name="Test", category="web", description="test", dry_run=False,
