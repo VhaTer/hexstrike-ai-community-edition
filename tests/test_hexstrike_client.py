@@ -176,7 +176,7 @@ class TestSafeGet:
         result = client.safe_get("health", None)
         assert result == {"ok": True}
         client.session.get.assert_called_once_with(
-            "http://localhost:8888/health", params={}, timeout=300
+            "http://localhost:8888/health", params={}, timeout=600
         )
 
     def test_request_exception(self, client):

@@ -42,7 +42,7 @@ class TestBasicArgumentParsing:
         args = parse_args()
         
         assert args.server == "http://127.0.0.1:8888"
-        assert args.timeout == 300
+        assert args.timeout == 600
         assert args.debug is False
         assert args.compact is False
         assert args.profile == []
@@ -341,7 +341,7 @@ class TestDefaultValues:
         args = parse_args()
         
         assert args.timeout == DEFAULT_REQUEST_TIMEOUT
-        assert args.timeout == 300
+        assert args.timeout == 600
 
     def test_all_defaults(self, original_argv):
         """Test all arguments have sensible defaults"""

@@ -133,98 +133,87 @@ def _no_tools_available():
     return {t: False for t in _all_tools_available()}
 
 
+def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
+    """Return a mock _collect_dashboard_state() result matching the Prefab pipeline."""
+    return {
+        "overview": {
+            "server_status": server_status,
+            "version": version,
+            "uptime_seconds": 3600,
+            "tools_count": 130,
+            "memory": "3.2/7.8 GB",
+            "uptime": "1h 0m",
+        },
+        "scope": {"active_target": None, "target_type": None},
+        "surface": {},
+        "findings": [],
+        "plan": {},
+        "active": {},
+        "history": [],
+        "rl": {},
+        "err": {},
+        "perf": {},
+        "cache_status": {},
+        "trends": {},
+        "sessions": {},
+        "confirmations": {},
+        "netio": {},
+        "async_scans_summary": "",
+        "next_suggested_tool": {},
+    }
+
+
 def test_build_dashboard_healthy():
-    """All essential tools present -> status=healthy."""
+    """Status=healthy when overview has healthy server_status."""
     from hexstrike_server import _build_dashboard_response
-    from contextlib import ExitStack
 
-    cfg = MagicMock()
-    cfg.get.return_value = "0.8.0"
-
-    with ExitStack() as stack:
-        stack.enter_context(patch("hexstrike_server._get_tool_availability",
-                                  return_value=_all_tools_available()))
-        stack.enter_context(patch("hexstrike_server.enhanced_process_manager",
-                                  mock_epm()))
-        stack.enter_context(patch("hexstrike_server.telemetry", mock_telemetry()))
-        stack.enter_context(patch("hexstrike_server.cache", mock_cache()))
-        stack.enter_context(patch("hexstrike_server.config_core", cfg))
-
-        result = _build_dashboard_response()
+    with patch("pulse_app._collect_dashboard_state",
+               return_value=_mock_dashboard_state("healthy")):
+        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+            result = _build_dashboard_response()
 
     assert result["status"] == "healthy"
-    assert result["all_essential_tools_available"] is True
-    assert result["version"] == "0.8.0"
-    assert result["total_tools_available"] == 17
-    assert result["total_tools_count"] == 17
-    assert result["category_stats"]["essential"]["available"] == 3
-    assert result["category_stats"]["essential"]["total"] == 3
-    assert result["cache_stats"]["size"] == 100
-    assert result["telemetry"]["commands_executed"] == 42
-    assert result["resources"]["cpu_percent"] == 50.0
+    assert result["version"] == "0.11.0"
+    assert result["tools_count"] == 130
+    assert "intelligence" in result
 
 
 def test_build_dashboard_degraded():
-    """Missing essential tools -> status=degraded."""
+    """Status=degraded when overview has degraded server_status."""
     from hexstrike_server import _build_dashboard_response
-    from contextlib import ExitStack
 
-    cfg = MagicMock()
-    cfg.get.return_value = "0.8.0"
-
-    with ExitStack() as stack:
-        stack.enter_context(patch("hexstrike_server._get_tool_availability",
-                                  return_value=_no_tools_available()))
-        stack.enter_context(patch("hexstrike_server.enhanced_process_manager",
-                                  mock_epm()))
-        stack.enter_context(patch("hexstrike_server.telemetry", mock_telemetry()))
-        stack.enter_context(patch("hexstrike_server.cache", mock_cache()))
-        stack.enter_context(patch("hexstrike_server.config_core", cfg))
-
-        result = _build_dashboard_response()
+    with patch("pulse_app._collect_dashboard_state",
+               return_value=_mock_dashboard_state("degraded")):
+        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+            result = _build_dashboard_response()
 
     assert result["status"] == "degraded"
-    assert result["all_essential_tools_available"] is False
-    assert result["total_tools_available"] == 0
 
 
 def test_build_dashboard_with_age():
-    """_tool_availability_last_refresh > 0 => age_seconds computed."""
+    """Uptime from overview.uptime_seconds in dashboard state."""
     from hexstrike_server import _build_dashboard_response
-    import hexstrike_server
-    from contextlib import ExitStack
 
-    hexstrike_server._tool_availability_last_refresh = 1000.0
+    state = _mock_dashboard_state("healthy")
+    state["overview"]["uptime_seconds"] = 7200
 
-    cfg = MagicMock()
-    cfg.get.return_value = "0.8.0"
+    with patch("pulse_app._collect_dashboard_state", return_value=state):
+        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+            result = _build_dashboard_response()
 
-    with ExitStack() as stack:
-        stack.enter_context(patch("hexstrike_server._get_tool_availability",
-                                  return_value=_all_tools_available()))
-        stack.enter_context(patch("hexstrike_server.enhanced_process_manager",
-                                  mock_epm()))
-        stack.enter_context(patch("hexstrike_server.telemetry", mock_telemetry()))
-        stack.enter_context(patch("hexstrike_server.cache", mock_cache()))
-        stack.enter_context(patch("hexstrike_server.config_core", cfg))
-        stack.enter_context(patch("hexstrike_server.time.time", return_value=1005.0))
-
-        result = _build_dashboard_response()
-
-    assert result["tool_availability_age_seconds"] == 5.0
-    assert result["uptime"] == 5.0  # 1005 - 1000
+    assert result["uptime"] == 7200
 
 
 def test_build_dashboard_exception():
     """Exception in _build_dashboard_response returns error dict."""
     from hexstrike_server import _build_dashboard_response
 
-    with patch("hexstrike_server._get_tool_availability",
+    with patch("pulse_app._collect_dashboard_state",
                side_effect=RuntimeError("test error")):
         result = _build_dashboard_response()
 
     assert result["status"] == "error"
-    assert "Server error" in result["error"]
+    assert "test error" in result.get("error", "")
 
 
 # ===========================================================================

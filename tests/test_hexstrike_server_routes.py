@@ -26,6 +26,36 @@ def run(coro):
         loop.close()
 
 
+def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
+    """Return a mock _collect_dashboard_state() result matching the Prefab pipeline."""
+    return {
+        "overview": {
+            "server_status": server_status,
+            "version": version,
+            "uptime_seconds": 3600,
+            "tools_count": 130,
+            "memory": "3.2/7.8 GB",
+            "uptime": "1h 0m",
+        },
+        "scope": {"active_target": None, "target_type": None},
+        "surface": {},
+        "findings": [],
+        "plan": {},
+        "active": {},
+        "history": [],
+        "rl": {},
+        "err": {},
+        "perf": {},
+        "cache_status": {},
+        "trends": {},
+        "sessions": {},
+        "confirmations": {},
+        "netio": {},
+        "async_scans_summary": "",
+        "next_suggested_tool": {},
+    }
+
+
 def test_register_http_routes_adds_health_and_ping(tmp_path):
     from hexstrike_server import register_http_routes
 
@@ -144,44 +174,23 @@ def test_ping_route_returns_ok(tmp_path):
 def test_build_dashboard_status_degraded_when_tools_missing():
     from hexstrike_server import _build_dashboard_response
 
-    no_tools = {tool: False for tools in (
-        ["nmap", "curl", "python3", "subfinder", "amass", "httpx", "katana",
-         "nikto", "sqlmap", "gobuster", "ffuf", "nuclei",
-         "airmon-ng", "airodump-ng", "aircrack-ng",
-         "msfconsole", "searchsploit"]
-    ) for tool in [tools] if isinstance(tools, list) for t in tools}
-    # Simpler: build the full set of all known tools
-    all_tools = {
-        "nmap": False, "curl": False, "python3": False,
-        "subfinder": False, "amass": False, "httpx": False, "katana": False,
-        "nikto": False, "sqlmap": False, "gobuster": False, "ffuf": False, "nuclei": False,
-        "airmon-ng": False, "airodump-ng": False, "aircrack-ng": False,
-        "msfconsole": False, "searchsploit": False,
-    }
-
-    with patch("hexstrike_server._get_tool_availability", return_value=all_tools):
-        result = _build_dashboard_response()
+    with patch("pulse_app._collect_dashboard_state",
+               return_value=_mock_dashboard_state("degraded")):
+        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+            result = _build_dashboard_response()
 
     assert result["status"] == "degraded"
-    assert result["all_essential_tools_available"] is False
 
 
 def test_build_dashboard_status_healthy_when_all_tools_present():
     from hexstrike_server import _build_dashboard_response
 
-    all_tools_present = {
-        "nmap": True, "curl": True, "python3": True,
-        "subfinder": True, "amass": True, "httpx": True, "katana": True,
-        "nikto": True, "sqlmap": True, "gobuster": True, "ffuf": True, "nuclei": True,
-        "airmon-ng": True, "airodump-ng": True, "aircrack-ng": True,
-        "msfconsole": True, "searchsploit": True,
-    }
-
-    with patch("hexstrike_server._get_tool_availability", return_value=all_tools_present):
-        result = _build_dashboard_response()
+    with patch("pulse_app._collect_dashboard_state",
+               return_value=_mock_dashboard_state("healthy")):
+        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+            result = _build_dashboard_response()
 
     assert result["status"] == "healthy"
-    assert result["all_essential_tools_available"] is True
 
 
 

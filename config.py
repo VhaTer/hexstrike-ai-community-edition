@@ -4,7 +4,7 @@ _config = {
     "APP_NAME": "HexStrike AI Pulse",
     "VERSION": "0.11.0",
     "DATA_DIR_NAME": "/home/vhater/hexstrike-ai-community-edition/.hexstrike_data",  # Root data directory name (relative to cwd, override with HEXSTRIKE_DATA_DIR env var)
-    "COMMAND_TIMEOUT": 300,
+    "COMMAND_TIMEOUT": 600,
     "CACHE_SIZE": 1000,
     "CACHE_TTL": 3600,  # 1 hour
     "TOOL_AVAILABILITY_TTL": 3600,  # 1 hour
