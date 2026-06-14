@@ -76,6 +76,21 @@ class AdvancedCache:
             self.access_times.clear()
             self.ttl_times.clear()
 
+    def __contains__(self, key: str) -> bool:
+        """Support 'key in cache' syntax."""
+        return self.get(key) is not None
+
+    def __getitem__(self, key: str) -> Any:
+        """Support cache[key] syntax."""
+        val = self.get(key)
+        if val is None:
+            raise KeyError(key)
+        return val
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Support cache[key] = value syntax."""
+        self.set(key, value)
+
     def __len__(self) -> int:
         """Return the number of live cache entries."""
         with self.cache_lock:

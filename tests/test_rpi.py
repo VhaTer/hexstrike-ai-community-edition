@@ -1,5 +1,5 @@
 """
-Real integration tests against RPI target (192.168.1.165) with DVWA.
+Real integration tests against RPI target (192.168.1.10) with DVWA.
 
 Tests the full pipeline with real binaries against a real DVWA instance
 at 3 security levels (low/medium/high).  Marked @pytest.mark.rpi.
@@ -10,7 +10,7 @@ Run:
     pytest tests/test_rpi.py -m rpi --level high -v
 
 Requires:
-  - RPI reachable at 192.168.1.165:80
+  - RPI reachable at 192.168.1.10:80
   - DVWA installed with default credentials (admin:password)
   - Tools: nmap, whatweb, nuclei, nikto, gobuster, sqlmap, dalfox
 """
@@ -26,7 +26,7 @@ import requests
 
 import pulse_app
 
-RPI_IP = "192.168.1.165"
+RPI_IP = "192.168.1.10"
 RPI_BASE = f"http://{RPI_IP}/DVWA/"
 
 pytestmark = [pytest.mark.rpi, pytest.mark.slow]
@@ -62,46 +62,9 @@ def _dvwa_login() -> dict:
 
 
 def _populate_direct_tools():
-    """Populate _DIRECT_TOOLS_CACHE so scan() can use direct exec functions.
-
-    Mirrors the logic in setup_mcp_server_standalone() without starting an MCP server.
-    """
-    from mcp_core.server_setup import _DIRECT_TOOLS_CACHE
-    if _DIRECT_TOOLS_CACHE:
-        return  # already populated
-    from mcp_core.tool_routes import TOOL_ROUTES
-    from mcp_core.wifi_direct import wifi_exec
-    from mcp_core.recon_direct import recon_exec
-    from mcp_core.net_scan_direct import net_scan_exec
-    from mcp_core.web_scan_direct import web_scan_exec
-    from mcp_core.web_fuzz_direct import web_fuzz_exec
-    from mcp_core.password_cracking_direct import pwdcrack_exec
-    from mcp_core.smb_enum_direct import smb_enum_exec
-    from mcp_core.exploit_framework_direct import exploit_exec
-    from mcp_core.web_recon_direct import web_recon_exec
-    from mcp_core.security_direct import security_exec
-    from mcp_core.misc_direct import misc_exec
-    from mcp_core.osint_direct import osint_exec
-    from mcp_core.active_directory_direct import ad_exec
-    from mcp_core.testssl_direct import testssl_exec
-    from mcp_core.web_probe_direct import web_probe_exec
-    from mcp_core.vuln_intel_direct import vuln_intel_exec
-
-    _exec_by_name = {
-        "wifi_exec": wifi_exec, "recon_exec": recon_exec,
-        "net_scan_exec": net_scan_exec, "web_scan_exec": web_scan_exec,
-        "web_fuzz_exec": web_fuzz_exec, "pwdcrack_exec": pwdcrack_exec,
-        "smb_enum_exec": smb_enum_exec, "exploit_exec": exploit_exec,
-        "web_recon_exec": web_recon_exec, "security_exec": security_exec,
-        "misc_exec": misc_exec, "osint_exec": osint_exec,
-        "ad_exec": ad_exec, "testssl_exec": testssl_exec,
-        "web_probe_exec": web_probe_exec, "vuln_intel_exec": vuln_intel_exec,
-    }
-
-    for tool_name, (mod_path, func_name, binary) in TOOL_ROUTES.items():
-        ef = _exec_by_name.get(func_name)
-        if ef:
-            _DIRECT_TOOLS_CACHE[tool_name] = (ef, binary)
+    """Populate _DIRECT_TOOLS_CACHE so scan() can use direct exec functions."""
+    from mcp_core.server_setup import _populate_direct_tools as _real_setup
+    _real_setup()
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
