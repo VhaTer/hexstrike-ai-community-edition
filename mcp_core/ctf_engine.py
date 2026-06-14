@@ -28,7 +28,6 @@ import base64
 import logging
 from typing import Any, Dict, List, Optional
 
-import aiohttp
 import json
 import os
 import re
@@ -56,22 +55,22 @@ async def _execute_http_chain(
     Execute a chain of HTTP requests with cookie persistence.
     
     Supports: Basic, Bearer, API Key, and Custom auth.
-    Cookie persistence via aiohttp.ClientSession.
+    Cookie persistence via http_request (Set-Cookie accumulated between calls).
     30s/request timeout, 120s total chain timeout.
     Full body scanned for success_pattern, truncated for storage.
     Returns structured result with flag extraction.
     """
-    import aiohttp
-    import re
     import base64
+    import re
+    import time as _time
     
     base_url = step.get("base_url", challenge.target or challenge.url or challenge.name)
     auth = step.get("auth", {})
     requests = step.get("requests", [])
     success_pattern = step.get("success_pattern", r"HTB\{[^}]+\}")
     max_body_size = step.get("max_body_size", 10000)
-    timeout_per = aiohttp.ClientTimeout(total=30)
-    timeout_total = aiohttp.ClientTimeout(total=120)
+    timeout_per = step.get("timeout_per_request", 30)
+    timeout_total = step.get("timeout_total", 120)
     
     if not requests:
         return {
@@ -79,148 +78,169 @@ async def _execute_http_chain(
             "error": "http_chain: no requests defined",
             "step": step.get("step", 0),
             "action": "http_chain",
-            "success": False,
         }
     
     # Build auth headers
-    headers = {}
+    auth_headers = {}
     auth_type = auth.get("type", "basic").lower()
     if auth_type == "basic" and auth.get("username") and auth.get("password"):
         creds = f"{auth['username']}:{auth['password']}".encode()
-        headers["Authorization"] = f"Basic {base64.b64encode(creds).decode()}"
+        auth_headers["Authorization"] = f"Basic {base64.b64encode(creds).decode()}"
     elif auth_type == "bearer" and auth.get("token"):
-        headers["Authorization"] = f"Bearer {auth['token']}"
+        auth_headers["Authorization"] = f"Bearer {auth['token']}"
     elif auth_type == "api_key" and auth.get("api_key"):
         header_name = auth.get("header", "X-API-Key")
-        headers[header_name] = auth["api_key"]
+        auth_headers[header_name] = auth["api_key"]
     elif auth_type == "custom" and auth.get("headers"):
-        headers.update(auth["headers"])
+        auth_headers.update(auth["headers"])
     elif auth.get("username") and auth.get("password"):
-        # Backward compat: default to basic
         creds = f"{auth['username']}:{auth['password']}".encode()
-        headers["Authorization"] = f"Basic {base64.b64encode(creds).decode()}"
+        auth_headers["Authorization"] = f"Basic {base64.b64encode(creds).decode()}"
     
-    # Add custom headers if provided
+    # Add custom headers from step
     if step.get("headers"):
-        headers.update(step["headers"])
+        auth_headers.update(step["headers"])
     
-    timeout_per_request = aiohttp.ClientTimeout(total=step.get("timeout_per_request", 30))
-    timeout_total = aiohttp.ClientTimeout(total=step.get("timeout_total", 120))
-    max_body_size = step.get("max_body_size", 10000)
-    success_pattern = step.get("success_pattern", r"HTB\{[^}]+\}")
+    from mcp_core.server_setup import run_security_tool
+    from mcp_core.null_context import NullContext
     
+    null_ctx = NullContext()
     requests_executed = []
+    cookies = {}
+    t0 = _time.time()
     
-    try:
-        async with aiohttp.ClientSession(timeout=timeout_total, headers=headers) as session:
-            for i, req in enumerate(requests):
-                method = req.get("method", "GET").upper()
-                path = req.get("path", "/")
-                url = f"{base_url.rstrip('/')}{path}"
-                
-                kwargs = {}
-                if req.get("json"):
-                    kwargs["json"] = req["json"]
-                    if "Content-Type" not in headers:
-                        kwargs["headers"] = {"Content-Type": "application/json"}
-                if req.get("data"):
-                    kwargs["data"] = req["data"]
-                if req.get("headers"):
-                    kwargs["headers"] = {**headers, **req["headers"]}
-                
-                await ctx.info(f"🌐 HTTP Chain [{i+1}/{len(requests)}] {method} {path}")
-                
-                try:
-                    async with session.request(method, url, **kwargs) as resp:
-                        text = await resp.text()
-                        
-                        # Truncate body for storage
-                        stored_body = text[:max_body_size] if len(text) > max_body_size else text
-                        
-                        # Check for flag pattern in FULL body (before truncation)
-                        match = re.search(step.get("success_pattern", r"HTB\{[^}]+\}"), text)
-                        flag_found = None
-                        if match:
-                            flag_found = match.group()
-                            await ctx.info(f"🚩 FLAG FOUND: {flag_found}")
-                        
-                        request_result = {
-                            "request_num": i + 1,
-                            "method": method,
-                            "path": path,
-                            "status": resp.status,
-                            "body": stored_body,
-                            "headers": dict(resp.headers),
-                            "cookies": {k: v for k, v in resp.cookies.items()},
-                            "elapsed_ms": 0,  # would need timing
-                            "flag_found": flag_found,
-                        }
-                        requests_executed.append(request_result)
-                        
-                        await ctx.info(f"   → {resp.status} ({len(text)} bytes)")
-                        
-                        if flag_found:
-                            return {
-                                "step": step.get("step", 0),
-                                "action": "http_chain",
-                                "description": step.get("description", "HTTP chain exploitation"),
-                                "success": True,
-                                "output": f"Flag extracted at request {i+1}: {flag_found}",
-                                "tools_executed": ["http_chain"],
-                                "tools_skipped": [],
-                                "execution_time": 0,
-                                "flag_candidates": [flag_found],
-                                "artifacts": [{"type": "http_response", "data": stored_body}],
-                                "requests_executed": requests_executed,
-                            }
-                        
-                except asyncio.TimeoutError:
-                    return {
-                        "step": step.get("step", 0),
-                        "action": "http_chain",
-                        "success": False,
-                        "error": f"Timeout at request {i+1} ({method} {path})",
-                        "requests_executed": requests_executed,
-                    }
-                except aiohttp.ClientConnectorError:
-                    return {
-                        "step": step.get("step", 0),
-                        "action": "http_chain",
-                        "success": False,
-                        "error": f"Instance unreachable at request {i+1} ({method} {path})",
-                        "requests_executed": requests_executed,
-                    }
-                except Exception as e:
-                    return {
-                        "step": step.get("step", 0),
-                        "action": "http_chain",
-                        "success": False,
-                        "error": f"Request {i+1} failed: {e}",
-                        "requests_executed": requests_executed,
-                    }
-            
-            # Chain completed without flag
+    for i, req in enumerate(requests):
+        # Check total timeout before each request
+        elapsed = _time.time() - t0
+        if elapsed > timeout_total:
+            return {
+                "step": step.get("step", 0),
+                "action": "http_chain",
+                "success": False,
+                "error": f"Total timeout exceeded at request {i+1} ({elapsed:.1f}s > {timeout_total}s)",
+                "requests_executed": requests_executed,
+            }
+        
+        method = req.get("method", "GET").upper()
+        path = req.get("path", "/")
+        url = f"{base_url.rstrip('/')}{path}"
+        
+        # Build http_request params
+        params: Dict[str, Any] = {
+            "url": url,
+            "method": method,
+            "timeout": timeout_per,
+            "follow_redirects": True,
+        }
+        
+        # Serialize accumulated cookies
+        if cookies:
+            params["cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        
+        # Build headers string (one per line as http_request expects)
+        header_lines = []
+        for k, v in auth_headers.items():
+            header_lines.append(f"{k}: {v}")
+        if req.get("headers"):
+            for k, v in req["headers"].items():
+                header_lines.append(f"{k}: {v}")
+        
+        # Handle request body
+        if req.get("json"):
+            import json as _json
+            params["data"] = _json.dumps(req["json"])
+            has_ct = any(k.lower() == "content-type" for k in auth_headers)
+            has_ct_req = any(k.lower() == "content-type" for k in (req.get("headers") or {}))
+            if not has_ct and not has_ct_req:
+                header_lines.append("Content-Type: application/json")
+        elif req.get("data"):
+            params["data"] = req["data"]
+        
+        if header_lines:
+            params["headers"] = "\n".join(header_lines)
+        
+        await ctx.info(f"🌐 HTTP Chain [{i+1}/{len(requests)}] {method} {path}")
+        
+        # Execute via Pulse tool chain
+        raw = await run_security_tool(null_ctx, "http_request", params)
+        if not raw.get("success"):
+            error_msg = raw.get("error", "Unknown error")
+            if "timeout" in str(error_msg).lower():
+                return {
+                    "step": step.get("step", 0),
+                    "action": "http_chain",
+                    "success": False,
+                    "error": f"Timeout at request {i+1} ({method} {path})",
+                    "requests_executed": requests_executed,
+                }
+            return {
+                "step": step.get("step", 0),
+                "action": "http_chain",
+                "success": False,
+                "error": f"Request {i+1} failed: {error_msg}",
+                "requests_executed": requests_executed,
+            }
+        
+        # Accumulate cookies from response
+        resp_cookies = raw.get("cookies", {})
+        if resp_cookies:
+            cookies.update(resp_cookies)
+        
+        # Parse response
+        text = raw.get("body", "")
+        status_code = raw.get("status_code", 0)
+        resp_headers = raw.get("headers", {})
+        
+        # Check for flag pattern
+        match = re.search(success_pattern, text)
+        flag_found = match.group() if match else None
+        if flag_found:
+            await ctx.info(f"🚩 FLAG FOUND: {flag_found}")
+        
+        request_result = {
+            "request_num": i + 1,
+            "method": method,
+            "path": path,
+            "status": status_code,
+            "body": text[:max_body_size] if len(text) > max_body_size else text,
+            "headers": resp_headers,
+            "cookies": resp_cookies,
+            "elapsed_ms": 0,
+            "flag_found": flag_found,
+        }
+        requests_executed.append(request_result)
+        
+        await ctx.info(f"   → {status_code} ({len(text)} bytes)")
+        
+        if flag_found:
             return {
                 "step": step.get("step", 0),
                 "action": "http_chain",
                 "description": step.get("description", "HTTP chain exploitation"),
-                "success": False,
-                "output": "HTTP chain completed without flag match",
+                "success": True,
+                "output": f"Flag extracted at request {i+1}: {flag_found}",
                 "tools_executed": ["http_chain"],
                 "tools_skipped": [],
-                "execution_time": 0,
-                "flag_candidates": [],
-                "artifacts": [],
+                "execution_time": round(_time.time() - t0, 3),
+                "flag_candidates": [flag_found],
+                "artifacts": [{"type": "http_response", "data": text[:max_body_size]}],
                 "requests_executed": requests_executed,
             }
-            
-    except Exception as e:
-        return {
-            "step": step.get("step", 0),
-            "action": "http_chain",
-            "success": False,
-            "error": f"HTTP chain failed: {e}",
-        }
+    
+    # All requests completed without flag
+    return {
+        "step": step.get("step", 0),
+        "action": "http_chain",
+        "description": step.get("description", ""),
+        "success": False,
+        "output": "HTTP chain completed without flag match",
+        "tools_executed": ["http_chain"],
+        "tools_skipped": [],
+        "execution_time": round(_time.time() - t0, 3),
+        "flag_candidates": [],
+        "artifacts": [],
+        "requests_executed": requests_executed,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -394,22 +414,23 @@ async def _triage_binary(file_path: str) -> Dict[str, Any]:
         result["error"] = f"File not found: {file_path}"
         return result
 
-    async def _run(cmd: str) -> str:
-        loop = asyncio.get_running_loop()
+    from mcp_core.server_setup import run_security_tool, _normalize_tool_result
+    from mcp_core.null_context import NullContext
+
+    null_ctx = NullContext()
+
+    async def _run_tool(name: str, params: dict) -> str:
         try:
-            proc = await loop.run_in_executor(
-                None, lambda: __import__("subprocess").run(
-                    cmd, shell=True, capture_output=True, text=True, timeout=15
-                )
-            )
-            return proc.stdout.strip()
+            raw = await run_security_tool(null_ctx, name, params)
+            norm = _normalize_tool_result(raw)
+            return norm.get("output", "")
         except Exception as exc:
-            logger.warning("Triage subprocess failed: %s", exc)
+            logger.warning("Triage tool %s failed: %s", name, exc)
             return ""
 
     file_out, strings_out = await asyncio.gather(
-        _run(f"file {file_path}"),
-        _run(f"strings -n 4 {file_path}"),
+        _run_tool("file", {"file_path": file_path}),
+        _run_tool("strings", {"file_path": file_path, "min_len": 4}),
     )
 
     result["raw"]["file"] = file_out
@@ -424,60 +445,29 @@ async def _triage_binary(file_path: str) -> Dict[str, Any]:
         result["stripped"] = "not stripped" not in file_out
         result["not_stripped"] = "not stripped" in file_out
 
-    # Parse checksec output — try JSON first, fallback to text
-    loop = asyncio.get_running_loop()
+    # Parse checksec output via Pulse tool chain
     prots = {}
-    checksec_raw = ""
-    try:
-        proc = await loop.run_in_executor(
-            None, lambda: __import__("subprocess").run(
-                f"checksec --file={file_path} --format=json",
-                shell=True, capture_output=True, text=True, timeout=15,
-            )
-        )
-        checksec_raw = proc.stdout.strip()
-        if checksec_raw:
-            data = json.loads(checksec_raw)
-            if isinstance(data, dict):
-                prots = {k.lower(): v for k, v in data.items()
-                         if k.lower() in ("canary", "nx", "pie", "relro", "rpath", "fortified")}
-            elif isinstance(data, list) and data:
-                prots = {k.lower(): v for k, v in data[0].items()
-                         if k.lower() in ("canary", "nx", "pie", "relro", "rpath", "fortified")}
-    except Exception:
-        prots = {}
-
-    if not prots:
-        try:
-            proc = await loop.run_in_executor(
-                None, lambda: __import__("subprocess").run(
-                    f"checksec --file={file_path}",
-                    shell=True, capture_output=True, text=True, timeout=15,
-                )
-            )
-            checksec_raw = proc.stdout.strip()
-            if checksec_raw:
-                for line in checksec_raw.split("\n"):
-                    line = line.strip().lower()
-                    if "canary" in line:
-                        prots["canary"] = "yes" in line or "true" in line
-                    elif "nx" in line:
-                        prots["nx"] = "yes" in line or "true" in line
-                    elif "pie" in line:
-                        prots["pie"] = "yes" in line or "true" in line
-                    elif "relro" in line:
-                        if "full" in line:
-                            prots["relro"] = "full"
-                        elif "partial" in line:
-                            prots["relro"] = "partial"
-                        else:
-                            prots["relro"] = "no"
-                    elif "rpath" in line:
-                        prots["rpath"] = "yes" in line
-                    elif "fortified" in line:
-                        prots["fortified"] = "yes" in line or "true" in line
-        except Exception:
-            pass
+    checksec_raw = await _run_tool("checksec", {"binary": file_path})
+    if checksec_raw:
+        for line in checksec_raw.split("\n"):
+            line = line.strip().lower()
+            if "canary" in line:
+                prots["canary"] = "yes" in line or "true" in line
+            elif "nx" in line:
+                prots["nx"] = "yes" in line or "true" in line
+            elif "pie" in line:
+                prots["pie"] = "yes" in line or "true" in line
+            elif "relro" in line:
+                if "full" in line:
+                    prots["relro"] = "full"
+                elif "partial" in line:
+                    prots["relro"] = "partial"
+                else:
+                    prots["relro"] = "no"
+            elif "rpath" in line:
+                prots["rpath"] = "yes" in line
+            elif "fortified" in line:
+                prots["fortified"] = "yes" in line or "true" in line
 
     result["raw"]["checksec"] = checksec_raw
     result["protections"] = prots

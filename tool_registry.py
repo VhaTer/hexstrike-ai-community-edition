@@ -663,7 +663,7 @@ TOOLS: Dict[str, dict] = {
         "method": 'POST',
         "category": 'forensics',
         "params": {'file': {'required': True}},
-        "optional": {'additional_args': ''},
+        "optional": {'additional_args': '', 'min_len': 4},
         "effectiveness": 0.7,
     },
     'ropgadget': {
@@ -856,7 +856,7 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.78,
     },
     'pwntools': {
-        "desc": 'Run a pwntools exploit script against a local or remote target',
+        "desc": 'CTF pwn/rev exploit runner. Write pwntools exploit scripts for binary exploitation (ROP, ret2dlresolve, ret2libc, format string, shellcode). Connects to remote target via socket or runs locally against a binary. Reports flag patterns.',
         "endpoint": '/api/tools/pwntools',
         "method": 'POST',
         "category": 'binary',

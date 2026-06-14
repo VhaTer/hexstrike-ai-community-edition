@@ -619,6 +619,49 @@ class TestCtfTeam:
 class TestTriageBinary:
     """Tests for _triage_binary()"""
 
+    _strings_output: str = ""
+
+    @pytest.fixture(autouse=True)
+    def _mock_run_security_tool(self):
+        """Mock run_security_tool to route through Pulse tool chain.
+
+        File/checksec return realistic hardcoded outputs. Strings returns
+        self._strings_output so each test can set the expected strings content.
+        """
+        import unittest.mock as um
+        self._strings_output = ""
+
+        async def mock_run_security_tool(ctx, tool_name, params):
+            if tool_name == "file":
+                assert "file_path" in params, f"file expected file_path in params, got {list(params.keys())}"
+                return {
+                    "success": True,
+                    "output": (
+                        "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), "
+                        "dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, "
+                        "not stripped"
+                    ),
+                }
+            elif tool_name == "checksec":
+                assert "binary" in params, f"checksec expected binary in params, got {list(params.keys())}"
+                return {
+                    "success": True,
+                    "output": "Canary: Yes\nNX: Yes\nPIE: No\nRelro: Full\n",
+                }
+            elif tool_name == "strings":
+                assert "file_path" in params, f"strings expected file_path in params, got {list(params.keys())}"
+                assert "min_len" in params, f"strings expected min_len in params, got {list(params.keys())}"
+                return {"success": True, "output": self._strings_output}
+            return {"success": True, "output": ""}
+
+        patcher = um.patch(
+            "mcp_core.server_setup.run_security_tool",
+            mock_run_security_tool,
+        )
+        patcher.start()
+        yield
+        patcher.stop()
+
     @pytest.mark.asyncio
     async def test_file_not_found(self):
         from mcp_core.ctf_engine import _triage_binary
@@ -650,6 +693,7 @@ class TestTriageBinary:
             b"HTB{t3st_fl4g_1n_str1ngs}" +
             b"random_data_here" * 10
         )
+        self._strings_output = "random_data_here\nHTB{t3st_fl4g_1n_str1ngs}"
         from mcp_core.ctf_engine import _triage_binary
         result = await _triage_binary(str(bin_path))
         assert result.get("flags_in_strings") is True
@@ -659,6 +703,7 @@ class TestTriageBinary:
     async def test_binary_without_flag(self, tmp_path):
         bin_path = tmp_path / "noflag.bin"
         bin_path.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 60 + b"just_some_text\x00")
+        self._strings_output = "just_some_text"
         from mcp_core.ctf_engine import _triage_binary
         result = await _triage_binary(str(bin_path))
         assert result.get("flags_in_strings") is False
@@ -746,6 +791,42 @@ class TestRefineWorkflow:
 
 class TestCtfAnalyzeWithTriage:
     """Integration tests: ctf_analyze() with file_path triggers triage"""
+
+    @pytest.fixture(autouse=True)
+    def _mock_run_security_tool(self):
+        """Same mock as TestTriageBinary — run_security_tool returns realistic output."""
+        import unittest.mock as um
+
+        async def mock_run_security_tool(ctx, tool_name, params):
+            if tool_name == "file":
+                assert "file_path" in params, f"file expected file_path in params, got {list(params.keys())}"
+                return {
+                    "success": True,
+                    "output": (
+                        "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), "
+                        "dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, "
+                        "not stripped"
+                    ),
+                }
+            elif tool_name == "checksec":
+                assert "binary" in params, f"checksec expected binary in params, got {list(params.keys())}"
+                return {
+                    "success": True,
+                    "output": "Canary: Yes\nNX: Yes\nPIE: No\nRelro: Full\n",
+                }
+            elif tool_name == "strings":
+                assert "file_path" in params, f"strings expected file_path in params, got {list(params.keys())}"
+                assert "min_len" in params, f"strings expected min_len in params, got {list(params.keys())}"
+                return {"success": True, "output": "test\nHTB{qu1ck_fl4g}"}
+            return {"success": True, "output": ""}
+
+        patcher = um.patch(
+            "mcp_core.server_setup.run_security_tool",
+            mock_run_security_tool,
+        )
+        patcher.start()
+        yield
+        patcher.stop()
 
     @pytest.mark.asyncio
     async def test_analyze_with_triage_attached(self, mock_ctx, tmp_path):

@@ -1015,6 +1015,15 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
             "The return value of the JS expression is converted to string — use JSON.stringify() for objects.",
         ],
     },
+    "pwntools": {
+        "workflow": "CTF binary exploitation (pwn/rev). Write pwntools exploit script in script_content. Use AFTER file/checksec/objdump analysis. Supports ret2libc, ret2dlresolve, ROP chains, format string, shellcode injection. Connects to remote target via target_host:target_port or local via target_binary.",
+        "example": "Run pwntools(script_content='from pwn import *; e = ELF(\"./void\"); io = remote(\"host\", 1337); io.send(payload); io.interactive()', target_host='10.0.0.1', target_port=1337)",
+        "returns": [
+            "dict — success (bool), output (str) with pwntools script stdout, stderr, and timing.",
+            "The output contains exploit result — flag for CTF, shell output, or error message.",
+            "Check output for flag patterns like HTB{...}, flag{...}, CTF{...}.",
+        ],
+    },
 }
 
 
