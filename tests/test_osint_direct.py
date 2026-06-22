@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.osint_direct import osint_exec, _require
+from mcp_core.osint_direct import osint_exec
+from mcp_core._helpers import require
 
 
 @pytest.fixture
@@ -12,10 +13,10 @@ def mock_exec():
 
 class TestOsintRequire:
     def test_require_all_present(self):
-        assert _require({"a": "x", "b": "y"}, "a", "b") == {}
+        assert require({"a": "x", "b": "y"}, "a", "b") == {}
 
     def test_require_missing(self):
-        result = _require({"a": "x"}, "a", "b")
+        result = require({"a": "x"}, "a", "b")
         assert result == {"success": False, "error": "'b' is required"}
 
 

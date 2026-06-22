@@ -21,16 +21,7 @@ from typing import Any, Dict
 from server_core.command_executor import execute_command
 
 logger = logging.getLogger(__name__)
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +39,7 @@ def _whatweb(data: dict) -> dict:
         no_errors:       Suppress error messages (default False)
         additional_args: Raw extra flags
     """
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -93,7 +84,7 @@ def _commix(data: dict) -> dict:
         proxy:           HTTP proxy URL
         additional_args: Raw extra flags
     """
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -158,7 +149,7 @@ def _joomscan(data: dict) -> dict:
         cookie:          HTTP Cookie header
         additional_args: Raw extra flags
     """
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 

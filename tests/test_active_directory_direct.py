@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.active_directory_direct import ad_exec, _require
+from mcp_core.active_directory_direct import ad_exec
+from mcp_core._helpers import require
 
 
 @pytest.fixture
@@ -12,14 +13,14 @@ def mock_exec():
 
 class TestADRequire:
     def test_require_all_present(self):
-        assert _require({"a": "x", "b": "y"}, "a", "b") == {}
+        assert require({"a": "x", "b": "y"}, "a", "b") == {}
 
     def test_require_missing(self):
-        result = _require({"a": "x"}, "a", "b")
+        result = require({"a": "x"}, "a", "b")
         assert result == {"success": False, "error": "'b' is required"}
 
     def test_require_empty(self):
-        result = _require({"a": ""}, "a")
+        result = require({"a": ""}, "a")
         assert result == {"success": False, "error": "'a' is required"}
 
 

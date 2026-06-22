@@ -14,6 +14,7 @@ Usage:
 
 import shlex
 from server_core.command_executor import execute_command
+from mcp_core._helpers import require
 
 # ---------------------------------------------------------------------------
 # Validated Impacket scripts available on Kali
@@ -30,23 +31,13 @@ IMPACKET_SCRIPTS = {
 }
 
 
-def _require(data: dict, *keys: str) -> dict:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
-
-
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
 
 def _impacket(data: dict) -> dict:
     """Generic impacket-{script} dispatcher."""
-    err = _require(data, "script", "target")
+    err = require(data, "script", "target")
     if err:
         return err
 
@@ -84,7 +75,7 @@ def _impacket(data: dict) -> dict:
 
 
 def _ldapdomaindump(data: dict) -> dict:
-    err = _require(data, "hostname")
+    err = require(data, "hostname")
     if err:
         return err
 
@@ -101,7 +92,7 @@ def _ldapdomaindump(data: dict) -> dict:
 
 
 def _adidnsdump(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err:
         return err
 
@@ -125,7 +116,7 @@ def _adidnsdump(data: dict) -> dict:
 
 
 def _certipy_ad(data: dict) -> dict:
-    err = _require(data, "action")
+    err = require(data, "action")
     if err:
         return err
 
@@ -152,7 +143,7 @@ def _certipy_ad(data: dict) -> dict:
 
 
 def _mitm6(data: dict) -> dict:
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err:
         return err
 
@@ -170,7 +161,7 @@ def _mitm6(data: dict) -> dict:
 
 
 def _pywerview(data: dict) -> dict:
-    err = _require(data, "request", "target")
+    err = require(data, "request", "target")
     if err:
         return err
 
@@ -195,7 +186,7 @@ def _pywerview(data: dict) -> dict:
 
 
 def _bloodhound(data: dict) -> dict:
-    err = _require(data, "domain", "username", "password", "dc_ip")
+    err = require(data, "domain", "username", "password", "dc_ip")
     if err:
         return err
 

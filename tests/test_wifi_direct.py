@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.wifi_direct import wifi_exec, _require
+from mcp_core._helpers import require
+from mcp_core.wifi_direct import wifi_exec
 
 
 @pytest.fixture
@@ -11,15 +12,15 @@ def mock_exec():
 
 
 class TestWifiRequire:
-    def test_require_all_present(self):
-        assert _require({"a": "x", "b": "y"}, "a", "b") == {}
+    def testrequire_all_present(self):
+        assert require({"a": "x", "b": "y"}, "a", "b") == {}
 
-    def test_require_missing(self):
-        result = _require({"a": "x"}, "a", "b")
+    def testrequire_missing(self):
+        result = require({"a": "x"}, "a", "b")
         assert result == {"success": False, "error": "'b' is required"}
 
-    def test_require_empty_value(self):
-        result = _require({"a": "", "b": "y"}, "a")
+    def testrequire_empty_value(self):
+        result = require({"a": "", "b": "y"}, "a")
         assert result == {"success": False, "error": "'a' is required"}
 
 

@@ -285,6 +285,14 @@ class CTFToolManager:
                 suggested_tools.append("rot13")
             if any(keyword in description_lower for keyword in ["pgp", "gpg", "signature"]):
                 suggested_tools.append("gpg")
+            if any(keyword in description_lower for keyword in ["bls", "rogue", "aggregate", "pairing"]):
+                suggested_tools.append("execute_code")
+            if any(keyword in description_lower for keyword in ["ecc", "elliptic", "p256", "p-256", "curve"]):
+                suggested_tools.append("execute_code")
+            if any(keyword in description_lower for keyword in ["hnp", "lattice", "lll", "hidden number"]):
+                suggested_tools.append("execute_code")
+            if any(keyword in description_lower for keyword in ["modular", "sqrt", "legendre", "point addition"]):
+                suggested_tools.append("execute_code")
 
         elif category == "pwn":
             suggested_tools.extend(["checksec", "file", "strings"])

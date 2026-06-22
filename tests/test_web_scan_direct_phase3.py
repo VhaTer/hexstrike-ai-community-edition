@@ -37,29 +37,29 @@ class TestParameterValidation:
 
     def test_require_single_missing_key(self):
         """Verify _require detects missing keys."""
-        from mcp_core.web_scan_direct import _require
+        from mcp_core._helpers import require
         
-        result = _require({"url": "http://test.com"}, "target")
+        result = require({"url": "http://test.com"}, "target")
         
         assert result is not None
         assert result.get("error") is not None or "target" not in {"url": "http://test.com"}
 
     def test_require_multiple_keys_all_present(self):
         """Verify _require accepts when all keys present."""
-        from mcp_core.web_scan_direct import _require
+        from mcp_core._helpers import require
         
         params = {"url": "http://test.com", "target": "example.com"}
-        result = _require(params, "url", "target")
+        result = require(params, "url", "target")
         
         # Either returns empty dict or None/success
         assert result is None or result == {} or result.get("error") is None
 
     def test_require_multiple_keys_one_missing(self):
         """Verify _require detects when one of many keys missing."""
-        from mcp_core.web_scan_direct import _require
+        from mcp_core._helpers import require
         
         params = {"url": "http://test.com"}
-        result = _require(params, "url", "target", "method")
+        result = require(params, "url", "target", "method")
         
         # Should indicate error
         assert result is not None
@@ -67,10 +67,10 @@ class TestParameterValidation:
     @pytest.mark.parametrize("key", ["target", "url", "host", "domain"])
     def test_require_various_key_names(self, key):
         """Verify _require works with various key names."""
-        from mcp_core.web_scan_direct import _require
+        from mcp_core._helpers import require
         
         params = {key: "test-value"}
-        result = _require(params, key)
+        result = require(params, key)
         
         # Should not error if key present
         assert result is None or result == {} or (result and not result.get("error", "").startswith("Missing"))

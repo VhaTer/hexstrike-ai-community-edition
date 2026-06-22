@@ -18,16 +18,7 @@ from typing import Any, Dict
 
 from server_core.command_executor import execute_command
 from server_core.singletons import ROCKYOU_PATH
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +75,7 @@ def _hashcat(data: dict) -> dict:
 
 
 def _john(data: dict) -> dict:
-    err = _require(data, "hash_file")
+    err = require(data, "hash_file")
     if err:
         return err
 

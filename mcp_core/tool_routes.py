@@ -136,6 +136,7 @@ TOOL_ROUTES = {
     "raw_tcp":           ("mcp_core.misc_direct", "misc_exec", "raw_tcp"),
     # exec
     "execute_code":      ("mcp_core.exec_direct", "exec_direct", "execute_code"),
+    "python":            ("mcp_core.exec_direct", "exec_direct", "execute_code"),
     # browser
     "browser_fetch":     ("mcp_core.browser_direct", "browser_exec", "browser_fetch"),
     "browser_screenshot":("mcp_core.browser_direct", "browser_exec", "browser_screenshot"),

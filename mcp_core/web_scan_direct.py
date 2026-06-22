@@ -20,6 +20,7 @@ import os, shlex
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
+from mcp_core._helpers import require
 
 
 def _sanitize(value: str) -> str:
@@ -31,22 +32,12 @@ def _sanitize(value: str) -> str:
     return value
 
 
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
-
-
 # ---------------------------------------------------------------------------
 # web_scan/ handlers
 # ---------------------------------------------------------------------------
 
 def _nikto(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err:
         return err
 
@@ -60,7 +51,7 @@ def _nikto(data: dict) -> dict:
 
 
 def _sqlmap(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -76,7 +67,7 @@ def _sqlmap(data: dict) -> dict:
 
 
 def _wpscan(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -117,7 +108,7 @@ def _dalfox(data: dict) -> dict:
 
 
 def _jaeles(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -137,7 +128,7 @@ def _jaeles(data: dict) -> dict:
 
 
 def _xsser(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 

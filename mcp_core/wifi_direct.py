@@ -25,22 +25,9 @@ import subprocess
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
+from mcp_core._helpers import require
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Validation helpers
-# ---------------------------------------------------------------------------
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    """Return error dict if any required key is missing or empty."""
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +35,7 @@ def _require(data: dict, *keys: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _airmon_ng(data: dict) -> dict:
-    err = _require(data, "interface", "action")
+    err = require(data, "interface", "action")
     if err:
         return err
 
@@ -70,7 +57,7 @@ def _airmon_ng(data: dict) -> dict:
 
 
 def _airodump_ng(data: dict) -> dict:
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err:
         return err
 
@@ -90,7 +77,7 @@ def _airodump_ng(data: dict) -> dict:
 
 def _aireplay_ng(data: dict) -> dict:
     VALID_MODES = {0, 1, 2, 3, 4, 5, 6, 7, 9}
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err:
         return err
 
@@ -134,7 +121,7 @@ def _aircrack_ng(data: dict) -> dict:
 
 
 def _airbase_ng(data: dict) -> dict:
-    err = _require(data, "interface", "essid")
+    err = require(data, "interface", "essid")
     if err:
         return err
 
@@ -154,7 +141,7 @@ def _airbase_ng(data: dict) -> dict:
 
 
 def _airdecap_ng(data: dict) -> dict:
-    err = _require(data, "capture_file")
+    err = require(data, "capture_file")
     if err:
         return err
 
@@ -175,7 +162,7 @@ def _airdecap_ng(data: dict) -> dict:
 
 
 def _hcxdumptool(data: dict) -> dict:
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err:
         return err
 
@@ -215,7 +202,7 @@ def _hcxdumptool(data: dict) -> dict:
 
 
 def _hcxpcapngtool(data: dict) -> dict:
-    err = _require(data, "input_file", "output_file")
+    err = require(data, "input_file", "output_file")
     if err:
         return err
 
@@ -227,7 +214,7 @@ def _hcxpcapngtool(data: dict) -> dict:
 
 
 def _wifite2(data: dict) -> dict:
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err:
         return err
 
@@ -245,7 +232,7 @@ def _wifite2(data: dict) -> dict:
 
 
 def _eaphammer(data: dict) -> dict:
-    err = _require(data, "interface", "essid")
+    err = require(data, "interface", "essid")
     if err:
         return err
 
@@ -327,15 +314,18 @@ def _mdk4(data: dict) -> dict:
 
 
 def _tcpdump(data: dict) -> dict:
-    err = _require(data, "interface")
+    err = require(data, "interface")
     if err: return err
     interface   = data["interface"].strip()
     count       = data.get("count", 10)
     filter_expr = data.get("filter", "")
     output_file = data.get("output_file", "")
-    command = f"tcpdump -i {interface} -c {count} -nn"
+    extra       = data.get("additional_args", "").strip()
+    command = f"tcpdump -i {interface} -nn"
+    if count > 0: command += f" -c {count}"
     if output_file: command += f" -w {output_file}"
     if filter_expr: command += f" \"{filter_expr}\""
+    if extra:      command += f" {extra}"
     return execute_command(command)
 
 
@@ -346,11 +336,13 @@ def _tshark(data: dict) -> dict:
         return {"success": False, "error": "'interface' or 'file' is required"}
     filter_expr = data.get("filter", "")
     count       = data.get("count", 50)
+    extra       = data.get("additional_args", "").strip()
     command = "tshark"
     if interface: command += f" -i {interface}"
     if file_path: command += f" -r {file_path}"
-    command += f" -c {count}"
+    if count > 0: command += f" -c {count}"
     if filter_expr: command += f" -Y \"{filter_expr}\""
+    if extra:      command += f" {extra}"
     return execute_command(command)
 
 

@@ -17,16 +17,7 @@ from typing import Any, Dict
 
 from server_core.command_executor import execute_command
 from server_core.singletons import COMMON_DIRB_PATH, COMMON_DIRSEARCH_PATH
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +25,7 @@ def _require(data: dict, *keys: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _gobuster(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -53,7 +44,7 @@ def _gobuster(data: dict) -> dict:
 
 
 def _ffuf(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -81,7 +72,7 @@ def _ffuf(data: dict) -> dict:
 
 
 def _feroxbuster(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -97,7 +88,7 @@ def _feroxbuster(data: dict) -> dict:
 
 
 def _dirsearch(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -116,7 +107,7 @@ def _dirsearch(data: dict) -> dict:
 
 
 def _dirb(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -131,7 +122,7 @@ def _dirb(data: dict) -> dict:
 
 
 def _wfuzz(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err:
         return err
 
@@ -146,7 +137,7 @@ def _wfuzz(data: dict) -> dict:
 
 
 def _dotdotpwn(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err:
         return err
 

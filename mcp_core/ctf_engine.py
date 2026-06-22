@@ -285,7 +285,7 @@ async def _execute_ctf_step(
     target = challenge.target or challenge.url or challenge.name
 
     # Filter executable tools vs manual/custom guidance steps
-    executable = [t for t in tools if t not in ("manual", "custom", "python", "sage",
+    executable = [t for t in tools if t not in ("manual", "custom", "sage",
                                                   "ida", "x64dbg", "ollydbg", "burpsuite",
                                                   "wireshark", "audacity", "maltego")]
     manual_tools = [t for t in tools if t not in executable]

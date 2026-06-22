@@ -25,18 +25,9 @@ from typing import Any, Dict
 import pymysql
 
 from server_core.command_executor import execute_command
+from mcp_core._helpers import require
 
 logger = logging.getLogger(__name__)
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +38,7 @@ def _ropgadget(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "binary"
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     gadget_type     = data.get("gadget_type", "")
@@ -59,7 +50,7 @@ def _ropgadget(data: dict) -> dict:
 
 
 def _ropper(data: dict) -> dict:
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     search          = data.get("search", "")
@@ -76,7 +67,7 @@ def _one_gadget(data: dict) -> dict:
     # Normalize: registry declares "libc_path" but handler uses "libc"
     if "libc" not in data and "libc_path" in data:
         data["libc"] = data["libc_path"]
-    err = _require(data, "libc")
+    err = require(data, "libc")
     if err: return err
     libc            = data["libc"].strip()
     level           = data.get("level", 0)
@@ -123,7 +114,7 @@ def _volatility3(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _gdb(data: dict) -> dict:
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     commands        = data.get("commands", "")
@@ -148,7 +139,7 @@ def _radare2(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "binary"
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     commands        = data.get("commands", "")
@@ -175,7 +166,7 @@ def _strings(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "file_path"
     if "file_path" not in data and "file" in data:
         data["file_path"] = data["file"]
-    err = _require(data, "file_path")
+    err = require(data, "file_path")
     if err: return err
     file_path       = data["file_path"].strip()
     min_len         = data.get("min_len", 4)
@@ -187,7 +178,7 @@ def _strings(data: dict) -> dict:
 
 
 def _objdump(data: dict) -> dict:
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     disassemble     = data.get("disassemble", True)
@@ -221,7 +212,7 @@ def _libc(data: dict) -> dict:
 
 
 def _xxd(data: dict) -> dict:
-    err = _require(data, "file_path")
+    err = require(data, "file_path")
     if err: return err
     file_path       = data["file_path"].strip()
     offset          = data.get("offset", "0")
@@ -237,7 +228,7 @@ def _xxd(data: dict) -> dict:
 def _file_type(data: dict) -> dict:
     if "file_path" not in data and "file" in data:
         data["file_path"] = data["file"]
-    err = _require(data, "file_path")
+    err = require(data, "file_path")
     if err: return err
     file_path = data["file_path"].strip()
     return execute_command(f"file {file_path}")
@@ -247,7 +238,7 @@ def _checksec(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "binary"
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary = data["binary"].strip()
     return execute_command(f"checksec --file={binary}")
@@ -255,7 +246,7 @@ def _checksec(data: dict) -> dict:
 
 def _autopsy(data: dict) -> dict:
     # Normalize: registry declares "image_path" mandatory
-    err = _require(data, "image_path")
+    err = require(data, "image_path")
     if err: return err
     image_path      = data["image_path"].strip()
     case_name       = data.get("case_name", "hexstrike_case")
@@ -267,7 +258,7 @@ def _autopsy(data: dict) -> dict:
 
 
 def _angr(data: dict) -> dict:
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     script_content  = data.get("script_content", "")
@@ -287,7 +278,7 @@ def _angr(data: dict) -> dict:
 
 
 def _ghidra(data: dict) -> dict:
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     project_dir     = data.get("project_dir", "/tmp/ghidra_projects")
@@ -305,7 +296,7 @@ def _binwalk(data: dict) -> dict:
     # Normalize: registry declares "file" but handler uses "binary"
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
-    err = _require(data, "binary")
+    err = require(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     extract         = data.get("extract", False)
@@ -471,7 +462,7 @@ def _jwt_analyzer(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _foremost(data: dict) -> dict:
-    err = _require(data, "input_file")
+    err = require(data, "input_file")
     if err: return err
     from pathlib import Path
     input_file      = data["input_file"].strip()
@@ -501,7 +492,7 @@ def _falco(data: dict) -> dict:
 
 
 def _steghide(data: dict) -> dict:
-    err = _require(data, "cover_file")
+    err = require(data, "cover_file")
     if err: return err
     action          = data.get("action", "extract")
     cover_file      = data["cover_file"].strip()
@@ -525,7 +516,7 @@ def _steghide(data: dict) -> dict:
 
 
 def _anew(data: dict) -> dict:
-    err = _require(data, "input_data")
+    err = require(data, "input_data")
     if err: return err
     input_data      = data["input_data"]
     output_file     = data.get("output_file", "")
@@ -537,7 +528,7 @@ def _anew(data: dict) -> dict:
 
 
 def _exiftool(data: dict) -> dict:
-    err = _require(data, "file_path")
+    err = require(data, "file_path")
     if err: return err
     file_path       = data["file_path"].strip()
     output_format   = data.get("output_format", "")
@@ -605,7 +596,7 @@ def _responder(data: dict) -> dict:
 
 
 def _api_fuzzer(data: dict) -> dict:
-    err = _require(data, "base_url")
+    err = require(data, "base_url")
     if err: return err
     base_url        = data["base_url"].strip()
     endpoints       = data.get("endpoints", [])
@@ -658,7 +649,7 @@ def _nuclei(data: dict) -> dict:
     return execute_command(command, timeout=timeout)
 
 def _bulk_extractor(data: dict) -> dict:
-    err = _require(data, "input_file")
+    err = require(data, "input_file")
     if err: return err
     input_file  = data["input_file"].strip()
     output_dir  = data.get("output_dir", "/tmp/bulk_extractor_output")
@@ -669,7 +660,7 @@ def _bulk_extractor(data: dict) -> dict:
 
 
 def _scalpel(data: dict) -> dict:
-    err = _require(data, "input_file")
+    err = require(data, "input_file")
     if err: return err
     input_file  = data["input_file"].strip()
     output_dir  = data.get("output_dir", "/tmp/scalpel_output")
@@ -889,6 +880,40 @@ def _raw_tcp(data: dict) -> dict:
         sock.close()
 
 
+def _strace(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    cmd = data.get("additional_args", "")
+    return execute_command(f"strace {cmd} {binary}")
+
+
+def _ltrace(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    cmd = data.get("additional_args", "")
+    return execute_command(f"ltrace {cmd} {binary}")
+
+
+def _gdb_peda(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    commands = data.get("commands", "")
+    script = data.get("script_file", "")
+    cmd = f"gdb {binary}"
+    if script:
+        cmd += f" -x {script}"
+    if commands:
+        import tempfile, os
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".gdb", delete=False)
+        f.write(commands)
+        f.close()
+        cmd += f" -x {f.name}"
+    return execute_command(cmd)
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -903,7 +928,11 @@ _HANDLERS = {
     "volatility3":         _volatility3,
     # binary_debug
     "gdb":                 _gdb,
+    "gdb-peda":            _gdb_peda,
     "radare2":             _radare2,
+    # runtime_trace
+    "strace":              _strace,
+    "ltrace":              _ltrace,
     # binary_analysis
     "file":                _file_type,
     "strings":             _strings,

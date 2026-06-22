@@ -19,16 +19,7 @@ logger = logging.getLogger(__name__)
 import shutil
 
 from server_core.command_executor import execute_command
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +27,7 @@ def _require(data: dict, *keys: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _katana(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err: return err
     url             = data["url"].strip()
     depth           = data.get("depth", 3)
@@ -55,7 +46,7 @@ def _katana(data: dict) -> dict:
 
 
 def _hakrawler(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err: return err
     url             = data["url"].strip()
     depth           = data.get("depth", 2)
@@ -79,7 +70,7 @@ def _hakrawler(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _gau(data: dict) -> dict:
-    err = _require(data, "domain")
+    err = require(data, "domain")
     if err: return err
     domain          = data["domain"].strip()
     providers       = data.get("providers", "wayback,commoncrawl,otx,urlscan")
@@ -98,7 +89,7 @@ def _gau(data: dict) -> dict:
 
 
 def _waybackurls(data: dict) -> dict:
-    err = _require(data, "domain")
+    err = require(data, "domain")
     if err: return err
     domain          = data["domain"].strip()
     get_versions    = data.get("get_versions", False)
@@ -137,7 +128,7 @@ def _resolve_httpx() -> str:
 
 
 def _httpx(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
 
     httpx_bin = _resolve_httpx()
@@ -179,7 +170,7 @@ def _wafw00f(data: dict) -> dict:
     # Normalize: registry declares "url" but handler uses "target"
     if "target" not in data and "url" in data:
         data["target"] = data["url"]
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     additional_args = data.get("additional_args", "")
@@ -195,7 +186,7 @@ def _wafw00f(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _arjun(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err: return err
     url             = data["url"].strip()
     method          = data.get("method", "GET")
@@ -215,7 +206,7 @@ def _arjun(data: dict) -> dict:
 
 
 def _paramspider(data: dict) -> dict:
-    err = _require(data, "domain")
+    err = require(data, "domain")
     if err: return err
     domain          = data["domain"].strip()
     level           = data.get("level", 2)
@@ -232,7 +223,7 @@ def _paramspider(data: dict) -> dict:
 
 
 def _x8(data: dict) -> dict:
-    err = _require(data, "url")
+    err = require(data, "url")
     if err: return err
     url             = data["url"].strip()
     wordlist        = data.get("wordlist", "/usr/share/wordlists/x8/params.txt")

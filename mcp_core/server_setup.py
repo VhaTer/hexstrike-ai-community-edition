@@ -984,7 +984,7 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
         ],
     },
     "execute_code": {
-        "workflow": "Execute arbitrary code. Use for inline scripting, one-liner exploits, payload encoding/decoding. Supported languages: python, bash, node.",
+        "workflow": "Execute arbitrary code. Use for inline scripting, crypto/math (BLS, ECC, P-256, modular arithmetic, LLL lattice), one-liner exploits, payload encoding/decoding. Supported languages: python, bash, node.",
         "example": "execute_code(code='import hashlib; print(hashlib.md5(b\"test\").hexdigest())', language='python')",
         "returns": [
             "dict — success (bool), stdout (str), stderr (str), exit_code (int), language (str), timeout (bool).",

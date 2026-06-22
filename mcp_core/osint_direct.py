@@ -12,20 +12,11 @@ Usage:
 """
 
 from server_core.command_executor import execute_command
-
-
-def _require(data: dict, *keys: str) -> dict:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 def _sherlock(data: dict) -> dict:
-    err = _require(data, "username")
+    err = require(data, "username")
     if err:
         return err
     username = data["username"].strip()
@@ -34,7 +25,7 @@ def _sherlock(data: dict) -> dict:
 
 
 def _spiderfoot(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err:
         return err
     target = data["target"].strip()
@@ -43,7 +34,7 @@ def _spiderfoot(data: dict) -> dict:
 
 
 def _sublist3r(data: dict) -> dict:
-    err = _require(data, "domain")
+    err = require(data, "domain")
     if err:
         return err
     domain  = data["domain"].strip()
@@ -57,7 +48,7 @@ def _sublist3r(data: dict) -> dict:
 
 
 def _parsero(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err:
         return err
     target          = data["target"].strip()

@@ -278,7 +278,7 @@ def test_register_routes_no_assets_dir(tmp_path):
 
 
 def test_register_routes_with_assets(tmp_path):
-    """static_dir + assets/ exist → /assets mounted."""
+    """static_dir + assets/ exist but /assets is no longer mounted (moved to static delivery)."""
     from hexstrike_server import register_http_routes
 
     mcp = FakeMCP()
@@ -293,7 +293,7 @@ def test_register_routes_with_assets(tmp_path):
 
     mount_paths = [r for r in mcp._additional_http_routes
                    if getattr(r, "path", None) == "/assets"]
-    assert len(mount_paths) == 1
+    assert len(mount_paths) == 0  # assets delivered via /dashboard index.html
 
 
 # ===========================================================================

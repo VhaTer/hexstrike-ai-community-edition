@@ -6,20 +6,11 @@ Phase 2 — Direct execution layer for smb_enum tools.
 
 from typing import Any, Dict
 from server_core.command_executor import execute_command
-
-
-def _require(data: dict, *keys: str) -> Dict[str, Any]:
-    _HINTS = {"url": "use http://host[:port]", "target": "use an IP or hostname", "domain": "use a domain name like example.com"}
-    for key in keys:
-        if not data.get(key, ""):
-            hint = _HINTS.get(key, "")
-            msg = f"'{key}' is required" + (f" ({hint})" if hint else "")
-            return {"success": False, "error": msg}
-    return {}
+from mcp_core._helpers import require
 
 
 def _enum4linux(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     additional_args = data.get("additional_args", "-a")
@@ -27,7 +18,7 @@ def _enum4linux(data: dict) -> dict:
 
 
 def _enum4linux_ng(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -56,7 +47,7 @@ def _enum4linux_ng(data: dict) -> dict:
 
 
 def _nbtscan(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     verbose         = data.get("verbose", False)
@@ -72,7 +63,7 @@ def _nbtscan(data: dict) -> dict:
 
 
 def _netexec(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     protocol        = data.get("protocol", "smb")
@@ -93,7 +84,7 @@ def _netexec(data: dict) -> dict:
 
 
 def _rpcclient(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -118,7 +109,7 @@ def _rpcclient(data: dict) -> dict:
 
 
 def _smbmap(data: dict) -> dict:
-    err = _require(data, "target")
+    err = require(data, "target")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -141,7 +132,7 @@ def _nxc(data: dict) -> dict:
 
 
 def _evil_winrm(data: dict) -> dict:
-    err = _require(data, "target", "username")
+    err = require(data, "target", "username")
     if err: return err
     target   = data["target"].strip()
     username = data["username"].strip()

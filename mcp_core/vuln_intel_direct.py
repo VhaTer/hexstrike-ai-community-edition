@@ -18,19 +18,11 @@ vulnx installation:
 """
 
 import logging
-from typing import Any, Dict
 
 from server_core.command_executor import execute_command
+from mcp_core._helpers import require_one
 
 logger = logging.getLogger(__name__)
-
-
-def _require_one(data: dict, *keys: str) -> Dict[str, Any]:
-    """Require at least one of the given keys to be non-empty."""
-    for key in keys:
-        if data.get(key, ""):
-            return {}
-    return {"success": False, "error": f"At least one of {list(keys)} is required" + " (provide a CVE ID using cve_id, or a search term using search)"}
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +40,7 @@ def _vulnx(data: dict) -> dict:
         output:          Output format (json/table, default table)
         additional_args: Raw extra flags
     """
-    err = _require_one(data, "cve_id", "search")
+    err = require_one(data, "cve_id", "search")
     if err:
         return err
 

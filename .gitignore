@@ -71,7 +71,15 @@ package-lock.json
 tests/test_hexstrike_cli.py
 tests/test_pulse_app.py
 CTF/
+hexstrike-sft/
 Projects_reports_docs/
 AGENTS.md
 ARCHITECTURE.md
 KNOWN_ISSUES.md
+
+# Config locales
+hexstrike-ai-mcp.json
+
+# Artifacts runtime
+core.*
+cysignals_crash_logs/
