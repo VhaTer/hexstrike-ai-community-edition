@@ -16,7 +16,6 @@ import base64
 import json
 import logging
 import os
-import socket
 import sqlite3
 import tempfile
 import time
@@ -671,59 +670,6 @@ def _scalpel(data: dict) -> dict:
     return execute_command(command)
 
 
-def _tcp_send(data: dict) -> dict:
-    """Raw TCP send/receive via Python socket. Returns structured response."""
-    host = data.get("host", "")
-    port = data.get("port", 0)
-    data_hex = data.get("data", "")
-    timeout = data.get("timeout", 10)
-
-    if not host:
-        return {"success": False, "error": "host is required"}
-    if not port:
-        return {"success": False, "error": "port is required"}
-    if not data_hex:
-        return {"success": False, "error": "data (hex) is required"}
-
-    try:
-        payload = bytes.fromhex(data_hex)
-    except ValueError:
-        return {"success": False, "error": "data must be valid hex"}
-
-    import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect((host, int(port)))
-        sent = s.send(payload)
-        try:
-            resp = s.recv(4096)
-            recv = len(resp)
-        except socket.timeout:
-            resp = b""
-            recv = 0
-        s.close()
-        return {
-            "success": True,
-            "host": host,
-            "port": int(port),
-            "data_sent_hex": data_hex,
-            "data_sent_ascii": payload.decode("latin-1", errors="replace"),
-            "bytes_sent": sent,
-            "response_hex": resp.hex(),
-            "response_ascii": resp.decode("latin-1", errors="replace"),
-            "bytes_recv": recv,
-        }
-    except socket.timeout:
-        return {"success": False, "error": f"Connection timed out after {timeout}s"}
-    except ConnectionRefusedError:
-        return {"success": False, "error": "Connection refused"}
-    except socket.gaierror:
-        return {"success": False, "error": f"Host resolution failed: {host}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 def _http_request(data: dict) -> dict:
     """Generic HTTP request (wraps curl). Returns structured response."""
     url = data.get("url", "")
@@ -824,62 +770,6 @@ def _http_request(data: dict) -> dict:
                 logger.debug("Failed to remove temp file %s", p, exc_info=True)
 
 
-# ---------------------------------------------------------------------------
-# raw_tcp — raw TCP socket primitive
-# ---------------------------------------------------------------------------
-
-def _raw_tcp(data: dict) -> dict:
-    host = data.get("host", "")
-    port = data.get("port", 0)
-    payload_hex = data.get("payload_hex", "")
-    timeout_val = int(data.get("timeout", 15))
-
-    if not host or not port:
-        return {"success": False, "error": "host and port are required"}
-
-    payload = b""
-    if payload_hex:
-        try:
-            payload = bytes.fromhex(payload_hex)
-        except ValueError as e:
-            return {"success": False, "error": f"invalid payload_hex: {e}"}
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout_val)
-    start = time.monotonic()
-    try:
-        sock.connect((host, port))
-        if payload:
-            sock.sendall(payload)
-        response = b""
-        while True:
-            try:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                response += chunk
-            except socket.timeout:
-                break
-        elapsed = time.monotonic() - start
-        return {
-            "success": True,
-            "response_hex": response.hex() if response else "",
-            "bytes_sent": len(payload),
-            "bytes_recv": len(response),
-            "duration_ms": round(elapsed * 1000),
-        }
-    except socket.timeout:
-        return {"success": False, "error": f"connection timed out after {timeout_val}s"}
-    except ConnectionRefusedError:
-        return {"success": False, "error": "connection refused"}
-    except socket.gaierror:
-        return {"success": False, "error": f"could not resolve host: {host}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        sock.close()
-
-
 def _strace(data: dict) -> dict:
     binary = data.get("binary") or data.get("target") or data.get("file_path", "")
     if not binary:
@@ -948,9 +838,6 @@ _HANDLERS = {
     "mysql":               _mysql,
     "sqlite":              _sqlite,
 
-    # raw_tcp
-    "tcp_send":            _tcp_send,
-
     # api_scan
     "http_request":        _http_request,
     "curl":                _http_request,
@@ -972,8 +859,6 @@ _HANDLERS = {
     "api_fuzzer":          _api_fuzzer,
     "bbot":                _bbot,
     "nuclei":              _nuclei,
-    # raw_tcp
-    "raw_tcp":             _raw_tcp,
 }
 
 

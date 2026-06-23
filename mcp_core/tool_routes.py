@@ -133,7 +133,6 @@ TOOL_ROUTES = {
     "falco":             ("mcp_core.misc_direct", "misc_exec", "falco"),
     "qsreplace":         ("mcp_core.misc_direct", "misc_exec", "qsreplace"),
     "http_request":      ("mcp_core.misc_direct", "misc_exec", "curl"),
-    "raw_tcp":           ("mcp_core.misc_direct", "misc_exec", "raw_tcp"),
     # exec
     "execute_code":      ("mcp_core.exec_direct", "exec_direct", "execute_code"),
     "python":            ("mcp_core.exec_direct", "exec_direct", "execute_code"),

@@ -1784,7 +1784,7 @@ _WORKFLOW_STEPS = {
     "exploit": {
         "label": "Exploitation",
         "description": "Execute attack: suggested tools, CTF solving, or manual primitives",
-        "tools": ["ctf_analyze()", "ctf_solve()", "raw_tcp()", "execute_code()", "http_request()", "run_security_tool()", "run_async_tool()"],
+        "tools": ["ctf_analyze()", "ctf_solve()", "execute_code()", "http_request()", "run_security_tool()", "run_async_tool()"],
     },
 }
 
@@ -1854,7 +1854,7 @@ def pulse_guide(step: str | None = None) -> dict:
             "no_target": "scan('target-ip')",
             "with_target": "scan() → get_surface() → get_findings() → get_plan()",
             "ctf": "ctf_analyze() → scan(target) → ctf_solve()",
-            "pwn": "execute_code(pwntools) → raw_tcp() for binary exploitation",
+            "pwn": "execute_code(pwntools) for binary exploitation",
         },
         "exploit_hint": ctx.get("reason", ""),
     }

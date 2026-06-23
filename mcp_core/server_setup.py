@@ -172,7 +172,7 @@ TOOL_TIMEOUTS: dict[str, int] = {
 _detector     = TechnologyDetector()
 _rate_limiter = RateLimitDetector()
 _rate_limit_events: list[dict] = []  # appended by run_security_tool on detection
-_PRIMITIVE_TOOLS = {"execute_code", "http_request", "raw_tcp"}
+_PRIMITIVE_TOOLS = {"execute_code", "http_request"}
 
 logger = logging.getLogger(__name__)
 
@@ -499,7 +499,6 @@ _TOOL_REGISTRY_ALIASES = {
     "theharvester": "theHarvester",
     "wifite2": "wifite",
     "http_request": "http-framework",
-    "tcp_send": "tcp-send",
 }
 
 
@@ -973,14 +972,6 @@ _TOOL_COUCHE1: Dict[str, Dict[str, str]] = {
         "returns": [
             "dict — success (bool), status_code (int), ok (bool, 2xx), headers (dict), cookies (dict), body (str), body_truncated (bool).",
             "Cookies from Set-Cookie are parsed into the cookies dict automatically.",
-        ],
-    },
-    "raw_tcp": {
-        "workflow": "Raw TCP socket client. Use for protocol-level attacks when http_request cannot send non-HTTP payloads. Payload is hex-encoded to avoid JSON encoding issues.",
-        "example": "raw_tcp(host='10.10.10.1', port=1337, payload_hex='474554202f20485454502f312e310d0a0d0a') sends GET / HTTP/1.1",
-        "returns": [
-            "dict — success (bool), response_hex (str, hex-encoded response), bytes_sent (int), bytes_recv (int), duration_ms (int).",
-            "Decode response_hex with bytes.fromhex(response_hex).decode(errors='replace') to read as text.",
         ],
     },
     "execute_code": {
@@ -1742,7 +1733,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         "hashpump": "hashpump", "anew": "anew", "uro": "uro",
         "nuclei": "nuclei", "responder": "responder",
         "jwt_analyzer": "jwt_analyzer", "autopsy": "autopsy",
-        "raw_tcp": "", "execute_code": "",
+        "execute_code": "",
         "browser_fetch": "", "browser_screenshot": "", "browser_eval": "",
         "sherlock": "sherlock", "spiderfoot": "spiderfoot",
         "sublist3r": "sublist3r", "parsero": "parsero",

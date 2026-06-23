@@ -18,7 +18,6 @@ INSTRUCTIONS = (
     "- `get_live_dashboard(target)` — all dashboard panels in one call (~100ms).\n"
     "- Individual tools: `get_overview()`, `get_scope()`, `get_surface(target)`, `get_findings(target)`, `get_plan(target)`, `get_active_tools()`, `get_history(target)`.\n"
     "- `http_request(url, method, ...)` — generic HTTP client (wraps curl). Returns status_code, headers, body, cookies. Binary responses: check `body_hex` field.\n"
-    "- `raw_tcp(host, port, payload_hex)` — raw TCP socket primitive for protocol testing.\n"
     "- `run_security_tool(tool_name, parameters)` — universal executor for all 130+ tools.\n"
     "- `run_async_tool(tool, target, params)` — launches background scan, returns scan_id immediately. Poll with `get_scan_status(scan_id)`.\n"
     "- `search_tools(pattern)` — search available tools by regex. `call_tool(name, arguments)` — execute a discovered tool by name.\n"

@@ -1477,24 +1477,6 @@ TOOLS: Dict[str, dict] = {
         "effectiveness": 0.9,
     },
     # ── Primitives (pure Python, no external binary) ──────────────────────
-    'raw_tcp': {
-        "desc": 'Raw TCP socket client — send/receive bytes over TCP (hex-encoded payload)',
-        "endpoint": '',
-        "method": 'POST',
-        "category": 'primitive',
-        "params": {'host': {'required': True}, 'port': {'required': True}},
-        "optional": {'payload_hex': '', 'timeout': 15},
-        "effectiveness": 0.9,
-    },
-    'tcp-send': {
-        "desc": 'Raw TCP send/receive via Python socket (decoded response included)',
-        "endpoint": '',
-        "method": 'POST',
-        "category": 'primitive',
-        "params": {'host': {'required': True}, 'port': {'required': True}},
-        "optional": {'data': '', 'timeout': 10},
-        "effectiveness": 0.9,
-    },
     'execute_code': {
         "desc": 'Execute arbitrary code — Python/bash/node inline, pwntools supported',
         "endpoint": '',

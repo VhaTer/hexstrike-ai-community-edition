@@ -107,7 +107,7 @@ class TestToolRegistry:
 
     def test_all_tools_have_binary_mapping(self, reg):
         """Every tool should have at least a binary name (primitives with no binary are allowed)."""
-        _PRIMITIVE_TOOLS = {"raw_tcp", "execute_code", "browser_fetch", "browser_screenshot", "browser_eval"}
+        _PRIMITIVE_TOOLS = {"execute_code", "browser_fetch", "browser_screenshot", "browser_eval"}
         for name in reg.all_tool_names:
             if name in _PRIMITIVE_TOOLS:
                 continue
