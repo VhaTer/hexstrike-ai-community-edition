@@ -160,6 +160,16 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data pipeline, intelligence lay
 
 ---
 
+## Session Reports & Development Notes
+
+Detailed session reports and architectural notes are stored in `Projects_reports_docs/`:
+- CTF analyses (local, not in git)
+- Session briefs and design decisions
+
+See `AGENTS.md` for development discipline rules and orchestration patterns.
+
+---
+
 ## Legal
 
 | Allowed | Not allowed |
