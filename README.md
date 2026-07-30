@@ -123,6 +123,105 @@ python3 hexstrike.py scan nuclei http://example.com -p severity=critical
 python3 hexstrike.py tools
 ```
 
+### CLI Reference
+
+#### `python3 hexstrike.py serve`
+
+Start the Pulse HTTP/SSE server.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| *(none)* | Start on `127.0.0.1:8888` | |
+| `--host 0.0.0.0` | Bind address | `127.0.0.1` |
+| `--port 8080` | Bind port | `8888` |
+| `--debug` | Debug logging | off |
+
+#### `python3 hexstrike.py scan <tool> [target]`
+
+Run any security tool directly.
+
+| Arg | Description |
+|-----|-------------|
+| `tool` | **Required.** Tool name (nmap, nuclei, whatweb, sqlmap, gobuster, …) |
+| `target` | Optional. IP / URL / domain |
+
+| Flag | Description |
+|------|-------------|
+| `-p key=val` | Extra parameter (repeatable) |
+| `--json` | Raw JSON output |
+| `-o file` | Write output to file |
+
+**Examples:** `scan nmap 10.0.0.1`, `scan nmap 10.0.0.1 --json -o result.json`, `scan nuclei http://example.com -p severity=critical`, `scan nmap 10.0.0.1 -p scan_type=-sV -p ports=22,80`
+
+#### `python3 hexstrike.py tools`
+
+List available tools with descriptions.
+
+| Flag | Description |
+|------|-------------|
+| `-f nmap` / `--filter nmap` | Filter by name |
+| `--json` | Raw JSON output |
+| `-o file` | Write output to file |
+
+**Examples:** `tools`, `tools -f nmap`, `tools --json`, `tools -f sql --json -o sql_tools.json`
+
+#### `python3 hexstrike.py status`
+
+Check Pulse server health.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--host 10.0.0.1` | Server address | `127.0.0.1` |
+| `--port 9090` | Server port | `8888` |
+| `--json` | Raw JSON output | off |
+| `-o file` | Write output to file | |
+
+**Example:** `status --host 192.168.1.10 --port 8080 --json -o health.json`
+
+#### `python3 hexstrike.py validate`
+
+Check which external tools are installed on PATH.
+
+| Flag | Description |
+|------|-------------|
+| `-f nmap` / `--tool-filter nmap` | Check only matching tools |
+| `-v` / `--verbose` | Show present tools too |
+| `--json` | Raw JSON output |
+| `-o file` | Write output to file |
+
+**Examples:** `validate`, `validate -v`, `validate --json`, `validate -v --json -o report.json`
+
+#### `python3 hexstrike.py mcp`
+
+Stdio bridge for Claude Desktop (internal, used via `./hexstrike-pulse --bridge`).
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--server URL` | Pulse server URL | `http://127.0.0.1:8888` |
+| `--timeout 600` | Request timeout (s) | `300` |
+| `--debug` | Debug logging | off |
+| `--compact` | Compact mode for small LLMs | off |
+| `--profile web` | Tool profiles to load | `[]` |
+| `--auth-token tok` | Bearer token | |
+| `--disable-ssl-verify` | Disable SSL verification | off |
+
+#### `python3 hexstrike.py ctf`
+
+CTF challenge analysis workflow.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--category pwn` | Category (web/pwn/crypto/forensics/re/misc) | `web` |
+| `--name MyChallenge` | Challenge name | auto |
+| `--description "..."` | Challenge description | auto |
+| `--difficulty hard` | Difficulty (easy/medium/hard/insane) | `medium` |
+| `--points 500` | Points | `0` |
+| `--target 10.0.0.1` | Target IP/host | |
+| `--json` | Raw JSON output | off |
+| `-o file` | Write output to file | |
+
+**Examples:** `ctf --category pwn --difficulty hard`, `ctf --category web --target http://10.0.0.1 --json`
+
 ---
 
 ## Example output
