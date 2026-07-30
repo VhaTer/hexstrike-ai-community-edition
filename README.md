@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/hexstrike-pulse-logo.png" alt="HexStrike Pulse" width="400">
+</p>
+
 # HexStrike AI-PULSE
 
 AI-powered security orchestration engine — 150+ tools, live Prefab dashboards, any MCP client.
