@@ -12,11 +12,14 @@ Usage:
 """
 
 from pulse.infrastructure.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 def _sherlock(data: dict) -> dict:
     err = require(data, "username")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "username")
     if err:
         return err
     username = data["username"].strip()
@@ -28,6 +31,9 @@ def _spiderfoot(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
+    err = reject_shell_metachars(data, "target")
+    if err:
+        return err
     target = data["target"].strip()
     command = f"spiderfoot -s {target}"
     return execute_command(command)
@@ -35,6 +41,9 @@ def _spiderfoot(data: dict) -> dict:
 
 def _sublist3r(data: dict) -> dict:
     err = require(data, "domain")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "domain")
     if err:
         return err
     domain  = data["domain"].strip()
@@ -49,6 +58,9 @@ def _sublist3r(data: dict) -> dict:
 
 def _parsero(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
     target          = data["target"].strip()

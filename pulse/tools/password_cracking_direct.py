@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from pulse.infrastructure.command_executor import execute_command
 from pulse.infrastructure.singletons import ROCKYOU_PATH
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +31,9 @@ def _hydra(data: dict) -> dict:
 
     if not target or not service:
         return {"success": False, "error": "target and service are required"}
+    err = reject_shell_metachars(data, "target")
+    if err:
+        return err
 
     username      = data.get("username", "")
     username_file = data.get("username_file", "")
@@ -99,6 +102,9 @@ def _medusa(data: dict) -> dict:
 
     if not target or not module:
         return {"success": False, "error": "target and module are required"}
+    err = reject_shell_metachars(data, "target")
+    if err:
+        return err
 
     username      = data.get("username", "")
     username_file = data.get("username_file", "")
@@ -122,6 +128,9 @@ def _patator(data: dict) -> dict:
 
     if not module or not target:
         return {"success": False, "error": "module and target are required"}
+    err = reject_shell_metachars(data, "target")
+    if err:
+        return err
 
     username      = data.get("username", "")
     username_file = data.get("username_file", "")

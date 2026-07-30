@@ -23,7 +23,7 @@ import subprocess
 from typing import Any, Dict
 
 from pulse.infrastructure.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +32,9 @@ from pulse.tools._helpers import require
 
 def _amass(data: dict) -> dict:
     err = require(data, "domain")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "domain")
     if err:
         return err
 
@@ -50,6 +53,9 @@ def _subfinder(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
+    err = reject_shell_metachars(data, "domain")
+    if err:
+        return err
 
     domain      = data["domain"].strip()
     silent      = data.get("silent", True)
@@ -66,6 +72,9 @@ def _subfinder(data: dict) -> dict:
 
 def _autorecon(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 
@@ -89,6 +98,9 @@ def _theharvester(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
+    err = reject_shell_metachars(data, "domain")
+    if err:
+        return err
 
     domain = data["domain"].strip()
     additional_args = data.get("additional_args", "")
@@ -104,6 +116,9 @@ def _theharvester(data: dict) -> dict:
 
 def _dnsenum(data: dict) -> dict:
     err = require(data, "domain")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "domain")
     if err:
         return err
 
@@ -122,6 +137,9 @@ def _dnsenum(data: dict) -> dict:
 
 def _fierce(data: dict) -> dict:
     err = require(data, "domain")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "domain")
     if err:
         return err
 

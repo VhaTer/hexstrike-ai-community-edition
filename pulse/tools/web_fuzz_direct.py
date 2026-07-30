@@ -17,7 +17,7 @@ from typing import Any, Dict
 
 from pulse.infrastructure.command_executor import execute_command
 from pulse.infrastructure.singletons import COMMON_DIRB_PATH, COMMON_DIRSEARCH_PATH
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,9 @@ from pulse.tools._helpers import require
 
 def _gobuster(data: dict) -> dict:
     err = require(data, "url")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "url")
     if err:
         return err
 
@@ -45,6 +48,9 @@ def _gobuster(data: dict) -> dict:
 
 def _ffuf(data: dict) -> dict:
     err = require(data, "url")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "url")
     if err:
         return err
 
@@ -75,6 +81,9 @@ def _feroxbuster(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url             = data["url"].strip()
     wordlist        = data.get("wordlist", COMMON_DIRB_PATH)
@@ -89,6 +98,9 @@ def _feroxbuster(data: dict) -> dict:
 
 def _dirsearch(data: dict) -> dict:
     err = require(data, "url")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "url")
     if err:
         return err
 
@@ -110,6 +122,9 @@ def _dirb(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url             = data["url"].strip()
     wordlist        = data.get("wordlist", COMMON_DIRB_PATH)
@@ -125,6 +140,9 @@ def _wfuzz(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url             = data["url"].strip()
     wordlist        = data.get("wordlist", COMMON_DIRB_PATH)
@@ -138,6 +156,9 @@ def _wfuzz(data: dict) -> dict:
 
 def _dotdotpwn(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 

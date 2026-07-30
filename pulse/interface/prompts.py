@@ -46,7 +46,7 @@ async def bug_bounty_recon(target: str) -> PromptResult:
         return PromptResult(
             messages=[Message("Error: bug_bounty_recon requires a non-empty `target` parameter. Example: `target=\"example.com\"` or `target=\"http://192.168.1.165/DVWA/\"`.", role="user")],
             description="Bug bounty recon — missing target",
-            meta={"version": "0.10.1", "error": "empty_target"},
+            meta={"version": "0.13.0", "error": "empty_target"},
         )
     target_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
     msgs = [
@@ -251,7 +251,7 @@ async def smb_lateral_movement(target: str) -> PromptResult:
         return PromptResult(
             messages=[Message("Error: smb_lateral_movement requires a non-empty `target` parameter. Example: `target=\"10.10.10.10\"`.", role="user")],
             description="SMB lateral movement — missing target",
-            meta={"version": "0.10.1", "error": "empty_target"},
+            meta={"version": "0.13.0", "error": "empty_target"},
         )
     msgs = [
         Message(
@@ -744,7 +744,7 @@ Use `scan()` or individual tools with the captured cookie:
     return PromptResult(
         messages=[Message(text, role="user")],
         description="Authenticated web testing — login → session → exploit",
-        meta={"version": "0.10.1"},
+        meta={"version": "0.13.0"},
     )
 
 
@@ -786,7 +786,7 @@ Execute them in order and confirm each one returns a visual app with no errors.
     return PromptResult(
         messages=[Message(text, role="user")],
         description="Pulse dashboards — validate all 3 UI entry points",
-        meta={"version": "0.10.1"},
+        meta={"version": "0.13.0"},
     )
 
 

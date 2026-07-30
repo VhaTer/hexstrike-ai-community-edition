@@ -20,7 +20,7 @@ import os, shlex
 from typing import Any, Dict
 
 from pulse.infrastructure.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 def _sanitize(value: str) -> str:
@@ -38,6 +38,9 @@ def _sanitize(value: str) -> str:
 
 def _nikto(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 
@@ -70,6 +73,9 @@ def _wpscan(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url             = data["url"].strip()
     additional_args = data.get("additional_args", "")
@@ -86,6 +92,9 @@ def _dalfox(data: dict) -> dict:
 
     if not url and not pipe_mode:
         return {"success": False, "error": "url or pipe_mode is required"}
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     mining_dom      = data.get("mining_dom", True)
     mining_dict     = data.get("mining_dict", True)
@@ -111,6 +120,9 @@ def _jaeles(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url             = data["url"].strip()
     signatures      = data.get("signatures", "")
@@ -129,6 +141,9 @@ def _jaeles(data: dict) -> dict:
 
 def _xsser(data: dict) -> dict:
     err = require(data, "url")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "url")
     if err:
         return err
 
@@ -158,6 +173,9 @@ def _zap(data: dict) -> dict:
 
     if not target and scan_type != "daemon":
         return {"success": False, "error": "target is required for scans (use an IP or hostname)"}
+    err = reject_shell_metachars(data, "target", "host")
+    if err:
+        return err
 
     if daemon:
         command = f"zaproxy -daemon -host {host} -port {port}"
