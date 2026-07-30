@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.osint_direct import osint_exec
-from mcp_core._helpers import require
+from pulse.tools.osint_direct import osint_exec
+from pulse.tools._helpers import require
 
 
 @pytest.fixture
 def mock_exec():
-    with patch("mcp_core.osint_direct.execute_command") as m:
+    with patch("pulse.tools.osint_direct.execute_command") as m:
         m.return_value = {"success": True, "output": "ok", "returncode": 0}
         yield m
 
@@ -43,7 +43,7 @@ class TestOsintExecRouting:
         assert result["success"] is True
 
     def test_all_tools_covered(self):
-        from mcp_core.osint_direct import _HANDLERS
+        from pulse.tools.osint_direct import _HANDLERS
         expected = {"sherlock", "spiderfoot", "sublist3r", "parsero"}
         assert set(_HANDLERS.keys()) == expected
 

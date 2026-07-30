@@ -1,6 +1,6 @@
 # tests/test_hexstrike_mcp.py  (Version ANTI-FREEZE)
 import pytest
-import hexstrike_mcp  # Couvre 7/9 lignes INSTANTANÉMENT
+import pulse.server.mcp_server as hexstrike_mcp  # Couvre 7/9 lignes INSTANTANÉMENT
 
 def test_hexstrike_mcp_entrypoint_imports():
     """Import exécute logging + imports = 78% coverage stable."""

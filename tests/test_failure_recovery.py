@@ -1,4 +1,4 @@
-from server_core.failure_recovery_system import FailureRecoverySystem
+from pulse.infrastructure.failure_recovery_system import FailureRecoverySystem
 
 
 class TestFailureRecoverySystem:

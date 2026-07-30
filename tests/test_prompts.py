@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mcp_core.prompts import (
+from pulse.interface.prompts import (
     PromptResult,
     bug_bounty_recon,
     cloud_security_audit,
@@ -280,7 +280,7 @@ class TestCtfPrompts:
 
     def test_ctf_web_structure(self):
         """Message len ≥ 3, CTF context, call_tool."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             messages = run(ctf_web_challenge(**self.CTF_WEB_KWARGS))
 
@@ -291,7 +291,7 @@ class TestCtfPrompts:
 
     def test_ctf_web_call_tool(self):
         """Messages contain call_tool references."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             messages = run(ctf_web_challenge(**self.CTF_WEB_KWARGS))
 
@@ -300,7 +300,7 @@ class TestCtfPrompts:
 
     def test_ctf_web_final_message(self):
         """Final message references flag/validation."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
             messages = run(ctf_web_challenge(**self.CTF_WEB_KWARGS))
 
@@ -309,7 +309,7 @@ class TestCtfPrompts:
 
     def test_ctf_web_empty_workflow(self):
         """Empty workflow doesn't crash — uses fallback defaults."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = {
                 "workflow_steps": [],
                 "strategies": [],
@@ -330,9 +330,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_structure(self):
         """Message len ≥ 3, CTF context, call_tool."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -343,9 +343,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_call_tool(self):
         """Messages contain call_tool from workflow steps."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -354,9 +354,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_category_in_first_message(self):
         """First message includes category marker (e.g. [WEB])."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -365,9 +365,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_strategies_section(self):
         """Strategies from stub appear in messages."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -376,9 +376,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_fallback_section(self):
         """Fallback strategies appear when strategies exist."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -387,7 +387,7 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_empty_workflow(self):
         """Empty workflow doesn't crash — fallback defaults used."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = {
                 "workflow_steps": [],
                 "strategies": [],
@@ -400,7 +400,7 @@ class TestCtfPrompts:
                 "expected_artifacts": [],
                 "resource_requirements": {},
             }
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.side_effect = Exception("tool not found")
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -410,9 +410,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_points_int_parsing(self):
         """Points as string '100' is parsed to int."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**{**self.CTF_CHALLENGE_KWARGS, "points": "500"}))
 
@@ -421,9 +421,9 @@ class TestCtfPrompts:
 
     def test_ctf_challenge_target_used_in_step_calls(self):
         """Target parameter is used in call_tool calls within steps."""
-        with patch("server_core.singletons.get_ctf_manager") as gm:
+        with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("server_core.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 

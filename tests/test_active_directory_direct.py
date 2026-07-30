@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.active_directory_direct import ad_exec
-from mcp_core._helpers import require
+from pulse.tools.active_directory_direct import ad_exec
+from pulse.tools._helpers import require
 
 
 @pytest.fixture
 def mock_exec():
-    with patch("mcp_core.active_directory_direct.execute_command") as m:
+    with patch("pulse.tools.active_directory_direct.execute_command") as m:
         m.return_value = {"success": True, "output": "ok", "returncode": 0}
         yield m
 
@@ -59,7 +59,7 @@ class TestADExecRouting:
         assert result["success"] is True
 
     def test_all_tools_covered(self):
-        from mcp_core.active_directory_direct import _HANDLERS
+        from pulse.tools.active_directory_direct import _HANDLERS
         expected = {"impacket", "ldapdomaindump", "adidnsdump", "certipy_ad", "certipy", "mitm6", "pywerview", "bloodhound", "bloodhound_python"}
         assert set(_HANDLERS.keys()) == expected
 

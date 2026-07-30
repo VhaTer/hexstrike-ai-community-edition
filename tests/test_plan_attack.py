@@ -9,7 +9,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _clear_scan_cache():
     """Clear global scan cache before every test (prevents state leak across tests)."""
-    from mcp_core.server_setup import _scan_cache
+    from pulse.interface.server_setup import _scan_cache
     _scan_cache.cache.clear()
     _scan_cache.ttl_times.clear()
 
@@ -38,7 +38,7 @@ def run(coro):
 
 
 def make_mcp():
-    from mcp_core.server_setup import setup_mcp_server_standalone
+    from pulse.interface.server_setup import setup_mcp_server_standalone
     return setup_mcp_server_standalone()
 
 
@@ -58,10 +58,10 @@ def test_plan_attack_triggers_analysis_and_returns_chain():
     )
 
     with patch(
-        "server_core.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.analyze_target",
+        "pulse.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.analyze_target",
         return_value=fake_profile,
     ) as mock_analyze, patch(
-        "server_core.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.create_attack_chain",
+        "pulse.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.create_attack_chain",
         return_value=fake_chain,
     ) as mock_chain:
         mcp = make_mcp()
@@ -97,7 +97,7 @@ def test_plan_attack_uses_session_profile_and_suggests_prompt():
 
     # Patch TargetProfile.from_dict to return our fake_profile and IDE.create_attack_chain
     with patch("shared.target_profile.TargetProfile.from_dict", return_value=fake_profile) as mock_from_dict, \
-         patch("server_core.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.create_attack_chain", return_value=fake_chain) as mock_chain:
+         patch("pulse.intelligence.intelligent_decision_engine.IntelligentDecisionEngine.create_attack_chain", return_value=fake_chain) as mock_chain:
         mcp = make_mcp()
 
         async def call_plan():

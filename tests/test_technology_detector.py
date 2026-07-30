@@ -1,5 +1,5 @@
 import pytest
-from server_core.technology_detector import TechnologyDetector
+from pulse.infrastructure.technology_detector import TechnologyDetector
 
 
 @pytest.fixture

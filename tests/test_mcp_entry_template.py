@@ -67,9 +67,9 @@ class TestLoggingSetup:
 class TestMCPServerSetup:
 
     def test_setup_mcp_standalone_called(self, mock_logger):
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone') as mock_setup:
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone') as mock_setup:
             mock_setup.return_value = Mock()
-            from mcp_core.mcp_entry import run_mcp
+            from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
             with patch.object(mock_setup.return_value, 'run'):
                 try:
@@ -80,7 +80,7 @@ class TestMCPServerSetup:
 
     def test_setup_mcp_with_profiles(self, mock_logger):
         """setup_mcp_server_standalone takes no profile arg — passes without error."""
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone') as mock_setup:
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone') as mock_setup:
             mock_setup.return_value = Mock()
             mock_setup()
             mock_setup.assert_called_once()
@@ -96,18 +96,18 @@ class TestStartupErrorHandling:
 
     def test_exception_during_client_init(self, mock_logger):
         """No HexStrikeClient anymore — test that run_mcp handles setup errors."""
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone',
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone',
                    side_effect=RuntimeError("setup failed")):
-            from mcp_core.mcp_entry import run_mcp
+            from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
             with patch('sys.exit') as mock_exit:
                 run_mcp(args, mock_logger)
                 mock_exit.assert_called_with(1)
 
     def test_exception_during_mcp_setup(self, mock_logger):
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone',
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone',
                    side_effect=RuntimeError("MCP setup failed")):
-            from mcp_core.mcp_entry import run_mcp
+            from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
             with patch('sys.exit') as mock_exit:
                 run_mcp(args, mock_logger)
@@ -143,16 +143,16 @@ class TestStartupErrorHandling:
 class TestMCPEntryIntegration:
 
     def test_full_mcp_startup_flow(self, mock_args_debug_off, mock_logger, mock_mcp_server):
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone',
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone',
                    return_value=mock_mcp_server):
-            with patch('mcp_core.mcp_entry._acquire_lock'):  # avoid lock contention in parallel
-                from mcp_core.mcp_entry import run_mcp
+            with patch('pulse.server.mcp_entry._acquire_lock'):  # avoid lock contention in parallel
+                from pulse.server.mcp_entry import run_mcp
                 run_mcp(mock_args_debug_off, mock_logger)
         mock_mcp_server.run.assert_called_once()
 
     def test_startup_with_auth_token(self, mock_logger):
         """Standalone mode has no auth token — verify no crash."""
-        with patch('mcp_core.mcp_entry.setup_mcp_server_standalone') as mock_setup:
+        with patch('pulse.server.mcp_entry.setup_mcp_server_standalone') as mock_setup:
             mock_setup.return_value = Mock()
             mock_setup()
             mock_setup.assert_called_once()
@@ -172,14 +172,14 @@ class TestMCPEntryIntegration:
 class TestVersionAndConfigLogging:
 
     def test_version_logging(self, mock_logger):
-        with patch('server_core.config_core.get', return_value="1.0.10"):
-            import server_core.config_core
-            version = server_core.config_core.get('VERSION', 'unknown')
+        with patch('pulse.infrastructure.config_core.get', return_value="1.0.10"):
+            import pulse.infrastructure.config_core
+            version = pulse.infrastructure.config_core.get('VERSION', 'unknown')
             mock_logger.info(f"📊 Version: {version}")
             mock_logger.info.assert_called()
 
     def test_config_version_default(self, mock_logger):
-        with patch('server_core.config_core.get', return_value="unknown"):
-            import server_core.config_core
-            version = server_core.config_core.get('VERSION', 'unknown')
+        with patch('pulse.infrastructure.config_core.get', return_value="unknown"):
+            import pulse.infrastructure.config_core
+            version = pulse.infrastructure.config_core.get('VERSION', 'unknown')
             assert version == "unknown"

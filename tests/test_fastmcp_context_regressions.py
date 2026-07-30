@@ -1,8 +1,8 @@
 import json
 from unittest.mock import patch
 
-from mcp_core.password_cracking_direct import pwdcrack_exec
-from server_core.advanced_cache import AdvancedCache
+from pulse.tools.password_cracking_direct import pwdcrack_exec
+from pulse.infrastructure.advanced_cache import AdvancedCache
 
 
 def test_advanced_cache_supports_len_and_items():
@@ -22,7 +22,7 @@ def test_advanced_cache_supports_len_and_items():
 def test_hashid_accepts_typed_tool_param_name():
     mock_result = {"success": True, "output": "MD5", "return_code": 0}
 
-    with patch("mcp_core.password_cracking_direct.execute_command", return_value=mock_result) as mock_exec:
+    with patch("pulse.tools.password_cracking_direct.execute_command", return_value=mock_result) as mock_exec:
         result = pwdcrack_exec("hashid", {"hash": "5f4dcc3b5aa765d61d8327deb882cf99"})
 
     mock_exec.assert_called_once()
@@ -33,7 +33,7 @@ def test_hashid_accepts_typed_tool_param_name():
 def test_hashid_still_accepts_legacy_hash_value_param():
     mock_result = {"success": True, "output": "MD5", "return_code": 0}
 
-    with patch("mcp_core.password_cracking_direct.execute_command", return_value=mock_result) as mock_exec:
+    with patch("pulse.tools.password_cracking_direct.execute_command", return_value=mock_result) as mock_exec:
         result = pwdcrack_exec("hashid", {"hash_value": "5f4dcc3b5aa765d61d8327deb882cf99"})
 
     mock_exec.assert_called_once()

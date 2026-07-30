@@ -57,7 +57,7 @@ def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
 
 
 def test_register_http_routes_adds_health_and_ping(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -77,7 +77,7 @@ def test_register_http_routes_adds_health_and_ping(tmp_path):
 
 
 def test_health_route_returns_ready_when_all_ok(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -96,8 +96,8 @@ def test_health_route_returns_ready_when_all_ok(tmp_path):
     }
 
     with (
-        patch("hexstrike_server._get_tool_availability", return_value=all_tools_ok),
-        patch("hexstrike_server.shutil.disk_usage", return_value=MagicMock(free=50 * 1024**3, total=100 * 1024**3)),
+        patch("pulse.server.web_server._get_tool_availability", return_value=all_tools_ok),
+        patch("pulse.server.web_server.shutil.disk_usage", return_value=MagicMock(free=50 * 1024**3, total=100 * 1024**3)),
     ):
         response = run(health_route(MagicMock()))
 
@@ -109,7 +109,7 @@ def test_health_route_returns_ready_when_all_ok(tmp_path):
 
 
 def test_health_route_returns_503_when_degraded(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -127,7 +127,7 @@ def test_health_route_returns_503_when_degraded(tmp_path):
         "msfconsole": False, "searchsploit": False,
     }
 
-    with patch("hexstrike_server._get_tool_availability", return_value=no_tools):
+    with patch("pulse.server.web_server._get_tool_availability", return_value=no_tools):
         response = run(health_route(MagicMock()))
 
     assert response.status_code == 503
@@ -137,7 +137,7 @@ def test_health_route_returns_503_when_degraded(tmp_path):
 
 
 def test_health_route_returns_500_on_exception(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -147,7 +147,7 @@ def test_health_route_returns_500_on_exception(tmp_path):
     register_http_routes(mcp, MagicMock(), static_dir=static_dir)
     health_route = mcp.routes[("/health", ("GET",))]
 
-    with patch("hexstrike_server._get_tool_availability", side_effect=RuntimeError("boom")):
+    with patch("pulse.server.web_server._get_tool_availability", side_effect=RuntimeError("boom")):
         response = run(health_route(MagicMock()))
 
     assert response.status_code == 500
@@ -156,7 +156,7 @@ def test_health_route_returns_500_on_exception(tmp_path):
 
 
 def test_ping_route_returns_ok(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -172,22 +172,22 @@ def test_ping_route_returns_ok(tmp_path):
 
 
 def test_build_dashboard_status_degraded_when_tools_missing():
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
-    with patch("pulse_app._collect_dashboard_state",
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
                return_value=_mock_dashboard_state("degraded")):
-        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
             result = _build_dashboard_response()
 
     assert result["status"] == "degraded"
 
 
 def test_build_dashboard_status_healthy_when_all_tools_present():
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
-    with patch("pulse_app._collect_dashboard_state",
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
                return_value=_mock_dashboard_state("healthy")):
-        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
             result = _build_dashboard_response()
 
     assert result["status"] == "healthy"

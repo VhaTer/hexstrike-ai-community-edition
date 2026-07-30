@@ -80,7 +80,7 @@ def _patch_bb_tools(results_map=None):
             **data,
         }
 
-    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+    with patch("pulse.interface.server_setup.run_security_tool", new=_mock):
         yield
 
 
@@ -92,7 +92,7 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_dry_run_returns_skipped(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "recon", "description": "test",
                  "tools": [{"tool": "nmap", "params": {}}]}
         result = await _execute_bb_phase(phase, "example.com", mock_ctx, dry_run=True)
@@ -101,7 +101,7 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_manual_tools_are_skipped(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "osint", "description": "OSINT phase",
                  "tools": [{"tool": "shodan", "params": {}}]}
         result = await _execute_bb_phase(phase, "example.com", mock_ctx)
@@ -109,7 +109,7 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_executable_tools_run(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
@@ -121,7 +121,7 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_tool_failure_skipped(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
@@ -133,7 +133,7 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_exception_during_tool_caught(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
 
         async def _crash_mock(ctx, tool_name, params):
             raise RuntimeError("crashed")
@@ -141,14 +141,14 @@ class TestExecuteBbPhase:
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
 
-        with patch("mcp_core.server_setup.run_security_tool", new=_crash_mock):
+        with patch("pulse.interface.server_setup.run_security_tool", new=_crash_mock):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
 
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_mixed_tools(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "mixed", "description": "Mixed",
                  "tools": [
                      {"tool": "nmap", "params": {}},
@@ -166,18 +166,18 @@ class TestExecuteBbPhase:
 
     @pytest.mark.asyncio
     async def test_gather_exception_skipped(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         async def fake_gather(*a, **kw):
             return [RuntimeError("tool crashed")]
         phase = {"name": "recon", "description": "Recon",
                  "tools": [{"tool": "nmap", "params": {}}]}
-        with patch("mcp_core.bugbounty_engine.asyncio.gather", fake_gather):
+        with patch("pulse.tools.bugbounty_engine.asyncio.gather", fake_gather):
             result = await _execute_bb_phase(phase, "example.com", mock_ctx)
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_empty_phase_no_tools(self, mock_ctx):
-        from mcp_core.bugbounty_engine import _execute_bb_phase
+        from pulse.tools.bugbounty_engine import _execute_bb_phase
         phase = {"name": "empty", "description": "No tools", "tools": []}
         result = await _execute_bb_phase(phase, "example.com", mock_ctx)
         assert result["success"] is False
@@ -191,7 +191,7 @@ class TestRegisterBbTools:
 
     def test_registers_five_tools(self):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
         names = [t.name for t in __import__('asyncio').run(mcp.list_tools())]
         assert "bb_recon" in names
@@ -210,11 +210,11 @@ class TestBbRecon:
     @pytest.mark.asyncio
     async def test_dry_run_no_execution(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_recon")
             result = await tool.fn(domain="example.com", dry_run=True)
 
@@ -225,11 +225,11 @@ class TestBbRecon:
     @pytest.mark.asyncio
     async def test_live_with_execution(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
              _patch_bb_tools({"nmap": {"success": True, "output": "ok"}}):
             tool = await mcp.get_tool("bb_recon")
             result = await tool.fn(domain="example.com", dry_run=False)
@@ -240,11 +240,11 @@ class TestBbRecon:
     @pytest.mark.asyncio
     async def test_scope_parsing(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_recon")
             result = await tool.fn(
                 domain="example.com", dry_run=True,
@@ -264,11 +264,11 @@ class TestBbHunt:
     @pytest.mark.asyncio
     async def test_hunt_success(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_hunt")
             result = await tool.fn(domain="example.com")
 
@@ -279,11 +279,11 @@ class TestBbHunt:
     @pytest.mark.asyncio
     async def test_hunt_custom_priority(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_hunt")
             result = await tool.fn(
                 domain="example.com",
@@ -303,11 +303,11 @@ class TestBbBusiness:
     @pytest.mark.asyncio
     async def test_business_success(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_business")
             result = await tool.fn(domain="example.com")
 
@@ -325,11 +325,11 @@ class TestBbOsint:
     @pytest.mark.asyncio
     async def test_osint_success(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_osint")
             result = await tool.fn(domain="example.com")
 
@@ -346,11 +346,11 @@ class TestBbFull:
     @pytest.mark.asyncio
     async def test_full_dry_run(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_full")
             result = await tool.fn(domain="example.com", dry_run=True)
 
@@ -363,11 +363,11 @@ class TestBbFull:
     @pytest.mark.asyncio
     async def test_full_live(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr), \
              _patch_bb_tools({"nmap": {"success": True, "output": "ok"}}):
             tool = await mcp.get_tool("bb_full")
             result = await tool.fn(domain="example.com", dry_run=False)
@@ -378,11 +378,11 @@ class TestBbFull:
     @pytest.mark.asyncio
     async def test_full_custom_params(self, mock_ctx, mock_bb_mgr):
         mcp = FastMCP("test")
-        from mcp_core.bugbounty_engine import register_bugbounty_tools
+        from pulse.tools.bugbounty_engine import register_bugbounty_tools
         register_bugbounty_tools(mcp)
 
-        with patch("mcp_core.bugbounty_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
+        with patch("pulse.tools.bugbounty_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.bugbounty_engine.get_bugbounty_manager", return_value=mock_bb_mgr):
             tool = await mcp.get_tool("bb_full")
             result = await tool.fn(
                 domain="example.com", dry_run=True,

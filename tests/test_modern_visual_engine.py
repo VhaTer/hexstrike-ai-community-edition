@@ -1,5 +1,5 @@
 import pytest
-from server_core.modern_visual_engine import ModernVisualEngine
+from pulse.infrastructure.modern_visual_engine import ModernVisualEngine
 
 
 MVE = ModernVisualEngine

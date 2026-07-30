@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from mcp_core.technology_detector import TechnologyDetector, TechProfile
+from pulse.tools.technology_detector import TechnologyDetector, TechProfile
 
 
 @pytest.fixture
@@ -412,7 +412,7 @@ class TestTechnologyDetector:
         """Line 235: if tech in detected_list: continue (dead-code guard).
         Uses patched TechProfile with pre-populated web_servers so 'apache'
         is already present when the inner loop processes it."""
-        with patch('mcp_core.technology_detector.TechProfile') as mock_cls:
+        with patch('pulse.tools.technology_detector.TechProfile') as mock_cls:
             profile = mock_cls.return_value
             profile.web_servers = ["apache"]
             profile.frameworks = []

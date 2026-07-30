@@ -1,7 +1,7 @@
 """
 Phase 4b: Intelligent Decision Engine Advanced Coverage Tests
 
-Comprehensive test suite for server_core.intelligence.intelligent_decision_engine module.
+Comprehensive test suite for pulse.intelligence.intelligent_decision_engine module.
 Tests core decision-making algorithms, parameter optimization, attack pattern selection,
 and tool effectiveness scoring.
 
@@ -30,7 +30,7 @@ import json
 
 # Import the module under test
 try:
-    from server_core.intelligence.intelligent_decision_engine import (
+    from pulse.intelligence.intelligent_decision_engine import (
         IntelligentDecisionEngine,
     )
     from shared.target_types import TargetType, TechnologyStack
@@ -161,7 +161,7 @@ def sample_target_profile():
 @pytest.fixture
 def mock_tool_stats():
     """Mock ToolStatsStore for testing effectiveness scoring"""
-    from server_core.singletons import get_tool_stats_store
+    from pulse.infrastructure.singletons import get_tool_stats_store
     store = get_tool_stats_store()
     with patch.object(store, "blended_effectiveness", return_value=0.8) as mock:
         yield mock

@@ -2,7 +2,7 @@
 
 import pytest
 
-from server_core import singletons
+from pulse.infrastructure import singletons
 
 
 def test_group_a_imports():

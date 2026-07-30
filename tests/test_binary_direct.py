@@ -4,7 +4,7 @@ import json
 import os
 import pytest
 
-from mcp_core.binary_direct import (
+from pulse.tools.binary_direct import (
     binary_varint,
     binary_block_parser,
     binary_rle_decode,

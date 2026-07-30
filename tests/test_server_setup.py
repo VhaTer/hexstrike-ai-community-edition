@@ -8,12 +8,12 @@ register_gateway_tools is gone — no longer imported.
 
 import pytest
 from unittest.mock import MagicMock, patch
-import mcp_core.server_setup
+import pulse.interface.server_setup
 
 
 def test_server_setup_imports():
     """Verify standalone entry point exists and Flask-era function is gone."""
-    available = [name for name in dir(mcp_core.server_setup) if not name.startswith('_')]
+    available = [name for name in dir(pulse.interface.server_setup) if not name.startswith('_')]
     assert 'setup_mcp_server_standalone' in available
     # Flask-era function removed in Track 2
     assert 'setup_mcp_server' not in available
@@ -24,7 +24,7 @@ def test_server_setup_imports():
 def test_setup_mcp_server_standalone_call():
     """setup_mcp_server_standalone() returns a FastMCP instance."""
     try:
-        mcp = mcp_core.server_setup.setup_mcp_server_standalone()
+        mcp = pulse.interface.server_setup.setup_mcp_server_standalone()
         assert mcp is not None
     except Exception as e:
         print(f"Expected error in test env: {e} — coverage OK!")
@@ -32,7 +32,7 @@ def test_setup_mcp_server_standalone_call():
 
 def test_module_structure():
     """Core FastMCP primitives are present in server_setup."""
-    assert hasattr(mcp_core.server_setup, 'FastMCP')
+    assert hasattr(pulse.interface.server_setup, 'FastMCP')
     # Flask-era artifacts must be absent
-    assert not hasattr(mcp_core.server_setup, 'register_gateway_tools')
-    assert not hasattr(mcp_core.server_setup, 'setup_mcp_server')
+    assert not hasattr(pulse.interface.server_setup, 'register_gateway_tools')
+    assert not hasattr(pulse.interface.server_setup, 'setup_mcp_server')

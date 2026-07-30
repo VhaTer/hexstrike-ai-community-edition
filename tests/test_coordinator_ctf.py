@@ -1,5 +1,5 @@
-from server_core.workflows.ctf.coordinator import CTFTeamCoordinator
-from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.coordinator import CTFTeamCoordinator
+from pulse.workflows.ctf.CTFChallenge import CTFChallenge
 
 
 class TestCTFTeamCoordinator:

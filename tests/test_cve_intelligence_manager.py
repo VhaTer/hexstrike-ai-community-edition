@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 
-from server_core.intelligence.cve_intelligence_manager import CVEIntelligenceManager
+from pulse.intelligence.cve_intelligence_manager import CVEIntelligenceManager
 
 
 @pytest.fixture
@@ -216,8 +216,8 @@ def make_cve_detail(cve_id="CVE-2024-0001", severity="CRITICAL", cvss_score=9.5,
 
 
 class TestFetchLatestCVEs:
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_success(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0001", "CRITICAL", 9.5, "V31")
         mock_response = MagicMock()
@@ -232,8 +232,8 @@ class TestFetchLatestCVEs:
         assert result["cves"][0]["cve_id"] == "CVE-2024-0001"
         assert result["cves"][0]["severity"] == "CRITICAL"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_cvss_v30(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0002", "HIGH", 7.5, "V30")
         mock_response = MagicMock()
@@ -246,8 +246,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["severity"] == "HIGH"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_cvss_v2(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0003", "CRITICAL", 9.0, "V2")
         mock_response = MagicMock()
@@ -260,8 +260,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["severity"] == "CRITICAL"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_v2_severity_high(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0011", "HIGH", 7.5, "V2")
         mock_resp = MagicMock()
@@ -271,8 +271,8 @@ class TestFetchLatestCVEs:
         result = mgr.fetch_latest_cves(hours=24, severity_filter="HIGH")
         assert result["cves"][0]["severity"] == "HIGH"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_v2_severity_medium(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0012", "MEDIUM", 5.0, "V2")
         mock_resp = MagicMock()
@@ -282,8 +282,8 @@ class TestFetchLatestCVEs:
         result = mgr.fetch_latest_cves(hours=24, severity_filter="MEDIUM")
         assert result["cves"][0]["severity"] == "MEDIUM"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_v2_severity_low(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0013", "LOW", 2.0, "V2")
         mock_resp = MagicMock()
@@ -293,8 +293,8 @@ class TestFetchLatestCVEs:
         result = mgr.fetch_latest_cves(hours=24, severity_filter="LOW")
         assert result["cves"][0]["severity"] == "LOW"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_severity_mismatch_filtered_out(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0004", "LOW", 3.0, "V31")
         mock_first = MagicMock()
@@ -311,8 +311,8 @@ class TestFetchLatestCVEs:
 
         assert result["total_found"] == 0
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_all_severity(self, mock_sleep, mock_get, mgr):
         nvd_data = make_nvd_response("CVE-2024-0005", "LOW", 3.0, "V31")
         mock_response = MagicMock()
@@ -324,8 +324,8 @@ class TestFetchLatestCVEs:
 
         assert result["total_found"] == 1
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_empty_then_broader_search(self, mock_sleep, mock_get, mgr):
         mock_empty = MagicMock()
         mock_empty.status_code = 200
@@ -343,8 +343,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["total_found"] >= 1
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_broader_search_fails(self, mock_sleep, mock_get, mgr):
         mock_empty = MagicMock()
         mock_empty.status_code = 200
@@ -360,8 +360,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["total_found"] == 0
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_api_error(self, mock_sleep, mock_get, mgr):
         mock_response = MagicMock()
         mock_response.status_code = 429
@@ -372,8 +372,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["total_found"] == 0
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_network_error(self, mock_sleep, mock_get, mgr):
         from requests.exceptions import ConnectionError
         mock_get.side_effect = ConnectionError("Connection refused")
@@ -383,8 +383,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["total_found"] == 0
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_top_level_exception(self, mock_sleep, mock_get, mgr):
         mock_get.side_effect = RuntimeError("Unexpected crash")
 
@@ -393,8 +393,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is False
         assert "Unexpected crash" in result["error"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_no_metrics_at_all(self, mock_sleep, mock_get, mgr):
         vuln = {
             "cve": {
@@ -418,8 +418,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["total_found"] == 0
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_non_english_description(self, mock_sleep, mock_get, mgr):
         data = make_nvd_response("CVE-2024-0101", "CRITICAL", 9.5, "V31")
         data["vulnerabilities"][0]["cve"]["descriptions"] = [
@@ -433,8 +433,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["description"] == "No description available"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_mixed_language_descriptions(self, mock_sleep, mock_get, mgr):
         data = make_nvd_response("CVE-2024-0102", "CRITICAL", 9.5, "V31")
         data["vulnerabilities"][0]["cve"]["descriptions"] = [
@@ -450,8 +450,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["description"] == "English description"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_non_cpe23_criteria(self, mock_sleep, mock_get, mgr):
         data = make_nvd_response("CVE-2024-0103", "CRITICAL", 9.5, "V31")
         data["vulnerabilities"][0]["cve"]["configurations"] = [
@@ -465,8 +465,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["affected_software"] == []
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_cpe_short_criteria(self, mock_sleep, mock_get, mgr):
         data = make_nvd_response("CVE-2024-0104", "CRITICAL", 9.5, "V31")
         data["vulnerabilities"][0]["cve"]["configurations"] = [
@@ -480,8 +480,8 @@ class TestFetchLatestCVEs:
         assert result["success"] is True
         assert result["cves"][0]["affected_software"] == []
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_broader_search_non_english(self, mock_sleep, mock_get, mgr):
         empty = MagicMock()
         empty.status_code = 200
@@ -497,8 +497,8 @@ class TestFetchLatestCVEs:
         result = mgr.fetch_latest_cves(hours=24, severity_filter="CRITICAL")
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_fetch_broader_no_v31_metrics(self, mock_sleep, mock_get, mgr):
         empty = MagicMock()
         empty.status_code = 200
@@ -527,7 +527,7 @@ class TestFetchLatestCVEs:
 # ---------------------------------------------------------------------------
 
 class TestAnalyzeCVEExploitability:
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_success_v31(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0001", "CRITICAL", 9.5, "V31")
         mock_response = MagicMock()
@@ -543,7 +543,7 @@ class TestAnalyzeCVEExploitability:
         assert result["exploitability_level"] == "HIGH"
         assert result["attack_vector"] == "NETWORK"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_success_v30(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0002", "HIGH", 7.5, "V30",
                                      attack_complexity="HIGH", privileges_required="LOW",
@@ -559,7 +559,7 @@ class TestAnalyzeCVEExploitability:
         assert result["severity"] == "HIGH"
         assert result["cvss_score"] == 7.5
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_success_v2(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0003", "CRITICAL", 8.0, "V2",
                                      attack_vector="ADJACENT_NETWORK")
@@ -574,7 +574,7 @@ class TestAnalyzeCVEExploitability:
         assert result["cvss_score"] == 0.0
         assert result["attack_vector"] == "UNKNOWN"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_no_metrics_uses_calculated_score(self, mock_get, mgr):
         vuln = {
             "cve": {
@@ -598,7 +598,7 @@ class TestAnalyzeCVEExploitability:
         assert result["attack_vector"] == "UNKNOWN"
         assert result["exploitability_level"] == "VERY_LOW"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_non_200(self, mock_get, mgr):
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -609,7 +609,7 @@ class TestAnalyzeCVEExploitability:
         assert result["success"] is False
         assert "404" in result["error"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_no_vulnerabilities(self, mock_get, mgr):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -621,7 +621,7 @@ class TestAnalyzeCVEExploitability:
         assert result["success"] is False
         assert "not found" in result["error"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_network_error(self, mock_get, mgr):
         from requests.exceptions import Timeout
         mock_get.side_effect = Timeout("Request timed out")
@@ -631,7 +631,7 @@ class TestAnalyzeCVEExploitability:
         assert result["success"] is False
         assert "timed out" in result["error"].lower()
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_exploit_keywords_rce(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0005", "CRITICAL", 9.5, "V31",
                                      description="Remote code execution in network service")
@@ -644,7 +644,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["exploitability_score"] > 0.8
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_exploit_keywords_auth_bypass(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0006", "HIGH", 7.5, "V31",
                                      description="Authentication bypass in admin panel")
@@ -657,7 +657,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["exploitability_score"] > 0.7
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_public_exploit_in_references(self, mock_get, mgr):
         refs = [{"url": "https://www.exploit-db.com/exploits/12345"}]
         data = make_cve_detail("CVE-2024-0007", "CRITICAL", 9.5, "V31",
@@ -672,7 +672,7 @@ class TestAnalyzeCVEExploitability:
         assert result["exploit_availability"]["public_exploits"] is True
         assert result["exploit_availability"]["exploit_maturity"] == "PROOF_OF_CONCEPT"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_weaponization_high(self, mock_get, mgr):
         refs = [{"url": "https://github.com/test/exploit"}]
         data = make_cve_detail("CVE-2024-0008", "CRITICAL", 9.5, "V31",
@@ -687,7 +687,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["exploit_availability"]["weaponization_level"] == "HIGH"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_priority_immediate(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0009", "CRITICAL", 9.5, "V31",
                                      exploitability_subscore=3.9)
@@ -700,7 +700,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["threat_intelligence"]["recommended_priority"] == "IMMEDIATE"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_priority_low(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0010", "LOW", 2.5, "V31",
                                      attack_vector="PHYSICAL", attack_complexity="HIGH",
@@ -715,7 +715,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["threat_intelligence"]["recommended_priority"] == "LOW"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_top_level_exception(self, mock_get, mgr):
         mock_get.side_effect = ValueError("Something broke")
 
@@ -723,7 +723,7 @@ class TestAnalyzeCVEExploitability:
 
         assert result["success"] is False
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_calculated_path_network(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0030", "HIGH", 7.0, "V31",
                                attack_vector="NETWORK", attack_complexity="LOW",
@@ -739,7 +739,7 @@ class TestAnalyzeCVEExploitability:
         assert result["success"] is True
         assert result["attack_vector"] == "NETWORK"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_calculated_path_local(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0031", "HIGH", 6.5, "V31",
                                attack_vector="LOCAL", attack_complexity="LOW",
@@ -753,7 +753,7 @@ class TestAnalyzeCVEExploitability:
         result = mgr.analyze_cve_exploitability("CVE-2024-0031")
         assert result["attack_vector"] == "LOCAL"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_calculated_path_physical(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0032", "LOW", 2.0, "V31",
                                attack_vector="PHYSICAL", attack_complexity="HIGH",
@@ -767,7 +767,7 @@ class TestAnalyzeCVEExploitability:
         result = mgr.analyze_cve_exploitability("CVE-2024-0032")
         assert result["attack_vector"] == "PHYSICAL"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_exploitability_medium(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0033", "HIGH", 6.5, "V31",
                                attack_vector="LOCAL", attack_complexity="LOW",
@@ -781,7 +781,7 @@ class TestAnalyzeCVEExploitability:
         result = mgr.analyze_cve_exploitability("CVE-2024-0033")
         assert result["exploitability_level"] == "MEDIUM"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_weaponization_medium_with_exploit(self, mock_get, mgr):
         refs = [{"url": "https://www.exploit-db.com/exploits/99999"}]
         data = make_cve_detail("CVE-2024-0034", "HIGH", 7.0, "V31",
@@ -795,7 +795,7 @@ class TestAnalyzeCVEExploitability:
         result = mgr.analyze_cve_exploitability("CVE-2024-0034")
         assert result["exploit_availability"]["weaponization_level"] == "MEDIUM"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_non_english_description(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0036", "HIGH", 7.5, "V31")
         data["vulnerabilities"][0]["cve"]["descriptions"] = [
@@ -809,7 +809,7 @@ class TestAnalyzeCVEExploitability:
         assert result["success"] is True
         assert result["vulnerability_details"]["description"] == ""
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_analyze_mixed_language_descriptions(self, mock_get, mgr):
         data = make_cve_detail("CVE-2024-0037", "HIGH", 7.5, "V31")
         data["vulnerabilities"][0]["cve"]["descriptions"] = [
@@ -831,8 +831,8 @@ class TestAnalyzeCVEExploitability:
 
 class TestSearchExistingExploits:
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_github_success(self, mock_sleep, mock_get, mgr):
         responses = []
 
@@ -871,8 +871,8 @@ class TestSearchExistingExploits:
         assert result["exploits_found"] >= 1
         assert "github" in result["sources_searched"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_github_non_matching(self, mock_sleep, mock_get, mgr):
         responses = []
 
@@ -907,8 +907,8 @@ class TestSearchExistingExploits:
 
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_nvd_references_exploit_db(self, mock_sleep, mock_get, mgr):
         responses = []
 
@@ -949,8 +949,8 @@ class TestSearchExistingExploits:
         assert "exploit-db" in exploit_sources
         assert "packetstorm" in exploit_sources
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_metasploit_module(self, mock_sleep, mock_get, mgr):
         responses = []
 
@@ -983,8 +983,8 @@ class TestSearchExistingExploits:
         assert result["success"] is True
         assert "metasploit" in result["sources_searched"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_github_rate_limited(self, mock_sleep, mock_get, mgr):
         responses = []
 
@@ -1007,8 +1007,8 @@ class TestSearchExistingExploits:
 
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_network_errors(self, mock_sleep, mock_get, mgr):
         from requests.exceptions import ConnectionError
         mock_get.side_effect = ConnectionError("Network error")
@@ -1017,8 +1017,8 @@ class TestSearchExistingExploits:
 
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_top_level_exception(self, mock_sleep, mock_get, mgr):
         mock_get.side_effect = RuntimeError("Unexpected")
 
@@ -1026,8 +1026,8 @@ class TestSearchExistingExploits:
 
         assert result["success"] is False
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_metasploit_other_error(self, mock_sleep, mock_get, mgr):
         responses = []
         gh = MagicMock()
@@ -1045,8 +1045,8 @@ class TestSearchExistingExploits:
         result = mgr.search_existing_exploits("CVE-2024-0035")
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_github_unverified_reliability(self, mock_sleep, mock_get, mgr):
         responses = []
         gh = MagicMock()
@@ -1075,8 +1075,8 @@ class TestSearchExistingExploits:
         assert result["success"] is True
         assert result["exploits"][0]["reliability"] == "UNVERIFIED"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_nvd_references_fails(self, mock_sleep, mock_get, mgr):
         responses = []
         gh = MagicMock()
@@ -1095,8 +1095,8 @@ class TestSearchExistingExploits:
         assert result["success"] is True
         assert "exploit-db" in result["sources_searched"]
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_duplicate_exploit_source(self, mock_sleep, mock_get, mgr):
         responses = []
         gh = MagicMock()
@@ -1127,8 +1127,8 @@ class TestSearchExistingExploits:
         assert result["success"] is True
         assert result["exploits_found"] == 2
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_search_metasploit_non_exploit_path(self, mock_sleep, mock_get, mgr):
         responses = []
         gh = MagicMock()
@@ -1158,7 +1158,7 @@ class TestSearchExistingExploits:
 
 class TestAnalyzeEdgeCases:
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_weaponization_medium_no_public_exploits(self, mock_get, mgr):
         data = make_cve_detail(
             "CVE-2024-0020", "HIGH", 9.0, "V31",
@@ -1174,7 +1174,7 @@ class TestAnalyzeEdgeCases:
         result = mgr.analyze_cve_exploitability("CVE-2024-0020")
         assert result["exploit_availability"]["weaponization_level"] == "MEDIUM"
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_priority_medium_severity_high(self, mock_get, mgr):
         data = make_cve_detail(
             "CVE-2024-0021", "HIGH", 7.5, "V31",
@@ -1190,7 +1190,7 @@ class TestAnalyzeEdgeCases:
         result = mgr.analyze_cve_exploitability("CVE-2024-0021")
         assert result["threat_intelligence"]["recommended_priority"] in ("MEDIUM", "HIGH")
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
     def test_attack_vector_adjacent_network(self, mock_get, mgr):
         data = make_cve_detail(
             "CVE-2024-0022", "HIGH", 6.0, "V31",
@@ -1206,8 +1206,8 @@ class TestAnalyzeEdgeCases:
         result = mgr.analyze_cve_exploitability("CVE-2024-0022")
         assert result["success"] is True
 
-    @patch("server_core.intelligence.cve_intelligence_manager.requests.get")
-    @patch("server_core.intelligence.cve_intelligence_manager.time.sleep")
+    @patch("pulse.intelligence.cve_intelligence_manager.requests.get")
+    @patch("pulse.intelligence.cve_intelligence_manager.time.sleep")
     def test_github_fair_reliability(self, mock_sleep, mock_get, mgr):
         responses = []
         gh_resp = MagicMock()

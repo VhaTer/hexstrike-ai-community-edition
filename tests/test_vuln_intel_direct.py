@@ -8,13 +8,13 @@ Covers: vulnx
 import pytest
 from unittest.mock import patch
 
-import mcp_core.vuln_intel_direct as _mod
+import pulse.tools.vuln_intel_direct as _mod
 
 MOCK_OK = {"success": True, "output": "vulnx output", "returncode": 0}
 
 
 def run_vulnx(data: dict):
-    with patch("mcp_core.vuln_intel_direct.execute_command", return_value=MOCK_OK) as mock:
+    with patch("pulse.tools.vuln_intel_direct.execute_command", return_value=MOCK_OK) as mock:
         result = _mod.vuln_intel_exec("vulnx", data)
         return result, mock
 

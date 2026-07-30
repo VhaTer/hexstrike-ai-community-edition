@@ -30,21 +30,21 @@ def tool_installed(name: str) -> bool:
 
 class TestExecDirect:
     def test_strings_binary(self):
-        from mcp_core.misc_direct import misc_exec
+        from pulse.tools.misc_direct import misc_exec
         r = misc_exec("strings", {"file_path": "/usr/bin/env", "max_len": 4})
         assert r.get("success"), f"strings failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
         assert len(out) > 0
 
     def test_xxd_hexdump(self):
-        from mcp_core.misc_direct import misc_exec
+        from pulse.tools.misc_direct import misc_exec
         r = misc_exec("xxd", {"file_path": "/usr/bin/env", "max_bytes": 32})
         assert r.get("success"), f"xxd failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
         assert len(out) > 0
 
     def test_hashid(self):
-        from mcp_core.password_cracking_direct import pwdcrack_exec
+        from pulse.tools.password_cracking_direct import pwdcrack_exec
         r = pwdcrack_exec("hashid", {"hash_value": "5f4dcc3b5aa765d61d8327deb882cf99"})
         assert r.get("success"), f"hashid failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
@@ -52,7 +52,7 @@ class TestExecDirect:
 
     @pytest.mark.skipif(not tool_installed("nmap"), reason="nmap not installed")
     def test_nmap_ping_scan(self):
-        from mcp_core.net_scan_direct import net_scan_exec
+        from pulse.tools.net_scan_direct import net_scan_exec
         r = net_scan_exec("nmap", {"target": SCANME, "scan_type": "-sn"})
         assert r.get("success"), f"nmap ping scan failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
@@ -60,7 +60,7 @@ class TestExecDirect:
 
     @pytest.mark.skipif(not tool_installed("exiftool"), reason="exiftool not installed")
     def test_exiftool(self):
-        from mcp_core.misc_direct import misc_exec
+        from pulse.tools.misc_direct import misc_exec
         r = misc_exec("exiftool", {"file_path": str(HEXSTRIKE)})
         assert r.get("success"), f"exiftool failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
@@ -68,7 +68,7 @@ class TestExecDirect:
 
     @pytest.mark.skipif(not tool_installed("objdump"), reason="objdump not installed")
     def test_objdump(self):
-        from mcp_core.misc_direct import misc_exec
+        from pulse.tools.misc_direct import misc_exec
         r = misc_exec("objdump", {"binary": "/usr/bin/env", "flags": "-f"})
         assert r.get("success"), f"objdump failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
@@ -76,7 +76,7 @@ class TestExecDirect:
 
     @pytest.mark.skipif(not tool_installed("sqlmap"), reason="sqlmap not installed")
     def test_sqlmap_version(self):
-        from mcp_core.web_scan_direct import web_scan_exec
+        from pulse.tools.web_scan_direct import web_scan_exec
         r = web_scan_exec("sqlmap", {"url": "http://testphp.vulnweb.com", "scan_type": "--version"})
         assert r.get("success"), f"sqlmap failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")

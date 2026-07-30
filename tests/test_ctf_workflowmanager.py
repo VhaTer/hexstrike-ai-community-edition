@@ -1,8 +1,8 @@
 """Test suite for CTF Workflow Manager"""
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from server_core.workflows.ctf.workflowManager import CTFWorkflowManager
-from server_core.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
+from pulse.workflows.ctf.CTFChallenge import CTFChallenge
 
 
 class TestCTFWorkflowManager:
@@ -650,7 +650,7 @@ class TestCTFWorkflowManager:
 
     def test_advanced_workflow_rev_cached_triage_removes_ghidra_ida(self, workflow_manager):
         """Cache triage hit for rev binary should remove ghidra/ida from workflow steps"""
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         c = CTFChallenge("test_binary", "rev", "test", 100, "easy", target="test_binary")
         key = "test:binary_triage:test_binary:hash"
         _scan_cache.set(key, {

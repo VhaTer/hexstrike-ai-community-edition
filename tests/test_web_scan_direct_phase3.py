@@ -9,7 +9,7 @@ Pattern: Mock command executor, parametrized tool tests, error handling validati
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock, call
-from mcp_core.web_scan_direct import web_scan_exec
+from pulse.tools.web_scan_direct import web_scan_exec
 
 
 # ========== FIXTURES ==========
@@ -17,7 +17,7 @@ from mcp_core.web_scan_direct import web_scan_exec
 @pytest.fixture
 def mock_command_executor():
     """Mock the command executor function."""
-    with patch('mcp_core.web_scan_direct.execute_command') as mock_exec:
+    with patch('pulse.tools.web_scan_direct.execute_command') as mock_exec:
         mock_exec.return_value = {"success": True, "output": ""}
         yield mock_exec
 
@@ -37,7 +37,7 @@ class TestParameterValidation:
 
     def test_require_single_missing_key(self):
         """Verify _require detects missing keys."""
-        from mcp_core._helpers import require
+        from pulse.tools._helpers import require
         
         result = require({"url": "http://test.com"}, "target")
         
@@ -46,7 +46,7 @@ class TestParameterValidation:
 
     def test_require_multiple_keys_all_present(self):
         """Verify _require accepts when all keys present."""
-        from mcp_core._helpers import require
+        from pulse.tools._helpers import require
         
         params = {"url": "http://test.com", "target": "example.com"}
         result = require(params, "url", "target")
@@ -56,7 +56,7 @@ class TestParameterValidation:
 
     def test_require_multiple_keys_one_missing(self):
         """Verify _require detects when one of many keys missing."""
-        from mcp_core._helpers import require
+        from pulse.tools._helpers import require
         
         params = {"url": "http://test.com"}
         result = require(params, "url", "target", "method")
@@ -67,7 +67,7 @@ class TestParameterValidation:
     @pytest.mark.parametrize("key", ["target", "url", "host", "domain"])
     def test_require_various_key_names(self, key):
         """Verify _require works with various key names."""
-        from mcp_core._helpers import require
+        from pulse.tools._helpers import require
         
         params = {key: "test-value"}
         result = require(params, key)

@@ -5,7 +5,7 @@ import math
 import tempfile
 import pytest
 
-from mcp_core.crypto_direct import (
+from pulse.tools.crypto_direct import (
     xor_crack,
     z3_solve,
     rsa_attack,

@@ -1,5 +1,5 @@
 import pytest
-from server_core.config_core import get_word_list, find_best_wordlist, get_word_list_path, get, set_value
+from pulse.infrastructure.config_core import get_word_list, find_best_wordlist, get_word_list_path, get, set_value
 
 
 class TestGetWordList:
@@ -46,7 +46,7 @@ class TestFindBestWordlist:
         assert result["wordlist"]["type"] == "directory"
 
     def test_empty_config(self, monkeypatch):
-        monkeypatch.setattr("server_core.config_core._config", {"WORD_LISTS": {}})
+        monkeypatch.setattr("pulse.infrastructure.config_core._config", {"WORD_LISTS": {}})
         result = find_best_wordlist({"for_task": "anything"})
         assert result is None
 
@@ -82,7 +82,7 @@ class TestGetWordListPath:
         assert get_word_list_path("nonexistent") is None
 
     def test_no_path_key(self, monkeypatch):
-        monkeypatch.setattr("server_core.config_core._config", {
+        monkeypatch.setattr("pulse.infrastructure.config_core._config", {
             "WORD_LISTS": {
                 "nopath": {"type": "password"},
             }

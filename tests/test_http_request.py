@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mcp_core.misc_direct import _http_request
+from pulse.tools.misc_direct import _http_request
 
 
 def _make_mock_namedtemp(name):
@@ -133,9 +133,9 @@ def test_binary_body_returns_hex():
         with open(bf_path, "wb") as f:
             f.write(bytes(range(256)))
 
-        with patch("mcp_core.misc_direct.execute_command") as mock_exec:
+        with patch("pulse.tools.misc_direct.execute_command") as mock_exec:
             mock_exec.return_value = {"stdout": "200", "stderr": ""}
-            with patch("mcp_core.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
+            with patch("pulse.tools.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
                 mock_tmp.side_effect = [
                     _make_mock_namedtemp(hf_path),
                     _make_mock_namedtemp(bf_path),
@@ -163,9 +163,9 @@ def test_timeout_configurable():
         with open(bf_path, "wb") as f:
             f.write(b"hello")
 
-        with patch("mcp_core.misc_direct.execute_command") as mock_exec:
+        with patch("pulse.tools.misc_direct.execute_command") as mock_exec:
             mock_exec.return_value = {"stdout": "200", "stderr": ""}
-            with patch("mcp_core.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
+            with patch("pulse.tools.misc_direct.tempfile.NamedTemporaryFile") as mock_tmp:
                 mock_tmp.side_effect = [
                     _make_mock_namedtemp(hf_path),
                     _make_mock_namedtemp(bf_path),

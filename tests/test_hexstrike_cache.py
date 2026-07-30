@@ -1,5 +1,5 @@
 import time
-from server_core.cache import HexStrikeCache
+from pulse.infrastructure.cache import HexStrikeCache
 
 
 class TestHexStrikeCache:

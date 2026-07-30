@@ -50,7 +50,7 @@ async def call_run_security_tool(mcp, tool_name, parameters, ctx=None):
     Parameters can be a dict (auto-serialized to JSON) or a raw string
     (passed through as-is — useful for testing invalid JSON).
     """
-    from mcp_core.server_setup import run_security_tool as _run_security_tool
+    from pulse.interface.server_setup import run_security_tool as _run_security_tool
     if ctx is None:
         ctx = make_mock_context()
     payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
@@ -68,7 +68,7 @@ def run(coro):
 
 def make_mcp():
     """Build a Phase-3 standalone MCP server."""
-    from mcp_core.server_setup import setup_mcp_server_standalone
+    from pulse.interface.server_setup import setup_mcp_server_standalone
     return setup_mcp_server_standalone(MagicMock())
 
 
@@ -81,7 +81,7 @@ class TestCtxInfoBasicFlow:
 
     def test_info_called_on_tool_start_and_success(self):
         """ctx.info should log start + completion for a simple non-destructive tool."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "uro", {}))
 
@@ -100,7 +100,7 @@ class TestCtxInfoBasicFlow:
 
     def test_info_called_on_tool_failure(self):
         """ctx.info should log start, and ctx.error should log failure."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": False, "error": "simulated failure"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": False, "error": "simulated failure"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "uro", {}))
 
@@ -136,7 +136,7 @@ class TestCtxReportProgress:
 
     def test_progress_reported_for_simple_tool(self):
         """Progress should be reported at start (0) and end (100)."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "anew", {}))
 
@@ -165,7 +165,7 @@ class TestCtxReportProgress:
                 return (set(), futures)
             return (futures, set())
 
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "slow ok"}), \
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "slow ok"}), \
              patch("asyncio.wait", side_effect=fake_wait):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "anew", {}))
@@ -183,7 +183,7 @@ class TestCtxReportProgress:
 
     def test_progress_calls_are_sequential(self):
         """Progress values should increase monotonically."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "checksec", {}))
 
@@ -205,7 +205,7 @@ class TestCtxStateMethods:
 
     def test_get_state_called_when_target_provided(self):
         """When a target is provided, ctx.get_state should be called to check for cached tech profile."""
-        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "scanme.nmap.org"}))
 
@@ -225,7 +225,7 @@ class TestCtxStateMethods:
         http://example.com [200 OK] Apache[2.4.41], PHP[7.4.3]
         """
 
-        with patch("mcp_core.web_probe_direct.web_probe_exec", return_value={
+        with patch("pulse.tools.web_probe_direct.web_probe_exec", return_value={
             "success": True,
             "output": whatweb_output,
         }):
@@ -244,7 +244,7 @@ class TestCtxStateMethods:
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
 
-        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "10.0.0.1"}, ctx=ctx))
 
@@ -275,7 +275,7 @@ class TestCtxStateMethods:
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=cached_profile)
 
-        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "cached-target.com"}, ctx=ctx))
 
@@ -319,7 +319,7 @@ class TestCtxErrorAndWarning:
 
     def test_warning_not_called_on_successful_tool(self):
         """Successful tool execution should NOT trigger ctx.warning."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "checksec", {"target": "test"}))
 
@@ -350,7 +350,7 @@ class TestLiveObservation:
 
     def test_print_all_ctx_calls_for_observation(self):
         """This test prints every ctx method call — run with -s to see live output."""
-        with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "all good"}):
+        with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "all good"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "checksec", {}))
 
@@ -402,7 +402,7 @@ class TestPopularToolsCtxUsage:
 
     def test_nmap_tool_ctx_calls(self):
         """nmap is a popular tool — verify its ctx flow."""
-        with patch("mcp_core.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "nmap done"}):
+        with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value={"success": True, "output": "nmap done"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "nmap", {"target": "127.0.0.1"}))
 
@@ -412,7 +412,7 @@ class TestPopularToolsCtxUsage:
 
     def test_sqlmap_tool_ctx_calls(self):
         """sqlmap — verify ctx flow."""
-        with patch("mcp_core.web_scan_direct.web_scan_exec", return_value={"success": True, "output": "sqlmap done"}):
+        with patch("pulse.tools.web_scan_direct.web_scan_exec", return_value={"success": True, "output": "sqlmap done"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "sqlmap", {"url": "http://test.com"}))
 
@@ -421,7 +421,7 @@ class TestPopularToolsCtxUsage:
 
     def test_sherlock_tool_ctx_calls(self):
         """sherlock — verify ctx flow."""
-        with patch("mcp_core.osint_direct.osint_exec", return_value={"success": True, "output": "sherlock done"}):
+        with patch("pulse.tools.osint_direct.osint_exec", return_value={"success": True, "output": "sherlock done"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "sherlock", {"username": "testuser"}))
 
@@ -430,7 +430,7 @@ class TestPopularToolsCtxUsage:
 
     def test_gobuster_tool_ctx_calls(self):
         """gobuster — verify ctx flow with progress reporting."""
-        with patch("mcp_core.web_fuzz_direct.web_fuzz_exec", return_value={"success": True, "output": "gobuster done"}):
+        with patch("pulse.tools.web_fuzz_direct.web_fuzz_exec", return_value={"success": True, "output": "gobuster done"}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "gobuster", {"url": "http://test.com", "wordlist": "/tmp/wordlist.txt"}))
 
@@ -440,8 +440,8 @@ class TestPopularToolsCtxUsage:
 
     def test_metasploit_auxiliary_scanner_ctx_calls(self):
         """Metasploit auxiliary scanner should NOT require confirmation and should use ctx normally."""
-        with patch("mcp_core.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "msf done"}), \
-             patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
+        with patch("pulse.tools.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "msf done"}), \
+             patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(
                 mcp, "metasploit",
@@ -454,7 +454,7 @@ class TestPopularToolsCtxUsage:
 
     def test_httpx_tool_with_target_ctx_calls(self):
         """httpx with target should trigger get_state for tech profile lookup."""
-        with patch("mcp_core.web_recon_direct.web_recon_exec", return_value={"success": True, "output": "httpx done", "headers": {}}):
+        with patch("pulse.tools.web_recon_direct.web_recon_exec", return_value={"success": True, "output": "httpx done", "headers": {}}):
             mcp = make_mcp()
             result, ctx = run(call_run_security_tool(mcp, "httpx", {"target": "example.com"}))
 

@@ -38,7 +38,7 @@ class TestBasicArgumentParsing:
         """Test parse_args returns default values when no args provided"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.server == "http://127.0.0.1:8888"
@@ -53,7 +53,7 @@ class TestBasicArgumentParsing:
         """Test parsing custom server URL"""
         sys.argv = ["hexstrike_mcp.py", "--server", "http://custom.com:9999"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.server == "http://custom.com:9999"
@@ -62,7 +62,7 @@ class TestBasicArgumentParsing:
         """Test parsing timeout value"""
         sys.argv = ["hexstrike_mcp.py", "--timeout", "600"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.timeout == 600
@@ -72,7 +72,7 @@ class TestBasicArgumentParsing:
         """Test parsing debug flag"""
         sys.argv = ["hexstrike_mcp.py", "--debug"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.debug is True
@@ -81,7 +81,7 @@ class TestBasicArgumentParsing:
         """Test parsing compact mode flag"""
         sys.argv = ["hexstrike_mcp.py", "--compact"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.compact is True
@@ -90,7 +90,7 @@ class TestBasicArgumentParsing:
         """Test parsing authentication token"""
         sys.argv = ["hexstrike_mcp.py", "--auth-token", "my_secret_token"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.auth_token == "my_secret_token"
@@ -99,7 +99,7 @@ class TestBasicArgumentParsing:
         """Test parsing SSL verification disable flag"""
         sys.argv = ["hexstrike_mcp.py", "--disable-ssl-verify"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.disable_ssl_verify is True
@@ -114,7 +114,7 @@ class TestProfileArgumentParsing:
         """Test parsing single tool profile"""
         sys.argv = ["hexstrike_mcp.py", "--profile", "recon"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.profile == ["recon"]
@@ -124,7 +124,7 @@ class TestProfileArgumentParsing:
         """Test parsing multiple tool profiles"""
         sys.argv = ["hexstrike_mcp.py", "--profile", "recon", "web_crawl", "exploit_framework"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.profile == ["recon", "web_crawl", "exploit_framework"]
@@ -134,7 +134,7 @@ class TestProfileArgumentParsing:
         """Test parsing 'full' profile"""
         sys.argv = ["hexstrike_mcp.py", "--profile", "full"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert "full" in args.profile
@@ -143,7 +143,7 @@ class TestProfileArgumentParsing:
         """Test parsing 'default' profile"""
         sys.argv = ["hexstrike_mcp.py", "--profile", "default"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert "default" in args.profile
@@ -152,7 +152,7 @@ class TestProfileArgumentParsing:
         """Test default when no profile specified"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.profile == []
@@ -168,7 +168,7 @@ class TestProfileArgumentParsing:
         """Parametrized test for various profile combinations"""
         sys.argv = ["hexstrike_mcp.py", "--profile"] + profiles
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.profile == profiles
@@ -183,7 +183,7 @@ class TestArgumentValidation:
         """Test that timeout is parsed as integer"""
         sys.argv = ["hexstrike_mcp.py", "--timeout", "500"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert isinstance(args.timeout, int)
@@ -193,7 +193,7 @@ class TestArgumentValidation:
         """Test that non-integer timeout raises error"""
         sys.argv = ["hexstrike_mcp.py", "--timeout", "not_a_number"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         
         with pytest.raises(SystemExit):  # argparse exits on error
             parse_args()
@@ -202,7 +202,7 @@ class TestArgumentValidation:
         """Test that negative timeout is allowed (parsed but may be invalid semantically)"""
         sys.argv = ["hexstrike_mcp.py", "--timeout", "-100"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         # argparse allows it, but business logic may reject it
@@ -212,7 +212,7 @@ class TestArgumentValidation:
         """Test that server URL is parsed as string"""
         sys.argv = ["hexstrike_mcp.py", "--server", "http://example.com"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert isinstance(args.server, str)
@@ -222,7 +222,7 @@ class TestArgumentValidation:
         """Test that boolean flags are correctly parsed as bool"""
         sys.argv = ["hexstrike_mcp.py", "--debug", "--compact"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert isinstance(args.debug, bool)
@@ -234,7 +234,7 @@ class TestArgumentValidation:
         """Test that boolean flags default to False"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.debug is False
@@ -260,7 +260,7 @@ class TestCombinedArguments:
             "--disable-ssl-verify"
         ]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.server == "http://custom.com:8888"
@@ -275,7 +275,7 @@ class TestCombinedArguments:
         """Test parsing only server and timeout"""
         sys.argv = ["hexstrike_mcp.py", "--server", "http://localhost", "--timeout", "500"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.server == "http://localhost"
@@ -291,7 +291,7 @@ class TestCombinedArguments:
             "--profile", "recon", "exploit_framework"
         ]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.debug is True
@@ -307,7 +307,7 @@ class TestCombinedArguments:
         """Parametrized test for various server/timeout combinations"""
         sys.argv = ["hexstrike_mcp.py", "--server", server, "--timeout", str(timeout)]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.server == server
@@ -323,8 +323,8 @@ class TestDefaultValues:
         """Test server URL default"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
-        from mcp_core.hexstrike_client import DEFAULT_HEXSTRIKE_SERVER
+        from pulse.server.args import parse_args
+        from pulse.server.hexstrike_client import DEFAULT_HEXSTRIKE_SERVER
         
         args = parse_args()
         
@@ -335,8 +335,8 @@ class TestDefaultValues:
         """Test timeout default"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
-        from mcp_core.hexstrike_client import DEFAULT_REQUEST_TIMEOUT
+        from pulse.server.args import parse_args
+        from pulse.server.hexstrike_client import DEFAULT_REQUEST_TIMEOUT
         
         args = parse_args()
         
@@ -347,7 +347,7 @@ class TestDefaultValues:
         """Test all arguments have sensible defaults"""
         sys.argv = ["hexstrike_mcp.py"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         # All defaults should be set
@@ -369,7 +369,7 @@ class TestHelpMessages:
         """Test that --help flag is available"""
         sys.argv = ["hexstrike_mcp.py", "--help"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         
         # --help causes SystemExit, which is expected
         with pytest.raises(SystemExit) as exc_info:
@@ -382,7 +382,7 @@ class TestHelpMessages:
         """Test that -h flag is available"""
         sys.argv = ["hexstrike_mcp.py", "-h"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         
         with pytest.raises(SystemExit) as exc_info:
             parse_args()
@@ -399,7 +399,7 @@ class TestEdgeCases:
         """Test empty profile list"""
         sys.argv = ["hexstrike_mcp.py", "--profile"]  # --profile without values
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         
         # This should cause an error because --profile requires at least one value
         with pytest.raises(SystemExit):
@@ -413,7 +413,7 @@ class TestEdgeCases:
             "--server", "http://second.com"
         ]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         # argparse uses the last value
@@ -423,7 +423,7 @@ class TestEdgeCases:
         """Test parsing very large timeout value"""
         sys.argv = ["hexstrike_mcp.py", "--timeout", "999999"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.timeout == 999999
@@ -432,7 +432,7 @@ class TestEdgeCases:
         """Test auth token with special characters"""
         sys.argv = ["hexstrike_mcp.py", "--auth-token", "token_with_$pec!@l_ch@rs"]
         
-        from mcp_core.args import parse_args
+        from pulse.server.args import parse_args
         args = parse_args()
         
         assert args.auth_token == "token_with_$pec!@l_ch@rs"
@@ -448,7 +448,7 @@ class TestEdgeCases:
         
         for url in localhost_urls:
             sys.argv = ["hexstrike_mcp.py", "--server", url]
-            from mcp_core.args import parse_args
+            from pulse.server.args import parse_args
             args = parse_args()
             assert args.server == url
 

@@ -8,8 +8,8 @@ Pattern: Pure function testing, parametrized validation, workflow structure veri
 """
 
 import pytest
-from server_core.workflows.bugbounty.workflow import BugBountyWorkflowManager
-from server_core.workflows.bugbounty.target import BugBountyTarget
+from pulse.workflows.bugbounty.workflow import BugBountyWorkflowManager
+from pulse.workflows.bugbounty.target import BugBountyTarget
 
 
 # ========== FIXTURES ==========

@@ -6,8 +6,8 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-from server_core.advanced_cache import AdvancedCache
-from mcp_core.server_setup import _ScanCache
+from pulse.infrastructure.advanced_cache import AdvancedCache
+from pulse.interface.server_setup import _ScanCache
 
 
 class TestAdvancedCacheBenchmarks:
