@@ -216,6 +216,64 @@ def test_build_dashboard_exception():
     assert "test error" in result.get("error", "")
 
 
+def test_build_dashboard_tool_stats_fallback():
+    """When get_tool_stats_store() raises, total_runs_display is em-dash."""
+    from pulse.server.web_server import _build_dashboard_response
+
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
+               return_value=_mock_dashboard_state("healthy")):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
+            with patch("pulse.server.web_server.get_tool_stats_store",
+                       side_effect=RuntimeError("stats fail")):
+                result = _build_dashboard_response()
+
+    assert result["total_runs_display"] == "—"
+
+
+def test_web_dashboard_error(tmp_path):
+    """/web-dashboard returns 500 when _build_dashboard_response raises."""
+    from pulse.server.web_server import register_http_routes
+
+    mcp = FakeMCP()
+    static_dir = tmp_path / "server_static"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+
+    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    dash_route = mcp.routes[("/web-dashboard", ("GET",))]
+
+    with patch("pulse.server.web_server._build_dashboard_response",
+               side_effect=RuntimeError("web dash fail")):
+        response = run(dash_route(MagicMock()))
+
+    assert response.status_code == 500
+    body = json.loads(response.body)
+    assert body["status"] == "error"
+    assert "web dash fail" in body["error"]
+
+
+def test_api_dashboard_json_error(tmp_path):
+    """api/dashboard.json returns 500 when _build_dashboard_response raises."""
+    from pulse.server.web_server import register_http_routes
+
+    mcp = FakeMCP()
+    static_dir = tmp_path / "server_static"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+
+    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    api_route = mcp.routes[("/api/dashboard.json", ("GET",))]
+
+    with patch("pulse.server.web_server._build_dashboard_response",
+               side_effect=RuntimeError("dashboard fail")):
+        response = run(api_route(MagicMock()))
+
+    assert response.status_code == 500
+    body = json.loads(response.body)
+    assert body["status"] == "error"
+    assert "dashboard fail" in body["error"]
+
+
 # ===========================================================================
 # _json_status_response
 # ===========================================================================

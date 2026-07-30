@@ -148,14 +148,14 @@ cmd_help() {
 cmd_stdio() {
     cd "$SCRIPT_DIR" || exit 1
     _ensure_venv
-    exec python3 -u hexstrike_mcp.py "$@"
+    exec python3 -u -m pulse.server.mcp_entry "$@"
 }
 
 cmd_bridge() {
     # stdio→HTTP bridge — requires HTTP server to be running
     cd "$SCRIPT_DIR" || exit 1
     _ensure_venv
-    exec python3 -u pulse-bridge.py "$@"
+    exec python3 -u -m pulse.server.bridge "$@"
 }
 
 cmd_foreground() {
@@ -163,7 +163,7 @@ cmd_foreground() {
     _ensure_venv
     echo "🔵 Pulse HTTP server — foreground (Ctrl+C to stop)"
     echo ""
-    exec python3 hexstrike_mcp.py --transport http --host "$HOST" --port "$PORT" "$@"
+    exec python3 -m pulse.server.mcp_entry --transport http --host "$HOST" --port "$PORT" "$@"
 }
 
 cmd_background() {
@@ -173,7 +173,7 @@ cmd_background() {
     # Build args: always add HTTP transport unless user overrides
     local args="--transport http --host $HOST --port $PORT $*"
 
-    nohup python3 hexstrike_mcp.py $args >> hexstrike.log 2>&1 &
+    nohup python3 -m pulse.server.mcp_entry $args >> hexstrike.log 2>&1 &
     local pid=$!
     echo "$pid" > "$PIDFILE"
 
