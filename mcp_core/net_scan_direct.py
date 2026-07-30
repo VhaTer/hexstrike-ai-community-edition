@@ -16,7 +16,7 @@ Usage:
 from typing import Any, Dict
 
 from server_core.command_executor import execute_command
-from mcp_core._helpers import require
+from mcp_core._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +25,9 @@ from mcp_core._helpers import require
 
 def _nmap(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 
@@ -43,6 +46,9 @@ def _nmap(data: dict) -> dict:
 
 def _nmap_advanced(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 
@@ -83,6 +89,9 @@ def _masscan(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
+    err = reject_shell_metachars(data, "target")
+    if err:
+        return err
 
     target          = data["target"].strip()
     ports           = data.get("ports", "1-65535")
@@ -105,6 +114,9 @@ def _masscan(data: dict) -> dict:
 
 def _rustscan(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target")
     if err:
         return err
 
@@ -130,6 +142,9 @@ def _arp_scan(data: dict) -> dict:
 
     if not target and not local_network:
         return {"success": False, "error": "target or local_network flag is required"}
+    err = reject_shell_metachars(data, "target", "interface")
+    if err:
+        return err
 
     interface       = data.get("interface", "")
     timeout         = data.get("timeout", 500)

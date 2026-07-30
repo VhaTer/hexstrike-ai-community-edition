@@ -16,6 +16,7 @@ import base64
 import json
 import logging
 import os
+import shlex
 import sqlite3
 import tempfile
 import time
@@ -203,9 +204,9 @@ def _libc(data: dict) -> dict:
         return {"success": False, "error": f"Invalid action: {action}"}
 
     base = "cd /opt/libc-database 2>/dev/null || cd ~/libc-database 2>/dev/null"
-    if action == "find":       command = f"{base} && ./find {symbols}"
-    elif action == "dump":     command = f"{base} && ./dump {libc_id}"
-    else:                      command = f"{base} && ./download {libc_id}"
+    if action == "find":       command = f"{base} && ./find {shlex.quote(symbols)}"
+    elif action == "dump":     command = f"{base} && ./dump {shlex.quote(libc_id)}"
+    else:                      command = f"{base} && ./download {shlex.quote(libc_id)}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -250,7 +251,7 @@ def _autopsy(data: dict) -> dict:
     image_path      = data["image_path"].strip()
     case_name       = data.get("case_name", "hexstrike_case")
     additional_args = data.get("additional_args", "")
-    command = f"autopsyingest --case {case_name} {image_path}"
+    command = f"autopsyingest --case {shlex.quote(case_name)} {shlex.quote(image_path)}"
     if additional_args: command += f" {additional_args}"
     command += " 2>/dev/null || autopsy --nogui 2>/dev/null || echo 'Autopsy launched'"
     return execute_command(command)
@@ -520,8 +521,9 @@ def _anew(data: dict) -> dict:
     input_data      = data["input_data"]
     output_file     = data.get("output_file", "")
     additional_args = data.get("additional_args", "")
-    if output_file: command = f"echo '{input_data}' | anew {output_file}"
-    else:           command = f"echo '{input_data}' | anew"
+    quoted_input = shlex.quote(input_data)
+    if output_file: command = f"echo {quoted_input} | anew {output_file}"
+    else:           command = f"echo {quoted_input} | anew"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -559,7 +561,7 @@ def _qsreplace(data: dict) -> dict:
     replacement     = data.get("replacement", "FUZZ")
     additional_args = data.get("additional_args", "")
     if not urls: return {"success": False, "error": "urls is required"}
-    command = f"echo '{urls}' | qsreplace {replacement}"
+    command = f"echo {shlex.quote(urls)} | qsreplace {replacement}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -570,7 +572,7 @@ def _uro(data: dict) -> dict:
     blacklist       = data.get("blacklist", "")
     additional_args = data.get("additional_args", "")
     if not urls: return {"success": False, "error": "urls is required"}
-    command = f"echo '{urls}' | uro"
+    command = f"echo {shlex.quote(urls)} | uro"
     if whitelist:       command += f" -w {whitelist}"
     if blacklist:       command += f" -b {blacklist}"
     if additional_args: command += f" {additional_args}"

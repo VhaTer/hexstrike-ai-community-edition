@@ -4,6 +4,7 @@ mcp_core/smb_enum_direct.py
 Phase 2 — Direct execution layer for smb_enum tools.
 """
 
+import shlex
 from typing import Any, Dict
 from server_core.command_executor import execute_command
 from mcp_core._helpers import require
@@ -102,7 +103,7 @@ def _rpcclient(data: dict) -> dict:
     if domain: auth += f" -W {domain}"
 
     command_sequence = commands.replace(";", "\n")
-    command = f"echo -e '{command_sequence}' | rpcclient {auth} {target}"
+    command = f"echo -e {shlex.quote(command_sequence)} | rpcclient {auth} {target}"
     if additional_args: command += f" {additional_args}"
 
     return execute_command(command)
