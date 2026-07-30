@@ -22,7 +22,7 @@ pip install -r requirements.txt
 **Prerequisites:** Linux (Kali/Debian/Ubuntu), Python 3.11+. Security tools (`nmap`, `whatweb`, `nuclei`, `nikto`, `gobuster`, `sqlmap`, …) autodetected at runtime.
 
 ```bash
-python3 -m pulse.server.cli validate        # check tool availability
+python3 hexstrike.py validate        # check tool availability
 ```
 
 ---
@@ -75,9 +75,22 @@ All clients share one server — no lock conflicts, no duplicate tools.
 
 ### Claude Code (terminal)
 
+Server mode (MCP HTTP) — via CLI:
+
 ```bash
-python3 -m pulse.server.mcp_entry --transport http --host 127.0.0.1 --port 8888
+python3 hexstrike.py serve
+# → http://127.0.0.1:8888/mcp
 ```
+
+Or via the launcher:
+
+```bash
+./hexstrike-pulse --foreground
+```
+
+### Any MCP client (alternative)
+
+Point your client to `http://localhost:8888/mcp` with type `streamable-http`.
 
 ---
 
@@ -104,10 +117,10 @@ Open `http://127.0.0.1:8888/dashboard` while scans run. 10 panels across 3 tabs:
 ### Execute
 
 ```bash
-python3 -m pulse.server.cli scan nmap scanme.nmap.org
-python3 -m pulse.server.cli scan whatweb http://example.com
-python3 -m pulse.server.cli scan nuclei http://example.com -p severity=critical
-python3 -m pulse.server.cli tools
+python3 hexstrike.py scan nmap scanme.nmap.org
+python3 hexstrike.py scan whatweb http://example.com
+python3 hexstrike.py scan nuclei http://example.com -p severity=critical
+python3 hexstrike.py tools
 ```
 
 ---
