@@ -1,0 +1,872 @@
+"""
+pulse.tools/misc_direct.py
+
+Phase 2 — Direct execution layer for miscellaneous tools.
+Covers: gadget_search, memory_forensics, binary_debug, db_query, api_scan,
+        binary_analysis.
+
+Usage:
+    import pulse.tools.misc_direct as _misc_direct
+    result = await loop.run_in_executor(
+        None, lambda: _misc_direct.misc_exec("volatility", data)
+    )
+"""
+
+import base64
+import json
+import logging
+import os
+import shlex
+import sqlite3
+import tempfile
+import time
+from typing import Any, Dict
+
+import pymysql
+
+from pulse.infrastructure.command_executor import execute_command
+from pulse.tools._helpers import require
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# gadget_search/
+# ---------------------------------------------------------------------------
+
+def _ropgadget(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    gadget_type     = data.get("gadget_type", "")
+    additional_args = data.get("additional_args", "")
+    command = f"ROPgadget --binary {binary}"
+    if gadget_type:     command += f" --only '{gadget_type}'"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _ropper(data: dict) -> dict:
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    search          = data.get("search", "")
+    arch            = data.get("arch", "")
+    additional_args = data.get("additional_args", "")
+    command = f"ropper --file {binary}"
+    if search:          command += f" --search '{search}'"
+    if arch:            command += f" --arch {arch}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _one_gadget(data: dict) -> dict:
+    # Normalize: registry declares "libc_path" but handler uses "libc"
+    if "libc" not in data and "libc_path" in data:
+        data["libc"] = data["libc_path"]
+    err = require(data, "libc")
+    if err: return err
+    libc            = data["libc"].strip()
+    level           = data.get("level", 0)
+    additional_args = data.get("additional_args", "")
+    command = f"one_gadget {libc}"
+    if level:           command += f" -l {level}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+# ---------------------------------------------------------------------------
+# memory_forensics/
+# ---------------------------------------------------------------------------
+
+def _volatility(data: dict) -> dict:
+    memory_file = data.get("memory_file", "").strip()
+    plugin      = data.get("plugin", "").strip()
+    if not memory_file: return {"success": False, "error": "memory_file is required"}
+    if not plugin:      return {"success": False, "error": "plugin is required"}
+    profile         = data.get("profile", "")
+    additional_args = data.get("additional_args", "")
+    command = f"volatility -f {memory_file}"
+    if profile: command += f" --profile={profile}"
+    command += f" {plugin}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _volatility3(data: dict) -> dict:
+    memory_file = data.get("memory_file", "").strip()
+    plugin      = data.get("plugin", "").strip()
+    if not memory_file: return {"success": False, "error": "memory_file is required"}
+    if not plugin:      return {"success": False, "error": "plugin is required"}
+    output_file     = data.get("output_file", "")
+    additional_args = data.get("additional_args", "")
+    command = f"vol -f {memory_file} {plugin}"
+    if output_file:     command += f" -o {output_file}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+# ---------------------------------------------------------------------------
+# binary_debug/
+# ---------------------------------------------------------------------------
+
+def _gdb(data: dict) -> dict:
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    commands        = data.get("commands", "")
+    script_file     = data.get("script_file", "")
+    additional_args = data.get("additional_args", "")
+    command = f"gdb {binary}"
+    if script_file: command += f" -x {script_file}"
+    if commands:
+        with open("/tmp/gdb_commands.txt", "w") as f: f.write(commands)
+        command += " -x /tmp/gdb_commands.txt"
+    if additional_args: command += f" {additional_args}"
+    command += " -batch"
+    result = execute_command(command)
+    if commands:
+        try: os.remove("/tmp/gdb_commands.txt")
+        except Exception:
+            logger.debug("Failed to remove gdb_commands.txt", exc_info=True)
+    return result
+
+
+def _radare2(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    commands        = data.get("commands", "")
+    additional_args = data.get("additional_args", "")
+    if commands:
+        with open("/tmp/r2_commands.txt", "w") as f: f.write(commands)
+        command = f"r2 -i /tmp/r2_commands.txt -q {binary}"
+    else:
+        command = f"r2 -q {binary}"
+    if additional_args: command += f" {additional_args}"
+    result = execute_command(command)
+    if commands:
+        try: os.remove("/tmp/r2_commands.txt")
+        except Exception:
+            logger.debug("Failed to remove r2_commands.txt", exc_info=True)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# binary_analysis/
+# ---------------------------------------------------------------------------
+
+def _strings(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "file_path"
+    if "file_path" not in data and "file" in data:
+        data["file_path"] = data["file"]
+    err = require(data, "file_path")
+    if err: return err
+    file_path       = data["file_path"].strip()
+    min_len         = data.get("min_len", 4)
+    additional_args = data.get("additional_args", "")
+    command = f"strings -n {min_len}"
+    if additional_args: command += f" {additional_args}"
+    command += f" {file_path}"
+    return execute_command(command)
+
+
+def _objdump(data: dict) -> dict:
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    disassemble     = data.get("disassemble", True)
+    additional_args = data.get("additional_args", "")
+    command = "objdump"
+    command += " -d" if disassemble else " -x"
+    if additional_args: command += f" {additional_args}"
+    command += f" {binary}"
+    return execute_command(command)
+
+
+def _libc(data: dict) -> dict:
+    action          = data.get("action", "find")
+    symbols         = data.get("symbols", "")
+    libc_id         = data.get("libc_id", "")
+    additional_args = data.get("additional_args", "")
+
+    if action == "find" and not symbols:
+        return {"success": False, "error": "symbols required for find action"}
+    if action in ["dump", "download"] and not libc_id:
+        return {"success": False, "error": "libc_id required for dump/download"}
+    if action not in ["find", "dump", "download"]:
+        return {"success": False, "error": f"Invalid action: {action}"}
+
+    base = "cd /opt/libc-database 2>/dev/null || cd ~/libc-database 2>/dev/null"
+    if action == "find":       command = f"{base} && ./find {shlex.quote(symbols)}"
+    elif action == "dump":     command = f"{base} && ./dump {shlex.quote(libc_id)}"
+    else:                      command = f"{base} && ./download {shlex.quote(libc_id)}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _xxd(data: dict) -> dict:
+    err = require(data, "file_path")
+    if err: return err
+    file_path       = data["file_path"].strip()
+    offset          = data.get("offset", "0")
+    length          = data.get("length", "")
+    additional_args = data.get("additional_args", "")
+    command = f"xxd -s {offset}"
+    if length:          command += f" -l {length}"
+    if additional_args: command += f" {additional_args}"
+    command += f" {file_path}"
+    return execute_command(command)
+
+
+def _file_type(data: dict) -> dict:
+    if "file_path" not in data and "file" in data:
+        data["file_path"] = data["file"]
+    err = require(data, "file_path")
+    if err: return err
+    file_path = data["file_path"].strip()
+    return execute_command(f"file {file_path}")
+
+
+def _checksec(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
+    err = require(data, "binary")
+    if err: return err
+    binary = data["binary"].strip()
+    return execute_command(f"checksec --file={binary}")
+
+
+def _autopsy(data: dict) -> dict:
+    # Normalize: registry declares "image_path" mandatory
+    err = require(data, "image_path")
+    if err: return err
+    image_path      = data["image_path"].strip()
+    case_name       = data.get("case_name", "hexstrike_case")
+    additional_args = data.get("additional_args", "")
+    command = f"autopsyingest --case {shlex.quote(case_name)} {shlex.quote(image_path)}"
+    if additional_args: command += f" {additional_args}"
+    command += " 2>/dev/null || autopsy --nogui 2>/dev/null || echo 'Autopsy launched'"
+    return execute_command(command)
+
+
+def _angr(data: dict) -> dict:
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    script_content  = data.get("script_content", "")
+    find_address    = data.get("find_address", "")
+    avoid_addresses = data.get("avoid_addresses", "")
+    analysis_type   = data.get("analysis_type", "symbolic")
+    additional_args = data.get("additional_args", "")
+
+    if script_content:
+        script_file = "/tmp/angr_script.py"
+        with open(script_file, "w") as f: f.write(script_content)
+        command = f"python3 {script_file}"
+    else:
+        command = f"python3 -c \"import angr; p=angr.Project('{binary}', auto_load_libs=False); print(p.arch)\""
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _ghidra(data: dict) -> dict:
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    project_dir     = data.get("project_dir", "/tmp/ghidra_projects")
+    project_name    = data.get("project_name", "hexstrike_analysis")
+    script          = data.get("script", "")
+    additional_args = data.get("additional_args", "")
+
+    command = f"analyzeHeadless {project_dir} {project_name} -import {binary}"
+    if script:          command += f" -postScript {script}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _binwalk(data: dict) -> dict:
+    # Normalize: registry declares "file" but handler uses "binary"
+    if "binary" not in data and "file" in data:
+        data["binary"] = data["file"]
+    err = require(data, "binary")
+    if err: return err
+    binary          = data["binary"].strip()
+    extract         = data.get("extract", False)
+    additional_args = data.get("additional_args", "")
+    command = f"binwalk {binary}"
+    if extract:         command += " -e"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+# ---------------------------------------------------------------------------
+# db_query/
+# ---------------------------------------------------------------------------
+
+def _mysql(data: dict) -> dict:
+    host = data.get("host"); user = data.get("user")
+    password = data.get("password", ""); database = data.get("database"); query = data.get("query")
+    if not all([host, user, database, query]):
+        return {"success": False, "error": "host, user, database, query are required"}
+    try:
+        conn = pymysql.connect(host=host, user=user, password=password,
+                               database=database, cursorclass=pymysql.cursors.DictCursor)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            result = cursor.fetchall()
+        conn.close()
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _sqlite(data: dict) -> dict:
+    db_path = data.get("db_path"); query = data.get("query")
+    if not db_path or not query:
+        return {"success": False, "error": "db_path and query are required"}
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor(); cur.execute(query)
+        result = cur.fetchall()
+        columns = [desc[0] for desc in cur.description] if cur.description else []
+        cur.close(); conn.close()
+        return {"success": True, "columns": columns, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# api_scan/
+# ---------------------------------------------------------------------------
+
+def _api_schema_analyzer(data: dict) -> dict:
+    schema_url = data.get("schema_url", "").strip()
+    schema_type = data.get("schema_type", "openapi")
+    if not schema_url: return {"success": False, "error": "schema_url is required (use http://host[:port])"}
+
+    result = execute_command(f"curl -s '{schema_url}'", use_cache=True)
+    if not result.get("success"): return {"success": False, "error": "Failed to fetch API schema"}
+
+    schema_content = result.get("stdout", "")
+    analysis = {"schema_url": schema_url, "schema_type": schema_type,
+                "endpoints_found": [], "security_issues": [], "recommendations": []}
+    try:
+        schema_data = json.loads(schema_content)
+        if str(schema_type).lower() in ["openapi", "swagger"]:
+            for path, methods in schema_data.get("paths", {}).items():
+                for method, details in methods.items():
+                    if isinstance(details, dict):
+                        ep = {"path": path, "method": method.upper(),
+                              "summary": details.get("summary", ""),
+                              "parameters": details.get("parameters", []),
+                              "security": details.get("security", [])}
+                        analysis["endpoints_found"].append(ep)
+                        if not ep["security"]:
+                            analysis["security_issues"].append({
+                                "endpoint": f"{method.upper()} {path}",
+                                "issue": "no_authentication", "severity": "MEDIUM",
+                                "description": "Endpoint has no authentication requirements"})
+                        for param in ep["parameters"]:
+                            pname = param.get("name", "").lower()
+                            if any(s in pname for s in ["password", "token", "key", "secret"]):
+                                analysis["security_issues"].append({
+                                    "endpoint": f"{method.upper()} {path}",
+                                    "issue": "sensitive_parameter", "severity": "HIGH",
+                                    "description": f"Sensitive parameter: {pname}"})
+        if analysis["security_issues"]:
+            analysis["recommendations"] = ["Implement authentication", "Use HTTPS", "Validate inputs", "Rate limiting"]
+    except json.JSONDecodeError:
+        analysis["security_issues"].append({"endpoint": "schema", "issue": "invalid_json",
+                                            "severity": "HIGH", "description": "Not valid JSON"})
+    return {"success": True, "schema_analysis_results": analysis}
+
+
+def _graphql_scanner(data: dict) -> dict:
+    endpoint = data.get("endpoint", "").strip()
+    if not endpoint: return {"success": False, "error": "endpoint is required"}
+    introspection = data.get("introspection", True)
+    query_depth   = data.get("query_depth", 10)
+    results = {"endpoint": endpoint, "tests_performed": [], "vulnerabilities": [], "recommendations": []}
+
+    if introspection:
+        q = '{ __schema { types { name fields { name type { name } } } } }'
+        r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{q}\"}}' '{endpoint}'", use_cache=False)
+        results["tests_performed"].append("introspection_query")
+        if "data" in r.get("stdout", ""):
+            results["vulnerabilities"].append({"type": "introspection_enabled", "severity": "MEDIUM",
+                                               "description": "GraphQL introspection enabled"})
+
+    deep = "{ " * query_depth + "field" + " }" * query_depth
+    r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{deep}\"}}' {endpoint}", use_cache=False)
+    results["tests_performed"].append("query_depth_analysis")
+    if "error" not in r.get("stdout", "").lower():
+        results["vulnerabilities"].append({"type": "no_query_depth_limit", "severity": "HIGH",
+                                           "description": f"No depth limit (tested: {query_depth})"})
+    if results["vulnerabilities"]:
+        results["recommendations"] = ["Disable introspection in prod", "Implement depth limiting", "Rate limit batch queries"]
+    return {"success": True, "graphql_scan_results": results}
+
+
+def _jwt_analyzer(data: dict) -> dict:
+    jwt_token  = data.get("jwt_token", "").strip()
+    target_url = data.get("target_url", "")
+    if not jwt_token: return {"success": False, "error": "jwt_token is required"}
+
+    results = {"token": jwt_token[:50] + "..." if len(jwt_token) > 50 else jwt_token,
+               "vulnerabilities": [], "token_info": {}, "attack_vectors": []}
+    try:
+        parts = jwt_token.split('.')
+        if len(parts) >= 2:
+            header  = json.loads(base64.b64decode(parts[0] + '=' * (4 - len(parts[0]) % 4)))
+            payload = json.loads(base64.b64decode(parts[1] + '=' * (4 - len(parts[1]) % 4)))
+            alg = header.get("alg", "").lower()
+            results["token_info"] = {"header": header, "payload": payload, "algorithm": alg}
+            if alg == "none":
+                results["vulnerabilities"].append({"type": "none_algorithm", "severity": "CRITICAL",
+                                                   "description": "JWT uses 'none' — no signature verification"})
+            if alg in ["hs256", "hs384", "hs512"]:
+                results["attack_vectors"].append("hmac_key_confusion")
+                results["vulnerabilities"].append({"type": "hmac_algorithm", "severity": "MEDIUM",
+                                                   "description": "HMAC algorithm — key confusion attack possible"})
+            if not payload.get("exp"):
+                results["vulnerabilities"].append({"type": "no_expiration", "severity": "HIGH",
+                                                   "description": "JWT has no expiration"})
+    except Exception as e:
+        results["vulnerabilities"].append({"type": "malformed_token", "severity": "HIGH",
+                                           "description": f"Decode failed: {str(e)}"})
+    if target_url:
+        parts = jwt_token.split('.')
+        if len(parts) >= 2:
+            nh = base64.b64encode(b'{"alg":"none","typ":"JWT"}').decode().rstrip('=')
+            none_tok = f"{nh}.{parts[1]}."
+            r = execute_command(f"curl -s -H 'Authorization: Bearer {none_tok}' '{target_url}'", use_cache=False)
+            if "200" in r.get("stdout", "") or "success" in r.get("stdout", "").lower():
+                results["vulnerabilities"].append({"type": "none_algorithm_accepted", "severity": "CRITICAL",
+                                                   "description": "Server accepts 'none' algorithm tokens"})
+    return {"success": True, "jwt_analysis_results": results}
+
+
+
+# ---------------------------------------------------------------------------
+# file_carving, runtime_monitor, stego_analysis, data_processing
+# metadata_extract, crypto_attack, param_fuzz, url_filter
+# credential_harvest, api_fuzz
+# ---------------------------------------------------------------------------
+
+def _foremost(data: dict) -> dict:
+    err = require(data, "input_file")
+    if err: return err
+    from pathlib import Path
+    input_file      = data["input_file"].strip()
+    output_dir      = data.get("output_dir", "/tmp/foremost_output")
+    file_types      = data.get("file_types", "")
+    additional_args = data.get("additional_args", "")
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    command = f"foremost -o {output_dir}"
+    if file_types:      command += f" -t {file_types}"
+    if additional_args: command += f" {additional_args}"
+    command += f" -i {input_file}"
+    return execute_command(command)
+
+
+def _falco(data: dict) -> dict:
+    config_file     = data.get("config_file", "/etc/falco/falco.yaml")
+    rules_file      = data.get("rules_file", "")
+    output_format   = data.get("output_format", "json")
+    duration        = data.get("duration", 60)
+    additional_args = data.get("additional_args", "")
+    command = f"timeout {duration} falco"
+    if config_file:     command += f" --config {config_file}"
+    if rules_file:      command += f" --rules {rules_file}"
+    if output_format == "json": command += " --json"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _steghide(data: dict) -> dict:
+    err = require(data, "cover_file")
+    if err: return err
+    action          = data.get("action", "extract")
+    cover_file      = data["cover_file"].strip()
+    embed_file      = data.get("embed_file", "")
+    passphrase      = data.get("passphrase", "")
+    output_file     = data.get("output_file", "")
+    additional_args = data.get("additional_args", "")
+    if action == "extract":
+        command = f"steghide extract -sf {cover_file}"
+        if output_file: command += f" -xf {output_file}"
+    elif action == "embed":
+        if not embed_file: return {"success": False, "error": "embed_file required"}
+        command = f"steghide embed -cf {cover_file} -ef {embed_file}"
+    elif action == "info":
+        command = f"steghide info {cover_file}"
+    else:
+        return {"success": False, "error": f"Invalid action: {action}"}
+    if passphrase:      command += f" -p '{passphrase}'"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _anew(data: dict) -> dict:
+    err = require(data, "input_data")
+    if err: return err
+    input_data      = data["input_data"]
+    output_file     = data.get("output_file", "")
+    additional_args = data.get("additional_args", "")
+    quoted_input = shlex.quote(input_data)
+    if output_file: command = f"echo {quoted_input} | anew {output_file}"
+    else:           command = f"echo {quoted_input} | anew"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _exiftool(data: dict) -> dict:
+    err = require(data, "file_path")
+    if err: return err
+    file_path       = data["file_path"].strip()
+    output_format   = data.get("output_format", "")
+    tags            = data.get("tags", "")
+    additional_args = data.get("additional_args", "")
+    command = "exiftool"
+    if output_format:   command += f" -{output_format}"
+    if tags:            command += f" -{tags}"
+    if additional_args: command += f" {additional_args}"
+    command += f" {file_path}"
+    return execute_command(command)
+
+
+def _hashpump(data: dict) -> dict:
+    signature   = data.get("signature", "")
+    orig_data   = data.get("data", "")
+    key_length  = data.get("key_length", "")
+    append_data = data.get("append_data", "")
+    additional_args = data.get("additional_args", "")
+    if not all([signature, orig_data, key_length, append_data]):
+        return {"success": False, "error": "signature, data, key_length, append_data required"}
+    command = f"hashpump -s {signature} -d '{orig_data}' -k {key_length} -a '{append_data}'"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _qsreplace(data: dict) -> dict:
+    urls            = data.get("urls", "")
+    replacement     = data.get("replacement", "FUZZ")
+    additional_args = data.get("additional_args", "")
+    if not urls: return {"success": False, "error": "urls is required"}
+    command = f"echo {shlex.quote(urls)} | qsreplace {replacement}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _uro(data: dict) -> dict:
+    urls            = data.get("urls", "")
+    whitelist       = data.get("whitelist", "")
+    blacklist       = data.get("blacklist", "")
+    additional_args = data.get("additional_args", "")
+    if not urls: return {"success": False, "error": "urls is required"}
+    command = f"echo {shlex.quote(urls)} | uro"
+    if whitelist:       command += f" -w {whitelist}"
+    if blacklist:       command += f" -b {blacklist}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _responder(data: dict) -> dict:
+    interface       = data.get("interface", "eth0")
+    analyze         = data.get("analyze", False)
+    wpad            = data.get("wpad", True)
+    force_wpad      = data.get("force_wpad_auth", False)
+    fingerprint     = data.get("fingerprint", False)
+    duration        = data.get("duration", 300)
+    additional_args = data.get("additional_args", "")
+    command = f"timeout {duration} responder -I {interface}"
+    if analyze:         command += " -A"
+    if wpad:            command += " -w"
+    if force_wpad:      command += " -F"
+    if fingerprint:     command += " -f"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _api_fuzzer(data: dict) -> dict:
+    err = require(data, "base_url")
+    if err: return err
+    base_url        = data["base_url"].strip()
+    endpoints       = data.get("endpoints", [])
+    methods         = data.get("methods", ["GET", "POST"])
+    wordlist        = data.get("wordlist", "/usr/share/wordlists/api/api-endpoints.txt")
+    additional_args = data.get("additional_args", "")
+    # Use ffuf for API fuzzing
+    command = f"ffuf -u {base_url}/FUZZ -w {wordlist}"
+    if isinstance(methods, list): methods_str = ",".join(methods)
+    else: methods_str = str(methods)
+    command += f" -X {methods_str.split(',')[0]}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command)
+
+
+def _bbot(data: dict) -> dict:
+    target      = data.get("target", "").strip()
+    parameters  = data.get("parameters", {})
+    if not target: return {"success": False, "error": "target is required (use an IP or hostname)"}
+    flags = ""
+    for k, v in parameters.items():
+        flags += f" -{k} {v}"
+    command = f"bbot -t {target}{flags}"
+    return execute_command(command)
+
+
+def _nuclei(data: dict) -> dict:
+    target          = data.get("target", "").strip()
+    if not target: return {"success": False, "error": "target is required (use an IP or hostname, or http://host[:port] for URL)"}
+    severity        = data.get("severity", "")
+    tags            = data.get("tags", "")
+    template        = data.get("template", "")
+    ports           = data.get("ports", "")
+    additional_args = data.get("additional_args", "")
+    timeout         = int(data.get("timeout", 300))  # default 5min
+
+    # When no filters are specified, default to critical CVE templates to
+    # avoid loading all ~12k templates (~2-3 min scan).  Users can override
+    # with severity='' and tags='' for a full scan.
+    if not severity and not tags and not template:
+        severity = "critical"
+        tags     = "cve"
+
+    command = f"nuclei -u {target} -duc"
+    if severity:        command += f" -severity {severity}"
+    if tags:            command += f" -tags {tags}"
+    if template:        command += f" -t {template}"
+    if ports:           command += f" -p {ports}"
+    if additional_args: command += f" {additional_args}"
+    return execute_command(command, timeout=timeout)
+
+def _bulk_extractor(data: dict) -> dict:
+    err = require(data, "input_file")
+    if err: return err
+    input_file  = data["input_file"].strip()
+    output_dir  = data.get("output_dir", "/tmp/bulk_extractor_output")
+    additional  = data.get("additional_args", "")
+    command = f"bulk_extractor -o {output_dir} {input_file}"
+    if additional: command += f" {additional}"
+    return execute_command(command)
+
+
+def _scalpel(data: dict) -> dict:
+    err = require(data, "input_file")
+    if err: return err
+    input_file  = data["input_file"].strip()
+    output_dir  = data.get("output_dir", "/tmp/scalpel_output")
+    config_file = data.get("config", "")
+    command = f"scalpel -o {output_dir}"
+    if config_file: command += f" -c {config_file}"
+    command += f" {input_file}"
+    return execute_command(command)
+
+
+def _http_request(data: dict) -> dict:
+    """Generic HTTP request (wraps curl). Returns structured response."""
+    url = data.get("url", "")
+    if not url:
+        return {"success": False, "error": "url is required"}
+
+    method = data.get("method", "GET").upper()
+    post_data = data.get("data", "")
+    cookie = data.get("cookie", "")
+    headers_raw = data.get("headers", "")
+    follow = data.get("follow_redirects", True)
+    max_body = data.get("max_body_size", 5000)
+    additional_args = data.get("additional_args", "")
+    timeout = int(data.get("timeout", 60))
+
+    hf = tempfile.NamedTemporaryFile(delete=False, suffix=".hdr")
+    hf_path = hf.name; hf.close()
+    bf = tempfile.NamedTemporaryFile(delete=False, suffix=".bdy")
+    bf_path = bf.name; bf.close()
+    try:
+        cmd = "curl -s -L" if follow else "curl -s"
+        cmd += f" -X {method} -D '{hf_path}' -o '{bf_path}' --write-out \"%{{http_code}}\""
+        if cookie:
+            cmd += f" --cookie '{cookie}'"
+        for h in headers_raw.splitlines():
+            h = h.strip()
+            if h:
+                cmd += f" -H '{h}'"
+        if post_data:
+            cmd += f" --data-raw '{post_data}'"
+        cmd += f" '{url}'"
+        if additional_args:
+            cmd += f" {additional_args}"
+
+        result = execute_command(cmd, timeout=timeout)
+        out = result.get("stdout") or ""
+        status_code = int(out.strip()) if out.strip().isdigit() else 0
+
+        hdr_text, body, body_hex = "", "", ""
+        try:
+            with open(hf_path) as f:
+                hdr_text = f.read()
+            with open(bf_path, "rb") as f:
+                raw = f.read()
+            try:
+                body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                body = raw.decode("utf-8", errors="replace")
+                body_hex = raw.hex()
+        except Exception:
+            logger.warning("Failed to read response body/headers from temp files", exc_info=True)
+
+        cookies = {}
+        for line in hdr_text.splitlines():
+            if line.lower().startswith("set-cookie:"):
+                val = line.split(":", 1)[1].strip()
+                eq = val.find("=")
+                semi = val.find(";") if eq > 0 else -1
+                n = val[:eq].strip() if eq > 0 else ""
+                v = val[eq + 1:semi] if semi > eq else (val[eq + 1:] if eq > 0 else "")
+                if n:
+                    cookies[n] = v
+
+        parsed_hdrs = {}
+        for line in hdr_text.splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                parsed_hdrs[k.strip()] = v.strip()
+
+        truncated = len(body) > max_body if body else len(body_hex) > max_body * 2
+        body_truncated = body[:max_body]
+        output_lines = [f"HTTP {status_code}"]
+        for k, v in parsed_hdrs.items():
+            output_lines.append(f"{k}: {v}")
+        if cookies:
+            output_lines.append(f"Cookies: {json.dumps(cookies)}")
+        output_lines.append("")
+        output_lines.append(body_truncated)
+        return {
+            "success": status_code > 0,
+            "status_code": status_code,
+            "ok": 200 <= status_code < 300,
+            "headers": parsed_hdrs,
+            "cookies": cookies,
+            "body": body_truncated,
+            "body_hex": body_hex[:max_body * 2] if body_hex else "",
+            "body_truncated": truncated,
+            "output": "\n".join(output_lines),
+        }
+    except Exception as e:
+        logger.warning("http_request failed", exc_info=True)
+        return {"success": False, "error": str(e)}
+    finally:
+        for p in (hf_path, bf_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                logger.debug("Failed to remove temp file %s", p, exc_info=True)
+
+
+def _strace(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    cmd = data.get("additional_args", "")
+    return execute_command(f"strace {cmd} {binary}")
+
+
+def _ltrace(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    cmd = data.get("additional_args", "")
+    return execute_command(f"ltrace {cmd} {binary}")
+
+
+def _gdb_peda(data: dict) -> dict:
+    binary = data.get("binary") or data.get("target") or data.get("file_path", "")
+    if not binary:
+        return {"success": False, "error": "binary, target, or file_path required"}
+    commands = data.get("commands", "")
+    script = data.get("script_file", "")
+    cmd = f"gdb {binary}"
+    if script:
+        cmd += f" -x {script}"
+    if commands:
+        import tempfile, os
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".gdb", delete=False)
+        f.write(commands)
+        f.close()
+        cmd += f" -x {f.name}"
+    return execute_command(cmd)
+
+
+# ---------------------------------------------------------------------------
+# Dispatch table
+# ---------------------------------------------------------------------------
+
+_HANDLERS = {
+    # gadget_search
+    "ropgadget":           _ropgadget,
+    "ropper":              _ropper,
+    "one_gadget":          _one_gadget,
+    # memory_forensics
+    "volatility":          _volatility,
+    "volatility3":         _volatility3,
+    # binary_debug
+    "gdb":                 _gdb,
+    "gdb-peda":            _gdb_peda,
+    "radare2":             _radare2,
+    # runtime_trace
+    "strace":              _strace,
+    "ltrace":              _ltrace,
+    # binary_analysis
+    "file":                _file_type,
+    "strings":             _strings,
+    "objdump":             _objdump,
+    "libc":                _libc,
+    "xxd":                 _xxd,
+    "checksec":            _checksec,
+    "autopsy":             _autopsy,
+    "angr":                _angr,
+    "ghidra":              _ghidra,
+    "binwalk":             _binwalk,
+    # db_query
+    "mysql":               _mysql,
+    "sqlite":              _sqlite,
+
+    # api_scan
+    "http_request":        _http_request,
+    "curl":                _http_request,
+    "api_schema_analyzer": _api_schema_analyzer,
+    "graphql_scanner":     _graphql_scanner,
+    "jwt_analyzer":        _jwt_analyzer,
+    # file_carving / runtime / stego / data / metadata / crypto / param / url
+    "foremost":            _foremost,
+    "bulk_extractor":      _bulk_extractor,
+    "scalpel":             _scalpel,
+    "falco":               _falco,
+    "steghide":            _steghide,
+    "anew":                _anew,
+    "exiftool":            _exiftool,
+    "hashpump":            _hashpump,
+    "qsreplace":           _qsreplace,
+    "uro":                 _uro,
+    "responder":           _responder,
+    "api_fuzzer":          _api_fuzzer,
+    "bbot":                _bbot,
+    "nuclei":              _nuclei,
+}
+
+
+def misc_exec(tool: str, data: dict) -> dict:
+    """Execute a miscellaneous tool directly"""
+    handler = _HANDLERS.get(tool)
+    if handler is None:
+        return {"success": False, "error": f"Unknown misc tool: '{tool}'"}
+    return handler(data)

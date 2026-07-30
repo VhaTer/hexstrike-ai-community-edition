@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mcp_core import mcp_entry
+from pulse.server import mcp_entry
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ def mock_scan_cache():
 def mock_op_metrics():
     """Patch _op_metrics in the seed function's import path."""
     fake = MagicMock()
-    with patch("server_core.operational_metrics._op_metrics", fake):
+    with patch("pulse.infrastructure.operational_metrics._op_metrics", fake):
         yield fake
 
 
@@ -115,8 +115,8 @@ class TestPrewarmSingletons:
         def sync_start(self_obj):
             self_obj._target()
 
-        with patch("server_core.singletons.get_decision_engine", fake_eng):
-            with patch("server_core.singletons.get_tool_stats_store", fake_store):
+        with patch("pulse.infrastructure.singletons.get_decision_engine", fake_eng):
+            with patch("pulse.infrastructure.singletons.get_tool_stats_store", fake_store):
                 with patch.object(threading.Thread, "start", sync_start):
                     mcp_entry._prewarm_singletons(MagicMock())
 
@@ -133,7 +133,7 @@ class TestPrewarmSingletons:
         def sync_start(self_obj):
             self_obj._target()
 
-        with patch("server_core.singletons.get_decision_engine", fake_eng):
+        with patch("pulse.infrastructure.singletons.get_decision_engine", fake_eng):
             with patch.object(threading.Thread, "start", sync_start):
                 mcp_entry._prewarm_singletons(logger)
 

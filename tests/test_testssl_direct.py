@@ -12,13 +12,13 @@ Strategy:
 import pytest
 from unittest.mock import patch, MagicMock
 
-import mcp_core.testssl_direct as _mod
+import pulse.tools.testssl_direct as _mod
 
 MOCK_OK = {"success": True, "output": "testssl output", "returncode": 0}
 
 
 def run_testssl(data: dict) -> dict:
-    with patch("mcp_core.testssl_direct.execute_command", return_value=MOCK_OK) as mock:
+    with patch("pulse.tools.testssl_direct.execute_command", return_value=MOCK_OK) as mock:
         result = _mod.testssl_exec("testssl", data)
         return result, mock
 

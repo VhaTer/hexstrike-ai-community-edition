@@ -1,11 +1,11 @@
-"""Tests for server_core.dashboard_sections — section registry and orchestration."""
+"""Tests for pulse.infrastructure.dashboard_sections — section registry and orchestration."""
 
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from server_core.dashboard_sections import (
+from pulse.interface.dashboard_sections import (
     SectionConfig,
     build_registry,
     cache_for_target,

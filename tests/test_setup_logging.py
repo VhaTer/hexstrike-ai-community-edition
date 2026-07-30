@@ -1,6 +1,6 @@
 import logging
 import pytest
-from server_core.setup_logging import setup_logging
+from pulse.infrastructure.setup_logging import setup_logging
 
 
 class TestSuppressWerkzeugBanner:

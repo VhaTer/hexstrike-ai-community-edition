@@ -1,4 +1,4 @@
-from server_core.workflows.bugbounty.testing import FileUploadTestingFramework
+from pulse.workflows.bugbounty.testing import FileUploadTestingFramework
 
 
 class TestFileUploadTestingFramework:

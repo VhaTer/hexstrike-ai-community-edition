@@ -1,12 +1,12 @@
-"""Unit tests for mcp_core.hexstrike_client — 100% coverage."""
+"""Unit tests for pulse.server.hexstrike_client — 100% coverage."""
 
 import pytest
 from unittest.mock import patch, MagicMock
 import requests
 import threading
 
-from mcp_core import hexstrike_client
-from mcp_core.hexstrike_client import HexStrikeClient
+from pulse.server import hexstrike_client
+from pulse.server.hexstrike_client import HexStrikeClient
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────

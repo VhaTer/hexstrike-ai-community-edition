@@ -1,6 +1,6 @@
 import logging
 
-from server_core.setup_logging import _SuppressMCPProbeAccess, _SuppressStartupNoise
+from pulse.infrastructure.setup_logging import _SuppressMCPProbeAccess, _SuppressStartupNoise
 
 
 def make_record(message: str, logger_name: str = "test") -> logging.LogRecord:

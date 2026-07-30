@@ -3,10 +3,10 @@ from unittest.mock import patch, MagicMock
 import socket
 import os
 
-from server_core.intelligence.intelligent_decision_engine import (
+from pulse.intelligence.intelligent_decision_engine import (
     IntelligentDecisionEngine,
 )
-from server_core.singletons import get_tool_stats_store
+from pulse.infrastructure.singletons import get_tool_stats_store
 from shared.target_types import TargetType, TechnologyStack
 from shared.target_profile import TargetProfile
 from shared.attack_chain import AttackChain

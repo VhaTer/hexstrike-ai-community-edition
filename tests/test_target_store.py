@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from server_core.target_store import TargetStore
+from pulse.infrastructure.target_store import TargetStore
 
 
 class TestTargetStore:

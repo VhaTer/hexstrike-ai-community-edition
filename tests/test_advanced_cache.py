@@ -4,8 +4,8 @@ import time
 import pytest
 from unittest.mock import patch, MagicMock
 
-from server_core.advanced_cache import AdvancedCache
-from mcp_core.server_setup import _ScanCache, _cache_key_for, _collect_cached_scans
+from pulse.infrastructure.advanced_cache import AdvancedCache
+from pulse.interface.server_setup import _ScanCache, _cache_key_for, _collect_cached_scans
 
 
 # =========================================================================
@@ -455,14 +455,14 @@ class TestCacheKeyFor:
 class TestCollectCachedScans:
     @pytest.fixture(autouse=True)
     def clear_cache(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         _scan_cache.access_times.clear()
         yield
 
     def test_collects_matching(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         _scan_cache.cache["sid1:nmap:10.0.0.1"] = {
             "tool": "nmap", "target": "10.0.0.1", "result": {"success": True},
         }
@@ -482,7 +482,7 @@ class TestCollectCachedScans:
         assert scans == {}
 
     def test_skip_missing_tool_field(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         _scan_cache.cache["sid1:nmap:10.0.0.1"] = {
             "target": "10.0.0.1", "result": {"data": 1},
         }
@@ -490,7 +490,7 @@ class TestCollectCachedScans:
         assert scans == {}
 
     def test_when_result_missing_uses_empty_dict(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         _scan_cache.cache["sid1:nmap:10.0.0.1"] = {
             "tool": "nmap", "target": "10.0.0.1",
         }

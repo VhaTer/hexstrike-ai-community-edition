@@ -1,7 +1,7 @@
 """Test suite for CTF Tool Manager"""
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from server_core.workflows.ctf.toolManager import CTFToolManager
+from pulse.workflows.ctf.toolManager import CTFToolManager
 
 
 class TestCTFToolManager:

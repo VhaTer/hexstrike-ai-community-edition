@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""
+HexStrike AI MCP Server - FastMCP stdio entry point
+
+Enhanced with AI-Powered Intelligence & Automation
+🚀 Bug Bounty | CTF | Red Team | Security Research
+
+Architecture: MCP Client for AI agent communication with HexStrike server
+Framework: FastMCP integration for tool orchestration
+"""
+
+import os
+import sys
+import logging
+from pathlib import Path
+
+# Ensure project root is on sys.path for standalone execution
+_root = Path(__file__).resolve().parent.parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from shared.colored_formatter import ColoredFormatter
+from pulse.server.mcp_entry import run_mcp
+from pulse.server.args import parse_args
+
+# Setup logging (respects HEXSTRIKE_LOG_LEVEL env var)
+_LOG_LEVEL = {
+    "debug": logging.DEBUG, "info": logging.INFO,
+    "warning": logging.WARNING, "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}.get(os.environ.get("HEXSTRIKE_LOG_LEVEL", "").strip().lower(), logging.WARNING)
+
+logging.basicConfig(
+    level=_LOG_LEVEL,
+    format="[%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+
+# Suppress low-level MCP protocol noise (e.g. "Processing request of type ...")
+logging.getLogger("mcp.server.lowlevel.server").setLevel(logging.WARNING)
+# Suppress FastMCP's own "Starting MCP server" banner (redundant with our own startup logs)
+logging.getLogger("fastmcp").setLevel(logging.WARNING)
+
+# Apply colored formatter
+for handler in logging.getLogger().handlers:
+    fmt = ColoredFormatter(
+        "[%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    fmt._stream = getattr(handler, 'stream', None)
+    handler.setFormatter(fmt)
+
+logger = logging.getLogger(__name__)
+
+def main():
+    """Main entry point for the MCP server."""
+    args = parse_args()
+    run_mcp(args, logger)
+
+if __name__ == "__main__":
+    main()

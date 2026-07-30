@@ -1,11 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from server_core.resource_monitor import ResourceMonitor
+from pulse.infrastructure.resource_monitor import ResourceMonitor
 
 
 class TestResourceMonitor:
     def test_get_current_usage(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             mock_psutil.cpu_percent.return_value = 42.0
             mock_psutil.virtual_memory.return_value.percent = 60.0
             mock_psutil.virtual_memory.return_value.available = 8 * 1024**3
@@ -20,7 +20,7 @@ class TestResourceMonitor:
             assert len(rm.usage_history) == 1
 
     def test_get_current_usage_history_limit(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             mock_psutil.cpu_percent.return_value = 10.0
             mock_psutil.virtual_memory.return_value.percent = 50.0
             mock_psutil.virtual_memory.return_value.available = 8 * 1024**3
@@ -36,7 +36,7 @@ class TestResourceMonitor:
             assert len(rm.usage_history) == 2
 
     def test_get_current_usage_exception(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             mock_psutil.cpu_percent.side_effect = RuntimeError("oops")
             rm = ResourceMonitor()
             usage = rm.get_current_usage()
@@ -44,7 +44,7 @@ class TestResourceMonitor:
             assert usage["memory_percent"] == 0
 
     def test_get_process_usage(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             mock_proc = MagicMock()
             mock_proc.cpu_percent.return_value = 5.0
             mock_proc.memory_percent.return_value = 1.0
@@ -59,7 +59,7 @@ class TestResourceMonitor:
             assert info["num_threads"] == 4
 
     def test_get_process_usage_not_found(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             class FakeNoSuchProcess(Exception):
                 pass
             mock_psutil.NoSuchProcess = FakeNoSuchProcess
@@ -70,7 +70,7 @@ class TestResourceMonitor:
             assert info == {}
 
     def test_get_usage_trends(self):
-        with patch("server_core.resource_monitor.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.resource_monitor.psutil") as mock_psutil:
             mock_psutil.cpu_percent.return_value = 30.0
             mock_psutil.virtual_memory.return_value.percent = 50.0
             mock_psutil.virtual_memory.return_value.available = 8 * 1024**3

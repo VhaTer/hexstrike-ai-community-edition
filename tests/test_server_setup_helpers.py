@@ -1,6 +1,6 @@
 import pytest
 
-from mcp_core import server_setup
+from pulse.interface import server_setup
 
 
 def test_normalize_tool_result_passthrough():

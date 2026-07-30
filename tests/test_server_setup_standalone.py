@@ -16,7 +16,7 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(autouse=True)
 def _clear_scan_cache():
-    from mcp_core.server_setup import _scan_cache
+    from pulse.interface.server_setup import _scan_cache
     _scan_cache.cache.clear()
     _scan_cache.ttl_times.clear()
 
@@ -52,25 +52,25 @@ def run(coro):
 
 
 def make_mcp():
-    from mcp_core.server_setup import setup_mcp_server_standalone
+    from pulse.interface.server_setup import setup_mcp_server_standalone
     return setup_mcp_server_standalone()
 
 
 async def call_run_security_tool(mcp, tool_name, parameters):
-    from mcp_core.server_setup import run_security_tool as _run_security_tool
+    from pulse.interface.server_setup import run_security_tool as _run_security_tool
     ctx = make_mock_context()
     payload = parameters if isinstance(parameters, str) else json.dumps(parameters)
     return await _run_security_tool(ctx, tool_name=tool_name, parameters=payload)
 
 
 def test_run_security_tool_available():
-    from mcp_core.server_setup import run_security_tool
+    from pulse.interface.server_setup import run_security_tool
     assert callable(run_security_tool)
 
 
 def test_aireplay_mode_9_skips_confirmation():
-    with patch("mcp_core.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
+    with patch("pulse.tools.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -83,8 +83,8 @@ def test_aireplay_mode_9_skips_confirmation():
 
 
 def test_aireplay_mode_0_requires_confirmation():
-    with patch("mcp_core.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
+    with patch("pulse.tools.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -97,8 +97,8 @@ def test_aireplay_mode_0_requires_confirmation():
 
 
 def test_responder_analyze_skips_confirmation():
-    with patch("mcp_core.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
+    with patch("pulse.tools.misc_direct.misc_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -111,8 +111,8 @@ def test_responder_analyze_skips_confirmation():
 
 
 def test_metasploit_auxiliary_scanner_skips_confirmation():
-    with patch("mcp_core.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
+    with patch("pulse.tools.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -125,8 +125,8 @@ def test_metasploit_auxiliary_scanner_skips_confirmation():
 
 
 def test_metasploit_exploit_requires_confirmation():
-    with patch("mcp_core.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
+    with patch("pulse.tools.exploit_framework_direct.exploit_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -139,8 +139,8 @@ def test_metasploit_exploit_requires_confirmation():
 
 
 def test_mitm6_requires_confirmation():
-    with patch("mcp_core.active_directory_direct.ad_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
+    with patch("pulse.tools.active_directory_direct.ad_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False) as mock_confirm:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -158,7 +158,7 @@ def assert_canonical_result(result):
 
 
 def test_invalid_json_records_metrics_and_returns_canonical_shape():
-    with patch("mcp_core.server_setup._op_metrics.record") as mock_record:
+    with patch("pulse.interface.server_setup._op_metrics.record") as mock_record:
         mcp = make_mcp()
         result = run(call_run_security_tool(mcp, "nmap", "not-json"))
 
@@ -172,7 +172,7 @@ def test_invalid_json_records_metrics_and_returns_canonical_shape():
 
 
 def test_non_object_json_records_metrics_and_returns_canonical_shape():
-    with patch("mcp_core.server_setup._op_metrics.record") as mock_record:
+    with patch("pulse.interface.server_setup._op_metrics.record") as mock_record:
         mcp = make_mcp()
         result = run(call_run_security_tool(mcp, "nmap", "[]"))
 
@@ -183,7 +183,7 @@ def test_non_object_json_records_metrics_and_returns_canonical_shape():
 
 
 def test_unknown_tool_records_metrics_and_returns_canonical_shape():
-    with patch("mcp_core.server_setup._op_metrics.record") as mock_record:
+    with patch("pulse.interface.server_setup._op_metrics.record") as mock_record:
         mcp = make_mcp()
         result = run(call_run_security_tool(mcp, "does_not_exist", {}))
 
@@ -197,9 +197,9 @@ def test_unknown_tool_records_metrics_and_returns_canonical_shape():
 
 
 def test_destructive_denial_records_metrics():
-    with patch("mcp_core.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
-         patch("mcp_core.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False), \
-         patch("mcp_core.server_setup._op_metrics.record") as mock_record:
+    with patch("pulse.tools.wifi_direct.wifi_exec", return_value={"success": True, "output": "ok"}) as mock_exec, \
+         patch("pulse.interface.server_setup.confirm_destructive_action", new_callable=AsyncMock, return_value=False), \
+         patch("pulse.interface.server_setup._op_metrics.record") as mock_record:
         mcp = make_mcp()
         result = run(call_run_security_tool(
             mcp,
@@ -216,7 +216,7 @@ def test_destructive_denial_records_metrics():
 
 
 def test_cache_hit_records_metrics_and_normalizes_cached_result():
-    from mcp_core.server_setup import _scan_cache
+    from pulse.interface.server_setup import _scan_cache
 
     # Session-scoped key — must match ctx.session_id = "test-session-fixed"
     cache_key = "test-session-fixed:nmap:cached-phase2.example"
@@ -231,8 +231,8 @@ def test_cache_hit_records_metrics_and_normalizes_cached_result():
         "timestamp": 0,
     })
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec") as mock_exec, \
-         patch("mcp_core.server_setup._op_metrics.record") as mock_record:
+    with patch("pulse.tools.net_scan_direct.net_scan_exec") as mock_exec, \
+         patch("pulse.interface.server_setup._op_metrics.record") as mock_record:
         mcp = make_mcp()
         result = run(call_run_security_tool(mcp, "nmap", {"target": "cached-phase2.example"}))
 
@@ -255,7 +255,7 @@ class TestNormalizeToolResult:
     """Unit tests for mcp_core/server_setup.py::_normalize_tool_result()."""
 
     def _fn(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         return _normalize_tool_result
 
     def test_non_dict_becomes_error(self):
@@ -347,10 +347,10 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
     target = "phase5-equiv.example"
 
     # Ensure cache is clear for this target so both calls execute
-    from mcp_core.server_setup import _scan_cache
+    from pulse.interface.server_setup import _scan_cache
     _scan_cache.cache.pop(f"test-session-fixed:nmap:{target}", None)
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+    with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value=fake_output):
         # --- generic call ---
         mcp_generic = make_mcp()
         generic_result = run(call_run_security_tool(
@@ -369,10 +369,10 @@ def test_typed_wrapper_and_generic_produce_same_normalized_output():
         ctx.set_state = AsyncMock()
         # get_context() requires an active FastMCP request context — patch it
         # to return our mock ctx so typed wrappers can call run_security_tool
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             return await tool.fn(target=target)
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+    with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value=fake_output):
         mcp_typed = make_mcp()
         typed_result = run(call_typed_wrapper(mcp_typed))
 
@@ -406,7 +406,7 @@ def test_ai_suggest_calls_ctx_sample_on_success():
     }
 
     async def run_with_sample():
-        from mcp_core.server_setup import run_security_tool as _run_security_tool
+        from pulse.interface.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
@@ -416,7 +416,7 @@ def test_ai_suggest_calls_ctx_sample_on_success():
         payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
         return await _run_security_tool(ctx, "nmap", payload), ctx
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+    with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value=fake_output):
         result, ctx = run(run_with_sample())
 
     ctx.sample.assert_awaited_once()
@@ -433,7 +433,7 @@ def test_ai_suggest_silent_when_sampling_unsupported():
     }
 
     async def run_with_failing_sample():
-        from mcp_core.server_setup import run_security_tool as _run_security_tool
+        from pulse.interface.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
@@ -441,7 +441,7 @@ def test_ai_suggest_silent_when_sampling_unsupported():
         payload = json.dumps({"target": "10.0.0.1", "_ai_suggest": True})
         return await _run_security_tool(ctx, "nmap", payload)
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+    with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value=fake_output):
         result = run(run_with_failing_sample())
 
     assert result["success"] is True
@@ -456,7 +456,7 @@ def test_ai_suggest_skipped_when_not_requested():
     }
 
     async def run_without_suggest():
-        from mcp_core.server_setup import run_security_tool as _run_security_tool
+        from pulse.interface.server_setup import run_security_tool as _run_security_tool
         ctx = make_mock_context()
         ctx.get_state = AsyncMock(return_value=None)
         ctx.set_state = AsyncMock()
@@ -464,7 +464,7 @@ def test_ai_suggest_skipped_when_not_requested():
         payload = json.dumps({"target": "10.0.0.1"})
         return await _run_security_tool(ctx, "nmap", payload), ctx
 
-    with patch("mcp_core.net_scan_direct.net_scan_exec", return_value=fake_output):
+    with patch("pulse.tools.net_scan_direct.net_scan_exec", return_value=fake_output):
         result, ctx = run(run_without_suggest())
 
     ctx.sample.assert_not_awaited()

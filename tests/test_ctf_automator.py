@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from server_core.workflows.ctf.CTFChallenge import CTFChallenge
-from server_core.workflows.ctf.automator import CTFChallengeAutomator
+from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.automator import CTFChallengeAutomator
 
 
 def make_challenge(category="web", name="test-ctf", difficulty="medium"):
@@ -142,7 +142,7 @@ class TestAutoSolve:
     def test_step_failure_does_not_increase_confidence(self):
         ch = make_challenge("web")
         with patch(
-            "server_core.singletons.get_ctf_tools",
+            "pulse.infrastructure.singletons.get_ctf_tools",
         ) as mock_get:
             mock_tools = mock_get.return_value
             mock_tools.get_tool_command.side_effect = Exception("Tool not found")
@@ -153,7 +153,7 @@ class TestAutoSolve:
     def test_early_termination_on_flag_found(self):
         ch = make_challenge("crypto", "flag-test")
         with patch(
-            "server_core.singletons.get_ctf_tools",
+            "pulse.infrastructure.singletons.get_ctf_tools",
         ) as mock_get:
             mock_tools = mock_get.return_value
             mock_tools.get_tool_command.return_value = "flag{found_early}"
@@ -164,7 +164,7 @@ class TestAutoSolve:
     def test_exception_within_try_block(self):
         ch = make_challenge("web")
         with patch(
-            "server_core.singletons.get_ctf_manager",
+            "pulse.infrastructure.singletons.get_ctf_manager",
         ) as mock_get:
             mock_mgr = mock_get.return_value
             mock_mgr.create_ctf_challenge_workflow.side_effect = RuntimeError("Workflow creation failed")
@@ -213,7 +213,7 @@ class TestParallelStep:
             "tools": ["httpx", "whatweb"],
         }
         with patch(
-            "server_core.singletons.get_ctf_tools",
+            "pulse.infrastructure.singletons.get_ctf_tools",
         ) as mock_get:
             mock_tools = mock_get.return_value
             mock_tools.get_tool_command.side_effect = Exception("Tool binary not found")
@@ -273,7 +273,7 @@ class TestSequentialStep:
             "tools": ["nmap"],
         }
         with patch(
-            "server_core.singletons.get_ctf_tools",
+            "pulse.infrastructure.singletons.get_ctf_tools",
         ) as mock_get:
             mock_tools = mock_get.return_value
             mock_tools.get_tool_command.side_effect = Exception("Binary not found")

@@ -1,7 +1,7 @@
 """Unit tests for server_core/rate_limit_detector.py."""
 
 import pytest
-from server_core.rate_limit_detector import RateLimitDetector
+from pulse.infrastructure.rate_limit_detector import RateLimitDetector
 
 
 @pytest.fixture

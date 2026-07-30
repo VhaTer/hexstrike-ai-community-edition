@@ -9,7 +9,7 @@ import pytest
 # Module-level MCP server (created once, shared across all tests)
 # setup_mcp_server_standalone() takes ~14s on first import — avoid per-test cost.
 # ---------------------------------------------------------------------------
-from mcp_core.server_setup import setup_mcp_server_standalone as _setup
+from pulse.interface.server_setup import setup_mcp_server_standalone as _setup
 
 _MCP = None
 
@@ -47,7 +47,7 @@ def make_mock_context(session_id="test-unit"):
 
 @pytest.fixture(autouse=True)
 def _clear_scan_cache():
-    from mcp_core.server_setup import _scan_cache
+    from pulse.interface.server_setup import _scan_cache
     _scan_cache.cache.clear()
     _scan_cache.ttl_times.clear()
 
@@ -62,13 +62,13 @@ class TestResourceScanLatest:
     def test_no_matches(self):
         tmpl = run(mcp().get_resource_template("scan://{target}/latest"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(tmpl.fn(target="10.0.0.99"))
         parsed = json.loads(text)
         assert parsed["status"] == "no_results"
 
     def test_with_matches(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         s = "test-unit"
         _scan_cache.cache[f"{s}:nmap:10.0.0.1"] = {
             "tool": "nmap", "target": "10.0.0.1",
@@ -82,7 +82,7 @@ class TestResourceScanLatest:
         }
         tmpl = run(mcp().get_resource_template("scan://{target}/latest"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(tmpl.fn(target="10.0.0.1"))
         parsed = json.loads(text)
         assert parsed["target"] == "10.0.0.1"
@@ -91,7 +91,7 @@ class TestResourceScanLatest:
 
 class TestResourceScanResult:
     def test_entry_found(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         s = "test-unit"
         _scan_cache.cache[f"{s}:nmap:10.0.0.1:x"] = {
             "tool": "nmap", "target": "10.0.0.1",
@@ -100,7 +100,7 @@ class TestResourceScanResult:
         }
         tmpl = run(mcp().get_resource_template("scan://{target}/{tool_name}"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(tmpl.fn(target="10.0.0.1", tool_name="nmap"))
         parsed = json.loads(text)
         assert parsed["target"] == "10.0.0.1"
@@ -110,7 +110,7 @@ class TestResourceScanResult:
     def test_entry_not_found(self):
         tmpl = run(mcp().get_resource_template("scan://{target}/{tool_name}"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(tmpl.fn(target="10.0.0.1", tool_name="nmap"))
         parsed = json.loads(text)
         assert parsed["status"] == "no_results"
@@ -118,7 +118,7 @@ class TestResourceScanResult:
 
 class TestResourceScanCacheList:
     def test_with_entries(self):
-        from mcp_core.server_setup import _scan_cache
+        from pulse.interface.server_setup import _scan_cache
         s = "test-unit"
         _scan_cache.cache[f"{s}:nmap:x"] = {
             "tool": "nmap", "target": "10.0.0.1",
@@ -127,7 +127,7 @@ class TestResourceScanCacheList:
         }
         resource = run(mcp().get_resource("scan://cache/list"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(resource.fn())
         parsed = json.loads(text)
         assert parsed["count"] >= 1
@@ -136,7 +136,7 @@ class TestResourceScanCacheList:
     def test_empty(self):
         resource = run(mcp().get_resource("scan://cache/list"))
         ctx = make_mock_context()
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             text = run(resource.fn())
         parsed = json.loads(text)
         assert parsed["count"] == 0
@@ -269,7 +269,7 @@ class TestPlanAttackStandard:
 
 from contextlib import contextmanager
 
-from mcp_core.server_setup import run_security_tool as _run_security_tool, _DIRECT_TOOLS_CACHE, _MOCK_EXECUTORS
+from pulse.interface.server_setup import run_security_tool as _run_security_tool, _DIRECT_TOOLS_CACHE, _MOCK_EXECUTORS
 from unittest.mock import MagicMock
 
 
@@ -295,7 +295,7 @@ class TestRunSecurityToolExec:
 
         async def go():
             with patch(
-                "mcp_core.server_setup.confirm_destructive_action",
+                "pulse.interface.server_setup.confirm_destructive_action",
                 new=AsyncMock(return_value=False),
             ):
                 return await _run_security_tool(
@@ -380,7 +380,7 @@ class TestRunSecurityToolExec:
         self._patch_tool("nmap", self._fast_exec("nmap"))
         ctx = make_mock_context()
         async def go():
-            with patch("mcp_core.server_setup._optimizer.optimize", return_value={
+            with patch("pulse.interface.server_setup._optimizer.optimize", return_value={
                 "target": "10.0.0.58",
                 "_optimizer": {"forced_stealth": True, "profile": "stealth"},
             }):
@@ -483,7 +483,7 @@ class TestRunSecurityToolExec:
         assert result["success"] is False
 
     def test_cache_hit_returned(self):
-        from mcp_core.server_setup import _scan_cache, _cache_key_for
+        from pulse.interface.server_setup import _scan_cache, _cache_key_for
         self._patch_tool("nmap", self._fast_exec("nmap"))
         s = "test-unit"
         key = _cache_key_for(s, "nmap", "10.0.0.67", {"target": "10.0.0.67"})
@@ -503,12 +503,12 @@ class TestResourceTargetStore:
     """MCP resource endpoints for TargetStore (targets://, target://, findings, sessions)."""
 
     def _store(self, tmp_path):
-        from server_core.target_store import TargetStore
+        from pulse.infrastructure.target_store import TargetStore
         return TargetStore(data_dir=str(tmp_path))
 
     def test_targets_list_empty(self, tmp_path):
         store = self._store(tmp_path)
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             resource = run(mcp().get_resource("targets://"))
             text = run(resource.fn())
         parsed = json.loads(text)
@@ -519,7 +519,7 @@ class TestResourceTargetStore:
         store = self._store(tmp_path)
         store.record_scan("alpha.example", surface_data={"ports": [{"port": 80, "service": "http"}]})
         store.record_scan("beta.example")
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             resource = run(mcp().get_resource("targets://"))
             text = run(resource.fn())
         parsed = json.loads(text)
@@ -531,7 +531,7 @@ class TestResourceTargetStore:
     def test_get_target_found(self, tmp_path):
         store = self._store(tmp_path)
         store.record_scan("target.example", surface_data={"ports": [{"port": 443, "service": "https"}]})
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}"))
             text = run(tmpl.fn(target="target.example"))
         parsed = json.loads(text)
@@ -541,7 +541,7 @@ class TestResourceTargetStore:
 
     def test_get_target_not_found(self, tmp_path):
         store = self._store(tmp_path)
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}"))
             text = run(tmpl.fn(target="nonexistent.example"))
         parsed = json.loads(text)
@@ -553,7 +553,7 @@ class TestResourceTargetStore:
             "ports": [{"port": 80, "service": "http"}],
             "technologies": ["nginx"],
         })
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}/findings"))
             text = run(tmpl.fn(target="findme.example"))
         parsed = json.loads(text)
@@ -562,7 +562,7 @@ class TestResourceTargetStore:
 
     def test_get_target_findings_not_found(self, tmp_path):
         store = self._store(tmp_path)
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}/findings"))
             text = run(tmpl.fn(target="ghost.example"))
         parsed = json.loads(text)
@@ -572,7 +572,7 @@ class TestResourceTargetStore:
         store = self._store(tmp_path)
         store.record_scan("sessionized.example", session_id="sess-001", tools_used=["nmap"])
         store.record_scan("sessionized.example", session_id="sess-002", tools_used=["whatweb"])
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}/sessions"))
             text = run(tmpl.fn(target="sessionized.example"))
         parsed = json.loads(text)
@@ -582,7 +582,7 @@ class TestResourceTargetStore:
 
     def test_get_target_sessions_not_found(self, tmp_path):
         store = self._store(tmp_path)
-        with patch("mcp_core.server_setup.get_target_store", return_value=store):
+        with patch("pulse.interface.server_setup.get_target_store", return_value=store):
             tmpl = run(mcp().get_resource_template("target://{target}/sessions"))
             text = run(tmpl.fn(target="ghost.example"))
         parsed = json.loads(text)
@@ -684,7 +684,7 @@ class TestScanBackground:
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.run_security_tool", mock_run),
+            patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.5"))
 
@@ -716,7 +716,7 @@ class TestScanBackground:
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.run_security_tool", mock_run),
+            patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.10"))
 
@@ -747,7 +747,7 @@ class TestScanBackground:
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.run_security_tool", mock_run),
+            patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.20"))
 
@@ -775,7 +775,7 @@ class TestScanBackground:
 
         with (
             patch.dict("sys.modules", {"pulse_app": mock_pulse}),
-            patch("mcp_core.server_setup.run_security_tool", mock_run),
+            patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.30"))
 
@@ -798,7 +798,7 @@ class TestEnrichProfileFromCache:
     """_enrich_profile_from_cache() injects cached scan results into a TargetProfile."""
 
     def test_nmap_ports_and_services(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
         from shared.target_types import TargetType
 
@@ -822,7 +822,7 @@ class TestEnrichProfileFromCache:
         assert result.confidence_score > 0
 
     def test_whatweb_technology_detection(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
         from shared.target_types import TargetType, TechnologyStack
 
@@ -843,7 +843,7 @@ class TestEnrichProfileFromCache:
         assert result.confidence_score > 0
 
     def test_testssl_enriches_ssl_info(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
         from shared.target_types import TargetType
 
@@ -859,7 +859,7 @@ class TestEnrichProfileFromCache:
         assert "TLSv1" in result.ssl_info["summary"]
 
     def test_wafw00f_boosts_confidence(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
 
         profile = TargetProfile(target="10.0.0.1")
@@ -868,7 +868,7 @@ class TestEnrichProfileFromCache:
         assert result.confidence_score == 0.05
 
     def test_empty_cache_returns_profile_unchanged(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
 
         profile = TargetProfile(target="10.0.0.1")
@@ -876,7 +876,7 @@ class TestEnrichProfileFromCache:
         assert result == profile
 
     def test_risk_level_high_when_many_ports(self):
-        from mcp_core.server_setup import _enrich_profile_from_cache
+        from pulse.interface.server_setup import _enrich_profile_from_cache
         from shared.target_profile import TargetProfile
         from shared.target_types import TargetType
 
@@ -901,7 +901,7 @@ class TestCreateTypedToolWrapper:
     """_create_typed_tool_wrapper() dynamically builds typed MCP tool wrappers."""
 
     def test_basic_typed_wrapper(self):
-        from mcp_core.server_setup import _create_typed_tool_wrapper
+        from pulse.interface.server_setup import _create_typed_tool_wrapper
 
         tool_def = {
             "desc": "Test tool",
@@ -920,7 +920,7 @@ class TestCreateTypedToolWrapper:
         assert "timeout" in wrapper.__annotations__ or "verbose" in wrapper.__annotations__
 
     def test_typed_wrapper_passes_optional_params(self):
-        from mcp_core.server_setup import _create_typed_tool_wrapper
+        from pulse.interface.server_setup import _create_typed_tool_wrapper
 
         tool_def = {
             "desc": "Verbose scan",
@@ -936,12 +936,12 @@ class TestCreateTypedToolWrapper:
         wrapper = _create_typed_tool_wrapper("nmap", tool_def, mock_run)
         mock_ctx = make_mock_context()
 
-        with patch("mcp_core.server_setup.get_context", return_value=mock_ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=mock_ctx):
             result = run(wrapper(target="10.0.0.1", verbose=False))
 
         assert captured["params"]["target"] == "10.0.0.1"
         assert captured["params"]["verbose"] is False
-        from mcp_core.server_setup import _create_typed_tool_wrapper
+        from pulse.interface.server_setup import _create_typed_tool_wrapper
 
         tool_def = {
             "desc": "Port scan",
@@ -958,7 +958,7 @@ class TestCreateTypedToolWrapper:
         wrapper = _create_typed_tool_wrapper("nmap", tool_def, mock_run)
         mock_ctx = make_mock_context()
 
-        with patch("mcp_core.server_setup.get_context", return_value=mock_ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=mock_ctx):
             result = run(wrapper(target="10.0.0.1"))
 
         assert captured["name"] == "nmap"
@@ -999,34 +999,34 @@ class TestRegisterSkills:
     """_register_skills() mounts the skills directory as MCP resources."""
 
     def test_no_skills_dir_returns_gracefully(self):
-        from mcp_core.server_setup import _register_skills
+        from pulse.interface.server_setup import _register_skills
         mcp = MagicMock()
         mcp.add_provider = MagicMock()
         logger = MagicMock()
 
-        with patch("mcp_core.server_setup.Path.exists", return_value=False):
+        with patch("pulse.interface.server_setup.Path.exists", return_value=False):
             _register_skills(mcp, logger)
 
         mcp.add_provider.assert_not_called()
 
     def test_skills_dir_registers_provider(self):
-        from mcp_core.server_setup import _register_skills
+        from pulse.interface.server_setup import _register_skills
         mcp = MagicMock()
         mcp.add_provider = MagicMock()
         logger = MagicMock()
 
-        with patch("mcp_core.server_setup.Path.exists", return_value=True):
-            with patch("mcp_core.server_setup.SkillsDirectoryProvider"):
+        with patch("pulse.interface.server_setup.Path.exists", return_value=True):
+            with patch("pulse.interface.server_setup.SkillsDirectoryProvider"):
                 _register_skills(mcp, logger)
 
         mcp.add_provider.assert_called_once()
 
     def test_skills_provider_none_logs_warning(self):
-        from mcp_core.server_setup import _register_skills
+        from pulse.interface.server_setup import _register_skills
         mcp = MagicMock()
         logger = MagicMock()
 
-        with patch("mcp_core.server_setup.SkillsDirectoryProvider", None):
+        with patch("pulse.interface.server_setup.SkillsDirectoryProvider", None):
             _register_skills(mcp, logger)
 
         logger.warning.assert_called_once()
@@ -1041,79 +1041,79 @@ class TestBuildDestructiveConfirmation:
     """_build_destructive_confirmation() determines if a tool needs user confirmation."""
 
     def test_nondestructive_tool_returns_none(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         assert _build_destructive_confirmation("nmap", {"target": "10.0.0.1"}) is None
 
     def test_aireplay_mode_9_allowed(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("aireplay_ng", {"attack_mode": 9})
         assert result is None
 
     def test_aireplay_mode_0_blocks(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("aireplay_ng", {"attack_mode": 0, "interface": "wlan0", "bssid": "AA:BB:CC:DD:EE:FF"})
         assert result is not None
         assert "action" in result
         assert "warning" in result
 
     def test_aireplay_no_mode_blocks(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("aireplay_ng", {"interface": "wlan0"})
         assert result is not None
 
     def test_responder_analyze_allowed(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("responder", {"analyze": True})
         assert result is None
 
     def test_responder_active_blocks(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("responder", {"interface": "eth0"})
         assert result is not None
         assert "poisoning" in result["action"]
 
     def test_metasploit_auxiliary_allowed(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "auxiliary/scanner/portscan/tcp"})
         assert result is None
 
     def test_metasploit_exploit_blocks(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "exploit/multi/handler"})
         assert result is not None
         assert "Metasploit" in result["action"]
 
     def test_generic_destructive_without_specific_tool(self):
         """Tool in _DESTRUCTIVE_TOOLS but not specially handled."""
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("mdk4", {"interface": "wlan0"})
         assert result is not None
         assert "action" in result
 
     def test_metasploit_auxiliary_allowed(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "auxiliary/scanner/portscan/tcp"})
         assert result is None
 
     def test_metasploit_exploit_blocks(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "exploit/multi/handler"})
         assert result is not None
         assert "Metasploit" in result["action"]
 
     def test_metasploit_options_empty(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "exploit/tomcat"})
         assert result is not None
 
     def test_mitm6_confirmation(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("mitm6", {"interface": "eth0", "domain": "corp.local"})
         assert result is not None
         assert "mitm6" in result["action"]
 
     def test_mitm6_no_domain(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("mitm6", {"interface": "eth0"})
         assert result is not None
 
@@ -1127,40 +1127,40 @@ class TestParamTypeInference:
     """Type inference helpers used by _create_typed_tool_wrapper."""
 
     def test_infer_bool(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type(True) == bool
         assert _infer_param_type(False) == bool
 
     def test_infer_int(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type(42) == int
 
     def test_infer_float(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type(3.14) == float
 
     def test_infer_dict(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type({"a": 1}) == dict
 
     def test_infer_list(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type([1, 2, 3]) == list
 
     def test_infer_str(self):
-        from mcp_core.server_setup import _infer_param_type
+        from pulse.interface.server_setup import _infer_param_type
         assert _infer_param_type("hello") == str
 
     def test_resolve_bool(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "bool"}) == bool
 
     def test_resolve_int(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "int"}) == int
 
     def test_resolve_default_str(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "unknown"}) == str
         assert _resolve_required_param_type({}) == str
 
@@ -1174,34 +1174,34 @@ class TestNormalizeToolResult:
     """_normalize_tool_result() normalizes diverse tool output formats."""
 
     def test_normalize_dict_result(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result({"success": True, "output": "ok"})
         assert result["success"] is True
         assert result["output"] == "ok"
 
     def test_normalize_non_dict(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result("string result")
         assert result["success"] is False
         assert "error" in result
 
     def test_normalize_stdout_fallback(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result({"success": True, "stdout": "fallback"})
         assert result["output"] == "fallback"
 
     def test_normalize_stderr_as_error(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result({"success": False, "stderr": "boom"})
         assert result["error"] == "boom"
 
     def test_normalize_returncode(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result({"return_code": 1})
         assert result["returncode"] == 1
 
     def test_normalize_partial_results(self):
-        from mcp_core.server_setup import _normalize_tool_result
+        from pulse.interface.server_setup import _normalize_tool_result
         result = _normalize_tool_result({"partial_results": True})
         assert result["partial_results"] is True
 
@@ -1215,21 +1215,21 @@ class TestGetRegistryToolDefinition:
     """_get_registry_tool_definition() resolves tool names to registry entries."""
 
     def test_known_tool_returns_definition(self):
-        from mcp_core.server_setup import _get_registry_tool_definition
+        from pulse.interface.server_setup import _get_registry_tool_definition
         result = _get_registry_tool_definition("nmap")
         assert result is not None
         assert "desc" in result
         assert "params" in result
 
     def test_alias_tool_returns_definition(self):
-        from mcp_core.server_setup import _get_registry_tool_definition, _TOOL_REGISTRY_ALIASES
+        from pulse.interface.server_setup import _get_registry_tool_definition, _TOOL_REGISTRY_ALIASES
         if _TOOL_REGISTRY_ALIASES:
             alias = next(iter(_TOOL_REGISTRY_ALIASES.keys()))
             result = _get_registry_tool_definition(alias)
             assert result is not None
 
     def test_unknown_tool_returns_none(self):
-        from mcp_core.server_setup import _get_registry_tool_definition
+        from pulse.interface.server_setup import _get_registry_tool_definition
         result = _get_registry_tool_definition("nonexistent_tool_xyz")
         assert result is None
 
@@ -1243,73 +1243,73 @@ class TestSuggestNextTool:
     """_suggest_next_tool() suggests the next tool based on current output."""
 
     def test_nmap_web_ports(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "80/tcp open http")
         assert result["tool"] == "whatweb"
 
     def test_nmap_smb_port(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "445/tcp open microsoft-ds")
         assert result["tool"] == "smbmap"
 
     def test_nmap_ssh_port(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "22/tcp open ssh")
         assert result["tool"] == "hydra"
 
     def test_nmap_db_port(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "3306/tcp open mysql")
         assert result["tool"] == "sqlmap"
 
     def test_nmap_generic(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "161/udp open snmp")
         assert result["tool"] == "nuclei"
 
     def test_whatweb_wordpress(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("whatweb", "WordPress[6.0]")
         assert result["tool"] == "wpscan"
 
     def test_whatweb_joomla(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("whatweb", "Joomla[4.2]")
         assert result["tool"] == "joomscan"
 
     def test_whatweb_generic(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("whatweb", "nginx 1.20")
         assert result["tool"] == "gobuster"
 
     def test_nuclei_sqli(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nuclei", "SQL Injection detected")
         assert result["tool"] == "sqlmap"
 
     def test_nuclei_xss(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nuclei", "Cross-Site Scripting (XSS)")
         assert result["tool"] == "dalfox"
 
     def test_nuclei_ssl(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nuclei", "SSL certificate expired")
         assert result["tool"] == "testssl"
 
     def test_nuclei_smb(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nuclei", "EternalBlue MS17-010")
         assert result["tool"] == "metasploit"
 
     def test_empty_output_nmap_returns_nuclei(self):
         """Even empty nmap output triggers generic nuclei suggestion."""
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nmap", "")
         assert result["tool"] == "nuclei"
 
     def test_empty_output_unknown_tool(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("unknown_tool", "")
         assert result == {}
 
@@ -1323,14 +1323,14 @@ class TestDetectFromCache:
     """_detect_from_cache() builds a TechProfile from cached scan results."""
 
     def test_no_cache_returns_none(self):
-        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        from pulse.interface.server_setup import _detect_from_cache, _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         result = _detect_from_cache("10.0.0.1")
         assert result is None
 
     def test_whatweb_cache_detects_apache(self):
-        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        from pulse.interface.server_setup import _detect_from_cache, _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         _scan_cache.set(
@@ -1346,7 +1346,7 @@ class TestDetectFromCache:
         assert "apache" in result.web_servers
 
     def test_wrong_target_returns_none(self):
-        from mcp_core.server_setup import _detect_from_cache, _scan_cache
+        from pulse.interface.server_setup import _detect_from_cache, _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         _scan_cache.set(
@@ -1370,15 +1370,15 @@ class TestResolveRequiredParamTypeRemaining:
     """_resolve_required_param_type() covers float/dict/list types."""
 
     def test_resolve_float(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "float"}) == float
 
     def test_resolve_dict(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "dict"}) == dict
 
     def test_resolve_list(self):
-        from mcp_core.server_setup import _resolve_required_param_type
+        from pulse.interface.server_setup import _resolve_required_param_type
         assert _resolve_required_param_type({"type": "list"}) == list
 
 
@@ -1391,63 +1391,63 @@ class TestSuggestNextToolRemaining:
     """Remaining _suggest_next_tool branches."""
 
     def test_whatweb_drupal(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("whatweb", "Drupal 9")
         assert result["tool"] == "nuclei"
 
     def test_whatweb_no_content(self):
         """Empty whatweb output should return nothing."""
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("whatweb", "")
         assert result == {}
 
     def test_nikto_sqli(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nikto", "SQL Injection in /page?id=1")
         assert result["tool"] == "sqlmap"
 
     def test_nuclei_output_empty(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("nuclei", "")
         assert result == {}
 
     def test_gobuster_with_output(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("gobuster", "/admin (Status: 200)")
         assert result["tool"] == "nuclei"
 
     def test_gobuster_no_output(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("gobuster", "")
         assert result == {}
 
     def test_hydra_success(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("hydra", "password: admin123")
         assert result["tool"] == "metasploit"
 
     def test_hydra_no_output(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("hydra", "")
         assert result == {}
 
     def test_smbmap_share_found(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("smbmap", "admin share")
         assert result["tool"] == "metasploit"
 
     def test_smbmap_generic(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("smbmap", "some output")
         assert result["tool"] == "hydra"
 
     def test_sqlmap_vulnerable(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("sqlmap", "parameter: id is vulnerable")
         assert result["tool"] == "metasploit"
 
     def test_sqlmap_generic(self):
-        from mcp_core.server_setup import _suggest_next_tool
+        from pulse.interface.server_setup import _suggest_next_tool
         result = _suggest_next_tool("sqlmap", "completed")
         assert result["tool"] == "nuclei"
 
@@ -1461,7 +1461,7 @@ class TestReadSkillBundle:
     """_read_skill_bundle() loads skill files via MCP context."""
 
     def test_read_skill_bundle_returns_documents(self):
-        from mcp_core.server_setup import _read_skill_bundle
+        from pulse.interface.server_setup import _read_skill_bundle
         ctx = make_mock_context()
         ctx.read_resource = AsyncMock(return_value=SimpleNamespace(
             contents=[SimpleNamespace(content="nmap skill content")]
@@ -1471,14 +1471,14 @@ class TestReadSkillBundle:
         assert result["SKILL.md"] == "nmap skill content"
 
     def test_read_skill_empty_bundle(self):
-        from mcp_core.server_setup import _read_skill_bundle
+        from pulse.interface.server_setup import _read_skill_bundle
         ctx = make_mock_context()
         ctx.read_resource = AsyncMock(return_value=SimpleNamespace(contents=[]))
         result = run(_read_skill_bundle(ctx, "nmap"))
         assert result == {}
 
     def test_read_skill_resource_exception(self):
-        from mcp_core.server_setup import _read_skill_bundle
+        from pulse.interface.server_setup import _read_skill_bundle
         ctx = make_mock_context()
         ctx.read_resource = AsyncMock(side_effect=Exception("resource not found"))
         result = run(_read_skill_bundle(ctx, "nmap"))
@@ -1494,7 +1494,7 @@ class TestCollectCachedScans:
     """_collect_cached_scans() retrieves cached scans by session + target."""
 
     def test_collect_with_matching_entry(self):
-        from mcp_core.server_setup import _collect_cached_scans, _scan_cache
+        from pulse.interface.server_setup import _collect_cached_scans, _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         _scan_cache.set(
@@ -1505,7 +1505,7 @@ class TestCollectCachedScans:
         assert "nmap" in result
 
     def test_collect_empty_when_no_match(self):
-        from mcp_core.server_setup import _collect_cached_scans, _scan_cache
+        from pulse.interface.server_setup import _collect_cached_scans, _scan_cache
         _scan_cache.cache.clear()
         _scan_cache.ttl_times.clear()
         _scan_cache.set(
@@ -1525,6 +1525,6 @@ class TestBuildDestructiveConfirmationEdgeCases:
     """Edge cases: options not a dict, mitm6 no interface."""
 
     def test_metasploit_options_not_dict(self):
-        from mcp_core.server_setup import _build_destructive_confirmation
+        from pulse.interface.server_setup import _build_destructive_confirmation
         result = _build_destructive_confirmation("metasploit", {"module": "exploit/test", "options": "string"})
         assert result is not None

@@ -1,15 +1,15 @@
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
-from server_core.enhanced_process_manager import EnhancedProcessManager
+from pulse.infrastructure.enhanced_process_manager import EnhancedProcessManager
 
 
 @pytest.fixture
 def manager():
-    with patch("server_core.enhanced_process_manager.ResourceMonitor"), \
-         patch("server_core.enhanced_process_manager.ProcessPool"), \
-         patch("server_core.enhanced_process_manager.AdvancedCache"), \
-         patch("server_core.enhanced_process_manager.PerformanceDashboard"), \
-         patch("server_core.enhanced_process_manager.threading.Thread"):
+    with patch("pulse.infrastructure.enhanced_process_manager.ResourceMonitor"), \
+         patch("pulse.infrastructure.enhanced_process_manager.ProcessPool"), \
+         patch("pulse.infrastructure.enhanced_process_manager.AdvancedCache"), \
+         patch("pulse.infrastructure.enhanced_process_manager.PerformanceDashboard"), \
+         patch("pulse.infrastructure.enhanced_process_manager.threading.Thread"):
         mgr = EnhancedProcessManager()
         yield mgr
 
@@ -292,7 +292,7 @@ class TestMonitorSystem:
     def test_monitor_system_normal(self, manager):
         manager.resource_monitor.get_current_usage.return_value = {"cpu_percent": 50, "memory_percent": 50}
         with patch.object(manager, '_auto_scale_based_on_resources') as mock_auto_scale, \
-             patch("server_core.enhanced_process_manager.time.sleep", side_effect=[None, KeyboardInterrupt]):
+             patch("pulse.infrastructure.enhanced_process_manager.time.sleep", side_effect=[None, KeyboardInterrupt]):
             with pytest.raises(KeyboardInterrupt):
                 manager._monitor_system()
         mock_auto_scale.assert_called_once()
@@ -302,7 +302,7 @@ class TestMonitorSystem:
         manager.auto_scaling_enabled = False
         manager.resource_monitor.get_current_usage.return_value = {"cpu_percent": 50, "memory_percent": 50}
         with patch.object(manager, '_auto_scale_based_on_resources') as mock_auto_scale, \
-             patch("server_core.enhanced_process_manager.time.sleep", side_effect=[None, KeyboardInterrupt]):
+             patch("pulse.infrastructure.enhanced_process_manager.time.sleep", side_effect=[None, KeyboardInterrupt]):
             with pytest.raises(KeyboardInterrupt):
                 manager._monitor_system()
         mock_auto_scale.assert_not_called()
@@ -310,7 +310,7 @@ class TestMonitorSystem:
 
     def test_monitor_system_exception(self, manager):
         with patch.object(manager, '_auto_scale_based_on_resources') as mock_auto_scale, \
-             patch("server_core.enhanced_process_manager.time.sleep", side_effect=[Exception("monitor error"), KeyboardInterrupt]):
+             patch("pulse.infrastructure.enhanced_process_manager.time.sleep", side_effect=[Exception("monitor error"), KeyboardInterrupt]):
             with pytest.raises(KeyboardInterrupt):
                 manager._monitor_system()
         mock_auto_scale.assert_not_called()

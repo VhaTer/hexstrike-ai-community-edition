@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
-from server_core.parameter_optimizer import ParameterOptimizer
+from pulse.infrastructure.parameter_optimizer import ParameterOptimizer
 from shared.target_profile import TargetProfile
 
 

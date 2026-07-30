@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_core.exec_direct import exec_direct, _execute_code, _HANDLERS
+from pulse.tools.exec_direct import exec_direct, _execute_code, _HANDLERS
 
 
 def test_unknown_tool():

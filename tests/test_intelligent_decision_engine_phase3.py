@@ -36,7 +36,7 @@ def mock_target_profile():
 @pytest.fixture
 def engine():
     """Initialize IntelligentDecisionEngine."""
-    from server_core.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
+    from pulse.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
     return IntelligentDecisionEngine()
 
 
@@ -557,7 +557,7 @@ def mock_socket_gethostbyname():
 @pytest.fixture
 def engine():
     """Initialize IntelligentDecisionEngine."""
-    from server_core.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
+    from pulse.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
     return IntelligentDecisionEngine()
 
 

@@ -1,4 +1,4 @@
-from server_core.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
+from pulse.intelligence.intelligent_decision_engine import IntelligentDecisionEngine
 from shared.target_profile import TargetProfile
 from shared.target_types import TargetType
 

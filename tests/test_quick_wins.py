@@ -11,8 +11,8 @@ from shared.attack_chain import AttackChain
 from shared.attack_step import AttackStep
 from shared.target_profile import TargetProfile
 
-from server_core.rate_limit_detector import RateLimitDetector
-from server_core.technology_detector import TechnologyDetector
+from pulse.infrastructure.rate_limit_detector import RateLimitDetector
+from pulse.infrastructure.technology_detector import TechnologyDetector
 
 
 # =========================================================================
@@ -99,43 +99,43 @@ def _make_record(msg, name="test"):
 
 class TestSetupLoggingBranches:
     def test_strip_clf_noise(self):
-        from server_core.setup_logging import _StripCLFNoise
+        from pulse.infrastructure.setup_logging import _StripCLFNoise
         filt = _StripCLFNoise()
         record = _make_record('10.0.0.1 - - [11/May/2026 12:00:00] "GET /" 200 -')
         assert filt.filter(record) is True
         assert "[" not in record.msg
 
     def test_strip_clf_noise_short_line(self):
-        from server_core.setup_logging import _StripCLFNoise
+        from pulse.infrastructure.setup_logging import _StripCLFNoise
         filt = _StripCLFNoise()
         record = _make_record('10.0.0.1 - ')
         assert filt.filter(record) is True
 
     def test_resolve_log_level_valid(self):
         with patch.dict(os.environ, {"HEXSTRIKE_LOG_LEVEL": "debug"}, clear=False):
-            from server_core.setup_logging import _resolve_log_level
+            from pulse.infrastructure.setup_logging import _resolve_log_level
             assert _resolve_log_level() == logging.DEBUG
 
     def test_resolve_log_level_invalid(self):
         with patch.dict(os.environ, {"HEXSTRIKE_LOG_LEVEL": "bogus"}, clear=False):
-            from server_core.setup_logging import _resolve_log_level
+            from pulse.infrastructure.setup_logging import _resolve_log_level
             assert _resolve_log_level() == logging.INFO
 
     def test_setup_logging_json_env(self, tmp_path):
         json_path = str(tmp_path / "test.json")
         with patch.dict(os.environ, {"HEXSTRIKE_JSON_LOG": json_path}, clear=False):
-            from server_core.setup_logging import setup_logging
+            from pulse.infrastructure.setup_logging import setup_logging
             root = setup_logging()
             assert root is not None
 
     def test_setup_logging_permission_error(self):
-        with patch("server_core.setup_logging.RotatingFileHandler", side_effect=PermissionError):
-            from server_core.setup_logging import setup_logging
+        with patch("pulse.infrastructure.setup_logging.RotatingFileHandler", side_effect=PermissionError):
+            from pulse.infrastructure.setup_logging import setup_logging
             root = setup_logging()
             assert root is not None
 
     def test_suppress_werkzeug_banner(self):
-        from server_core.setup_logging import setup_logging
+        from pulse.infrastructure.setup_logging import setup_logging
         root = setup_logging()
         werkzeug_logger = logging.getLogger('werkzeug')
         banner_filters = [
@@ -146,7 +146,7 @@ class TestSetupLoggingBranches:
 
     def test_resolve_log_level_empty(self):
         with patch.dict(os.environ, {"HEXSTRIKE_LOG_LEVEL": ""}, clear=False):
-            from server_core.setup_logging import _resolve_log_level
+            from pulse.infrastructure.setup_logging import _resolve_log_level
             assert _resolve_log_level() == logging.INFO
 
 
@@ -190,7 +190,7 @@ class _RecoveryStrategy:
 
 class TestRecoveryExecutorBranches:
     def test_switch_to_alternative_tool(self):
-        from server_core.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "tool failed"},
             {"success": True, "result": "alt tool worked"},
@@ -220,7 +220,7 @@ class TestRecoveryExecutorBranches:
         logger.warning.assert_called()
 
     def test_switch_to_alternative_no_fallback(self):
-        from server_core.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "failed"},
             {"success": False, "stderr": "still failed"},
@@ -247,7 +247,7 @@ class TestRecoveryExecutorBranches:
         assert result["success"] is False
 
     def test_switch_to_alternative_no_alt_tool(self):
-        from server_core.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "failed"},
             {"success": False, "stderr": "still failed"},
@@ -272,7 +272,7 @@ class TestRecoveryExecutorBranches:
         assert result["success"] is False
 
     def test_adjust_parameters(self):
-        from server_core.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "bad params"},
             {"success": True, "result": "adjusted worked"},

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from server_core.performance_monitor import PerformanceMonitor
+from pulse.infrastructure.performance_monitor import PerformanceMonitor
 
 
 @pytest.fixture
@@ -14,11 +14,11 @@ def pm():
 
 class TestMonitorSystemResources:
     def test_returns_resource_dict(self, pm):
-        with patch("server_core.performance_monitor.psutil.cpu_percent",
+        with patch("pulse.infrastructure.performance_monitor.psutil.cpu_percent",
                    return_value=45.0), \
-             patch("server_core.performance_monitor.psutil.virtual_memory") as vm, \
-             patch("server_core.performance_monitor.psutil.disk_usage") as du, \
-             patch("server_core.performance_monitor.psutil.net_io_counters") as net:
+             patch("pulse.infrastructure.performance_monitor.psutil.virtual_memory") as vm, \
+             patch("pulse.infrastructure.performance_monitor.psutil.disk_usage") as du, \
+             patch("pulse.infrastructure.performance_monitor.psutil.net_io_counters") as net:
             vm.return_value.percent = 60.0
             du.return_value.percent = 70.0
             net.return_value.bytes_sent = 1000
@@ -32,7 +32,7 @@ class TestMonitorSystemResources:
         assert "timestamp" in r
 
     def test_psutil_error_returns_empty(self, pm):
-        with patch("server_core.performance_monitor.psutil.cpu_percent",
+        with patch("pulse.infrastructure.performance_monitor.psutil.cpu_percent",
                    side_effect=Exception("no perm")):
             r = pm.monitor_system_resources()
         assert r == {}

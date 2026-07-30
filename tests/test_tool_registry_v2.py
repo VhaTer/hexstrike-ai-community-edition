@@ -21,7 +21,7 @@ Covers:
 import subprocess
 import pytest
 from unittest.mock import patch, MagicMock
-from mcp_core.tool_registry_v2 import ToolRegistry, _SKIP_INSTALL, _INSTALL_HINTS
+from pulse.tools.tool_registry_v2 import ToolRegistry, _SKIP_INSTALL, _INSTALL_HINTS
 
 
 class TestToolRegistry:
@@ -125,7 +125,7 @@ class TestToolRegistry:
         """When cache is empty, _get_binary_status calls shutil.which."""
         reg = ToolRegistry()
         reg._status_cache.clear()
-        with patch("mcp_core.tool_registry_v2.shutil.which", return_value=None):
+        with patch("pulse.tools.tool_registry_v2.shutil.which", return_value=None):
             s = reg._get_binary_status("nmap")
             assert s == "not_found"
             assert reg._status_cache.get("nmap") == "not_found"

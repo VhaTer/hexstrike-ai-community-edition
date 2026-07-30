@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
-from server_core.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
+from pulse.infrastructure.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 
 
 def _make_context(name="test_tool", uri="test://uri", session_id="session-123", client_name=None):
@@ -106,13 +106,13 @@ class TestHexStrikeSessionMiddleware:
         assert result == {"result": "ok"}
 
     async def test_session_id_unknown_when_no_fastmcp_context(self):
-        from server_core.hexstrike_middleware import _get_session_id
+        from pulse.infrastructure.hexstrike_middleware import _get_session_id
         ctx = SimpleNamespace(message=None, fastmcp_context=None)
         sid = _get_session_id(ctx)
         assert sid == "unknown"
 
     async def test_session_id_unknown_on_runtime_error(self):
-        from server_core.hexstrike_middleware import _get_session_id
+        from pulse.infrastructure.hexstrike_middleware import _get_session_id
         class RaisesFctx:
             @property
             def session_id(self):

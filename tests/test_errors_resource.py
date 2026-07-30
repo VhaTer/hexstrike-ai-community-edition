@@ -6,7 +6,7 @@ the expected structure.
 
 from datetime import datetime
 import pytest
-from server_core.error_handling import IntelligentErrorHandler, ErrorContext, ErrorType
+from pulse.infrastructure.error_handling import IntelligentErrorHandler, ErrorContext, ErrorType
 
 
 @pytest.fixture

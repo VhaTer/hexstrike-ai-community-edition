@@ -36,7 +36,7 @@ class FakeMCP:
 @pytest.fixture(autouse=True)
 def reset_module_globals():
     """Reset hexstrike_server module-level globals before each test."""
-    import hexstrike_server
+    import pulse.server.web_server as hexstrike_server
     hexstrike_server._tool_availability_last_refresh = 0.0
     hexstrike_server._tool_availability_cache = {}
 
@@ -84,12 +84,12 @@ def mock_epm():
 
 def test_get_tool_availability_cache_miss():
     """First call — no cache, no last_refresh — builds result from scratch."""
-    from hexstrike_server import _get_tool_availability
-    import hexstrike_server
+    from pulse.server.web_server import _get_tool_availability
+    import pulse.server.web_server as hexstrike_server
     hexstrike_server._tool_availability_last_refresh = 0.0
     hexstrike_server._tool_availability_cache = {}
 
-    with patch("hexstrike_server.shutil.which", return_value="/usr/bin/tool"):
+    with patch("pulse.server.web_server.shutil.which", return_value="/usr/bin/tool"):
         result = _get_tool_availability()
 
     assert len(result) == 17
@@ -100,15 +100,15 @@ def test_get_tool_availability_cache_miss():
 
 def test_get_tool_availability_cache_hit():
     """Second call within 60s returns cached dict, does NOT call shutil.which."""
-    from hexstrike_server import _get_tool_availability
-    import hexstrike_server
+    from pulse.server.web_server import _get_tool_availability
+    import pulse.server.web_server as hexstrike_server
     hexstrike_server._tool_availability_last_refresh = 0.0
     hexstrike_server._tool_availability_cache = {}
 
-    with patch("hexstrike_server.shutil.which", return_value="/usr/bin/tool"):
+    with patch("pulse.server.web_server.shutil.which", return_value="/usr/bin/tool"):
         result1 = _get_tool_availability()
 
-    with patch("hexstrike_server.shutil.which") as mock_which:
+    with patch("pulse.server.web_server.shutil.which") as mock_which:
         result2 = _get_tool_availability()
 
     mock_which.assert_not_called()
@@ -165,11 +165,11 @@ def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
 
 def test_build_dashboard_healthy():
     """Status=healthy when overview has healthy server_status."""
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
-    with patch("pulse_app._collect_dashboard_state",
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
                return_value=_mock_dashboard_state("healthy")):
-        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
             result = _build_dashboard_response()
 
     assert result["status"] == "healthy"
@@ -180,11 +180,11 @@ def test_build_dashboard_healthy():
 
 def test_build_dashboard_degraded():
     """Status=degraded when overview has degraded server_status."""
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
-    with patch("pulse_app._collect_dashboard_state",
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
                return_value=_mock_dashboard_state("degraded")):
-        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
             result = _build_dashboard_response()
 
     assert result["status"] == "degraded"
@@ -192,13 +192,13 @@ def test_build_dashboard_degraded():
 
 def test_build_dashboard_with_age():
     """Uptime from overview.uptime_seconds in dashboard state."""
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
     state = _mock_dashboard_state("healthy")
     state["overview"]["uptime_seconds"] = 7200
 
-    with patch("pulse_app._collect_dashboard_state", return_value=state):
-        with patch("pulse_app.get_tool_intelligence", return_value=[]):
+    with patch("pulse.interface.pulse_app._collect_dashboard_state", return_value=state):
+        with patch("pulse.interface.pulse_app.get_tool_intelligence", return_value=[]):
             result = _build_dashboard_response()
 
     assert result["uptime"] == 7200
@@ -206,9 +206,9 @@ def test_build_dashboard_with_age():
 
 def test_build_dashboard_exception():
     """Exception in _build_dashboard_response returns error dict."""
-    from hexstrike_server import _build_dashboard_response
+    from pulse.server.web_server import _build_dashboard_response
 
-    with patch("pulse_app._collect_dashboard_state",
+    with patch("pulse.interface.pulse_app._collect_dashboard_state",
                side_effect=RuntimeError("test error")):
         result = _build_dashboard_response()
 
@@ -222,7 +222,7 @@ def test_build_dashboard_exception():
 
 def test_json_status_response_healthy():
     """Status 'healthy' → HTTP 200."""
-    from hexstrike_server import _json_status_response
+    from pulse.server.web_server import _json_status_response
     response = _json_status_response({"status": "healthy", "data": "ok"})
     assert response.status_code == 200
     assert json.loads(response.body) == {"status": "healthy", "data": "ok"}
@@ -230,7 +230,7 @@ def test_json_status_response_healthy():
 
 def test_json_status_response_not_healthy():
     """Status != 'healthy' → HTTP 500."""
-    from hexstrike_server import _json_status_response
+    from pulse.server.web_server import _json_status_response
     response = _json_status_response({"status": "degraded", "data": "bad"})
     assert response.status_code == 500
     assert json.loads(response.body) == {"status": "degraded", "data": "bad"}
@@ -242,7 +242,7 @@ def test_json_status_response_not_healthy():
 
 def test_register_routes_no_static_dir(tmp_path):
     """static_dir does not exist → warning, no dashboard/root routes."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     logger = MagicMock()
@@ -261,7 +261,7 @@ def test_register_routes_no_static_dir(tmp_path):
 
 def test_register_routes_no_assets_dir(tmp_path):
     """static_dir exists but assets/ subdir missing → no /assets mount."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -279,7 +279,7 @@ def test_register_routes_no_assets_dir(tmp_path):
 
 def test_register_routes_with_assets(tmp_path):
     """static_dir + assets/ exist but /assets is no longer mounted (moved to static delivery)."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -302,7 +302,7 @@ def test_register_routes_with_assets(tmp_path):
 
 def test_dashboard_index_found(tmp_path):
     """index.html exists → FileResponse with 200."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -319,7 +319,7 @@ def test_dashboard_index_found(tmp_path):
 
 def test_dashboard_index_missing(tmp_path):
     """No index.html → 404."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -339,7 +339,7 @@ def test_dashboard_index_missing(tmp_path):
 
 def test_root_static_valid_file(tmp_path):
     """Valid .ico file in static_dir → FileResponse 200."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -358,7 +358,7 @@ def test_root_static_valid_file(tmp_path):
 
 def test_root_static_not_found(tmp_path):
     """Non-existent file in static_dir → 404."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -376,7 +376,7 @@ def test_root_static_not_found(tmp_path):
 
 def test_root_static_not_a_file(tmp_path):
     """Requested path is a directory → 404."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -398,7 +398,7 @@ def test_root_static_not_a_file(tmp_path):
 # ===========================================================================
 
 def test_ping_route(tmp_path):
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -419,7 +419,7 @@ def test_ping_route(tmp_path):
 
 def test_health_ready(tmp_path):
     """All essential tools available + disk OK → 200 ready."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -431,8 +431,8 @@ def test_health_ready(tmp_path):
 
     all_ok = _all_tools_available()
     with (
-        patch("hexstrike_server._get_tool_availability", return_value=all_ok),
-        patch("hexstrike_server.shutil.disk_usage",
+        patch("pulse.server.web_server._get_tool_availability", return_value=all_ok),
+        patch("pulse.server.web_server.shutil.disk_usage",
               return_value=MagicMock(free=50 * 1024**3, total=100 * 1024**3)),
     ):
         response = run(health_route(MagicMock()))
@@ -446,7 +446,7 @@ def test_health_ready(tmp_path):
 
 def test_health_degraded_tools(tmp_path):
     """Missing essential tools → 503 degraded."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -457,7 +457,7 @@ def test_health_degraded_tools(tmp_path):
     health_route = mcp.routes[("/health", ("GET",))]
 
     no_tools = _no_tools_available()
-    with patch("hexstrike_server._get_tool_availability", return_value=no_tools):
+    with patch("pulse.server.web_server._get_tool_availability", return_value=no_tools):
         response = run(health_route(MagicMock()))
 
     assert response.status_code == 503
@@ -468,7 +468,7 @@ def test_health_degraded_tools(tmp_path):
 
 def test_health_degraded_disk(tmp_path):
     """Low disk space → 503 degraded even if tools OK."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -481,8 +481,8 @@ def test_health_degraded_disk(tmp_path):
     all_ok = _all_tools_available()
     # disk.free / disk.total = 0.05 < 0.1 → disk_ok = False
     with (
-        patch("hexstrike_server._get_tool_availability", return_value=all_ok),
-        patch("hexstrike_server.shutil.disk_usage",
+        patch("pulse.server.web_server._get_tool_availability", return_value=all_ok),
+        patch("pulse.server.web_server.shutil.disk_usage",
               return_value=MagicMock(free=5 * 1024**3, total=100 * 1024**3)),
     ):
         response = run(health_route(MagicMock()))
@@ -495,7 +495,7 @@ def test_health_degraded_disk(tmp_path):
 
 def test_health_exception(tmp_path):
     """Exception in health route → 500."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -505,7 +505,7 @@ def test_health_exception(tmp_path):
     register_http_routes(mcp, MagicMock(), static_dir=static_dir)
     health_route = mcp.routes[("/health", ("GET",))]
 
-    with patch("hexstrike_server._get_tool_availability",
+    with patch("pulse.server.web_server._get_tool_availability",
                side_effect=RuntimeError("boom")):
         response = run(health_route(MagicMock()))
 
@@ -520,7 +520,7 @@ def test_health_exception(tmp_path):
 
 def test_web_dashboard_normal(tmp_path):
     """Normal call returns dashboard data."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -531,7 +531,7 @@ def test_web_dashboard_normal(tmp_path):
     web_dashboard_route = mcp.routes[("/web-dashboard", ("GET",))]
 
     dashboard_data = {"status": "healthy", "data": "test"}
-    with patch("hexstrike_server._build_dashboard_response",
+    with patch("pulse.server.web_server._build_dashboard_response",
                return_value=dashboard_data):
         response = run(web_dashboard_route(MagicMock()))
 
@@ -541,7 +541,7 @@ def test_web_dashboard_normal(tmp_path):
 
 def test_web_dashboard_exception(tmp_path):
     """Exception in _build_dashboard_response → 500 error response."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -551,7 +551,7 @@ def test_web_dashboard_exception(tmp_path):
     register_http_routes(mcp, MagicMock(), static_dir=static_dir)
     web_dashboard_route = mcp.routes[("/web-dashboard", ("GET",))]
 
-    with patch("hexstrike_server._build_dashboard_response",
+    with patch("pulse.server.web_server._build_dashboard_response",
                side_effect=RuntimeError("dashboard error")):
         response = run(web_dashboard_route(MagicMock()))
 
@@ -568,7 +568,7 @@ def test_web_dashboard_exception(tmp_path):
 async def _collect_stream_chunks(stream_route, side_effects, n_chunks=3):
     """Helper: collect n_chunks from the stream route with given side_effects."""
     with (
-        patch("hexstrike_server._build_dashboard_response") as mock_build,
+        patch("pulse.server.web_server._build_dashboard_response") as mock_build,
         patch("asyncio.sleep", new_callable=AsyncMock),
     ):
         mock_build.side_effect = side_effects
@@ -584,7 +584,7 @@ async def _collect_stream_chunks(stream_route, side_effects, n_chunks=3):
 @pytest.mark.asyncio
 async def test_stream_dashboard_initial_data(tmp_path):
     """First chunk should contain dashboard data."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -605,7 +605,7 @@ async def test_stream_dashboard_initial_data(tmp_path):
 @pytest.mark.asyncio
 async def test_stream_dashboard_keepalive(tmp_path):
     """Same data consecutively yields keepalive."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -630,7 +630,7 @@ async def test_stream_dashboard_keepalive(tmp_path):
 @pytest.mark.asyncio
 async def test_stream_dashboard_changing_data(tmp_path):
     """Different data consecutively yields data again."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -656,7 +656,7 @@ async def test_stream_dashboard_changing_data(tmp_path):
 @pytest.mark.asyncio
 async def test_stream_dashboard_error(tmp_path):
     """Exception in _build_dashboard_response yields error data."""
-    from hexstrike_server import register_http_routes
+    from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
     static_dir = tmp_path / "server_static"
@@ -691,7 +691,7 @@ def test_main_block_execution():
         [sys.executable, "-c", """
 import sys
 sys.path.insert(0, ".")
-import hexstrike_server
+import pulse.server.web_server as hexstrike_server
 assert hasattr(hexstrike_server, "register_http_routes")
 assert hasattr(hexstrike_server, "_build_dashboard_response")
 assert hasattr(hexstrike_server, "_get_tool_availability")

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from mcp_core.elicitation import confirm_destructive_action
+from pulse.interface.elicitation import confirm_destructive_action
 
 
 class MockResult:

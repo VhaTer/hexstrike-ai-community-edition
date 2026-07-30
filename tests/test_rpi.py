@@ -24,7 +24,7 @@ from urllib.parse import urljoin
 import pytest
 import requests
 
-import pulse_app
+from pulse.interface import pulse_app
 
 RPI_IP = "192.168.1.10"
 RPI_BASE = f"http://{RPI_IP}/DVWA/"
@@ -63,7 +63,7 @@ def _dvwa_login() -> dict:
 
 def _populate_direct_tools():
     """Populate _DIRECT_TOOLS_CACHE so scan() can use direct exec functions."""
-    from mcp_core.server_setup import _populate_direct_tools as _real_setup
+    from pulse.interface.server_setup import _populate_direct_tools as _real_setup
     _real_setup()
 
 
@@ -115,7 +115,7 @@ class TestRpiEasy:
     @pytest.mark.skipif(not tool_installed("nmap"), reason="nmap not installed")
     def test_ports_open(self, rpi_available):
         """nmap finds at least SSH (22) and HTTP (80)."""
-        from mcp_core.net_scan_direct import net_scan_exec
+        from pulse.tools.net_scan_direct import net_scan_exec
         r = net_scan_exec("nmap", {"target": RPI_IP, "scan_type": "-sT -Pn",
                                     "ports": "22,80,443,3306"})
         assert r.get("success"), f"nmap failed: {r.get('stderr', '')[:200]}"
@@ -126,7 +126,7 @@ class TestRpiEasy:
     @pytest.mark.skipif(not tool_installed("whatweb"), reason="whatweb not installed")
     def test_tech_detection(self, rpi_available):
         """whatweb detects Apache and PHP on DVWA."""
-        from mcp_core.web_probe_direct import web_probe_exec
+        from pulse.tools.web_probe_direct import web_probe_exec
         r = web_probe_exec("whatweb", {"url": RPI_BASE})
         assert r.get("success"), f"whatweb failed: {r.get('stderr', '')[:200]}"
         out = r.get("stdout", "") or r.get("output", "")
@@ -233,7 +233,7 @@ class TestRpiHard:
     @pytest.mark.skipif(not tool_installed("gobuster"), reason="gobuster not installed")
     def test_gobuster_discovers_paths(self, rpi_available):
         """gobuster finds DVWA standard paths."""
-        from mcp_core.web_fuzz_direct import web_fuzz_exec
+        from pulse.tools.web_fuzz_direct import web_fuzz_exec
         r = web_fuzz_exec("gobuster", {
             "url": RPI_BASE,
             "mode": "dir",
@@ -253,7 +253,7 @@ class TestRpiHard:
     @pytest.mark.skipif(not tool_installed("sqlmap"), reason="sqlmap not installed")
     def test_sqlmap_detects_database(self, rpi_available, dvwa_session):
         """sqlmap --banner against DVWA SQLi page confirms injection."""
-        from mcp_core.web_scan_direct import web_scan_exec
+        from pulse.tools.web_scan_direct import web_scan_exec
         sqli_url = urljoin(RPI_BASE, "vulnerabilities/sqli/?id=1&Submit=Submit")
         r = web_scan_exec("sqlmap", {
             "url": sqli_url,
@@ -271,7 +271,7 @@ class TestRpiHard:
     @pytest.mark.skipif(not tool_installed("dalfox"), reason="dalfox not installed")
     def test_dalfox_detects_xss(self, rpi_available, dvwa_session):
         """dalfox finds XSS on DVWA reflected XSS page."""
-        from mcp_core.web_scan_direct import web_scan_exec
+        from pulse.tools.web_scan_direct import web_scan_exec
         xss_url = urljoin(RPI_BASE, "vulnerabilities/xss_r/")
         r = web_scan_exec("dalfox", {
             "url": xss_url,

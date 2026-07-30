@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
-from mcp_core import server_setup
-from mcp_core.server_setup import (
+from pulse.interface import server_setup
+from pulse.interface.server_setup import (
     _ScanCache,
     _build_destructive_confirmation,
     _build_typed_tool_doc,
@@ -576,7 +576,7 @@ class TestCreateTypedToolWrapper:
 
         wrapper = _create_typed_tool_wrapper("test_tool", tool_def, fake_run)
         ctx = SimpleNamespace(session_id="test")
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             result = run(wrapper(target="example.com", verbose=True))
         assert result["success"] is True
         assert call_log[0][0] == "test_tool"
@@ -596,7 +596,7 @@ class TestCreateTypedToolWrapper:
 
         wrapper = _create_typed_tool_wrapper("test_tool", tool_def, fake_run)
         ctx = SimpleNamespace(session_id="test")
-        with patch("mcp_core.server_setup.get_context", return_value=ctx):
+        with patch("pulse.interface.server_setup.get_context", return_value=ctx):
             result = run(wrapper(target="example.com"))
         assert result["success"] is True
         assert "verbose" not in call_log[0][1]

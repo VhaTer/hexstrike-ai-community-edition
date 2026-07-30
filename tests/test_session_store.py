@@ -2,7 +2,7 @@ import pytest
 import json
 import os
 from unittest.mock import patch
-from server_core.session_store import SessionStore
+from pulse.infrastructure.session_store import SessionStore
 
 
 @pytest.fixture

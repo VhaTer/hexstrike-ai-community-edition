@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import pulse_app
+from pulse.interface import pulse_app
 from tests.test_pulse_app import _MockCache  # shared mock cache
 
 
@@ -150,7 +150,7 @@ def mock_direct_tools(mock_cache):
                 "output": data.get("stdout", ""), "error": "",
                 "returncode": 0, "duration": 0.1}
 
-    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+    with patch("pulse.interface.server_setup.run_security_tool", new=_mock):
         yield results
 
 
@@ -182,7 +182,7 @@ def mock_dvwa_direct_tools(mock_cache):
                 "output": data.get("stdout", ""), "error": "",
                 "returncode": 0, "duration": 0.1}
 
-    with patch("mcp_core.server_setup.run_security_tool", new=_mock):
+    with patch("pulse.interface.server_setup.run_security_tool", new=_mock):
         yield results
 
 

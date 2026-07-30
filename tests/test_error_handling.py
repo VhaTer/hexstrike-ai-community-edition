@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, PropertyMock
-from server_core.error_handling import (
+from pulse.infrastructure.error_handling import (
     ErrorType, RecoveryAction, ErrorContext, RecoveryStrategy,
     IntelligentErrorHandler, GracefulDegradation
 )

@@ -57,7 +57,7 @@ class TestRegisterCveTools:
 
     def test_registers_four_tools(self):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
         names = [t.name for t in __import__('asyncio').run(mcp.list_tools())]
         assert "cve_fetch" in names
@@ -75,11 +75,11 @@ class TestCveFetch:
     @pytest.mark.asyncio
     async def test_fetch_success(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_fetch")
             result = await tool.fn(hours=48, severity="CRITICAL")
 
@@ -93,11 +93,11 @@ class TestCveFetch:
             "success": False, "error": "NVD API rate limited", "cves": [],
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_fetch")
             result = await tool.fn()
 
@@ -107,11 +107,11 @@ class TestCveFetch:
     @pytest.mark.asyncio
     async def test_fetch_default_params(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_fetch")
             result = await tool.fn()
 
@@ -127,10 +127,10 @@ class TestCveAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_invalid_cve(self, mock_ctx):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx):
             tool = await mcp.get_tool("cve_analyze")
             result = await tool.fn(cve_id="not-a-cve")
 
@@ -140,11 +140,11 @@ class TestCveAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_valid_cve(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_analyze")
             result = await tool.fn(cve_id="CVE-2024-1234")
 
@@ -154,11 +154,11 @@ class TestCveAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_lowercase_cve(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_analyze")
             result = await tool.fn(cve_id="cve-2024-5678")
 
@@ -170,11 +170,11 @@ class TestCveAnalyze:
             "success": False, "error": "CVE not found",
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_analyze")
             result = await tool.fn(cve_id="CVE-2024-9999")
 
@@ -190,10 +190,10 @@ class TestCveExploits:
     @pytest.mark.asyncio
     async def test_exploits_invalid_cve(self, mock_ctx):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx):
             tool = await mcp.get_tool("cve_exploits")
             result = await tool.fn(cve_id="bad")
 
@@ -202,11 +202,11 @@ class TestCveExploits:
     @pytest.mark.asyncio
     async def test_exploits_success(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_exploits")
             result = await tool.fn(cve_id="CVE-2024-1234")
 
@@ -219,11 +219,11 @@ class TestCveExploits:
             "success": False, "error": "API unavailable",
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_exploits")
             result = await tool.fn(cve_id="CVE-2024-1234")
 
@@ -239,10 +239,10 @@ class TestCveIntel:
     @pytest.mark.asyncio
     async def test_intel_invalid_cve(self, mock_ctx):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx):
             tool = await mcp.get_tool("cve_intel")
             result = await tool.fn(cve_id="bad")
 
@@ -251,11 +251,11 @@ class TestCveIntel:
     @pytest.mark.asyncio
     async def test_intel_success(self, mock_ctx, mock_cve_mgr):
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_intel")
             result = await tool.fn(cve_id="CVE-2024-1234")
 
@@ -364,11 +364,11 @@ class TestCveIntel:
             "search_summary": {"github_repos": 3, "metasploit_modules": 2, "exploit_db_refs": 2},
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_intel")
             result = await tool.fn(cve_id="CVE-2024-0001")
 
@@ -388,11 +388,11 @@ class TestCveIntel:
             "search_summary": {"github_repos": 0, "metasploit_modules": 0, "exploit_db_refs": 0},
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
 
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_intel")
             result = await tool.fn(cve_id="CVE-2024-9999")
 
@@ -412,10 +412,10 @@ class TestCveIntel:
             "search_summary": {"github_repos": 0, "metasploit_modules": 0, "exploit_db_refs": 0},
         }
         mcp = FastMCP("test")
-        from mcp_core.cve_engine import register_cve_tools
+        from pulse.tools.cve_engine import register_cve_tools
         register_cve_tools(mcp)
-        with patch("mcp_core.cve_engine.get_context", return_value=mock_ctx), \
-             patch("mcp_core.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
+        with patch("pulse.tools.cve_engine.get_context", return_value=mock_ctx), \
+             patch("pulse.tools.cve_engine.get_cve_intelligence", return_value=mock_cve_mgr):
             tool = await mcp.get_tool("cve_intel")
             result = await tool.fn(cve_id="CVE-2024-0001")
         assert result["risk_level"] == "MEDIUM"

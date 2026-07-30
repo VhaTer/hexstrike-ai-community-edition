@@ -10,8 +10,8 @@ import sys
 import pytest
 from unittest.mock import patch, MagicMock
 
-from mcp_core.technology_detector import TechProfile
-from mcp_core.parameter_optimizer import ParameterOptimizer
+from pulse.tools.technology_detector import TechProfile
+from pulse.tools.parameter_optimizer import ParameterOptimizer
 
 
 @pytest.fixture(autouse=True)
@@ -21,8 +21,8 @@ def mock_psutil_low_load():
     mock_ps = MagicMock()
     mock_ps.cpu_percent.return_value = 30
     mock_ps.virtual_memory.return_value.percent = 40
-    with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True), \
-         patch("mcp_core.parameter_optimizer.psutil", mock_ps):
+    with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True), \
+         patch("pulse.tools.parameter_optimizer.psutil", mock_ps):
         yield mock_ps
 
 
@@ -192,8 +192,8 @@ class TestFailureRecovery:
 
 class TestResourceTuning:
     def test_high_cpu_reduces_threads(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_psutil:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_psutil:
                 mock_psutil.cpu_percent.return_value = 90
                 mock_psutil.virtual_memory.return_value.percent = 60
                 params = {"threads": 20}
@@ -201,8 +201,8 @@ class TestResourceTuning:
                 assert result["threads"] == 10
 
     def test_low_cpu_no_reduction(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_psutil:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_psutil:
                 mock_psutil.cpu_percent.return_value = 30
                 mock_psutil.virtual_memory.return_value.percent = 40
                 params = {"threads": 20}
@@ -331,8 +331,8 @@ class TestPhpExtended:
 
 class TestResourceTuningExtended:
     def test_high_memory_reduces_threads(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 30
                 mock_ps.virtual_memory.return_value.percent = 95
                 params = {"threads": 20}
@@ -340,22 +340,22 @@ class TestResourceTuningExtended:
                 assert result["threads"] == 10
 
     def test_psutil_unavailable_no_reduction(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", False):
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", False):
             params = {"threads": 20}
             result = optimizer._apply_resource_tuning("gobuster", params)
             assert result["threads"] == 20
 
     def test_psutil_error_no_crash(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.side_effect = Exception("psutil error")
                 params = {"threads": 20}
                 result = optimizer._apply_resource_tuning("gobuster", params)
                 assert result["threads"] == 20
 
     def test_concurrency_key_reduced(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"concurrency": 10}
@@ -363,8 +363,8 @@ class TestResourceTuningExtended:
                 assert result["concurrency"] == 5
 
     def test_workers_key_reduced(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"workers": 8}
@@ -372,8 +372,8 @@ class TestResourceTuningExtended:
                 assert result["workers"] == 4
 
     def test_multiple_thread_keys_all_reduced(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"threads": 20, "concurrency": 10, "workers": 8}
@@ -383,8 +383,8 @@ class TestResourceTuningExtended:
                 assert result["workers"] == 4
 
     def test_caller_protected_threads_not_reduced(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"threads": 20}
@@ -393,8 +393,8 @@ class TestResourceTuningExtended:
                 assert result["threads"] == 20
 
     def test_caller_protected_concurrency_still_reduced(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"threads": 20, "concurrency": 10}
@@ -404,8 +404,8 @@ class TestResourceTuningExtended:
                 assert result["concurrency"] == 5
 
     def test_reduce_to_minimum_one(self, optimizer):
-        with patch("mcp_core.parameter_optimizer._PSUTIL_AVAILABLE", True):
-            with patch("mcp_core.parameter_optimizer.psutil") as mock_ps:
+        with patch("pulse.tools.parameter_optimizer._PSUTIL_AVAILABLE", True):
+            with patch("pulse.tools.parameter_optimizer.psutil") as mock_ps:
                 mock_ps.cpu_percent.return_value = 90
                 mock_ps.virtual_memory.return_value.percent = 60
                 params = {"threads": 1}
@@ -577,11 +577,11 @@ class TestIntegration:
 class TestCheckPsutil:
 
     def test_check_psutil_available_returns_true(self):
-        from mcp_core.parameter_optimizer import _check_psutil
+        from pulse.tools.parameter_optimizer import _check_psutil
         assert _check_psutil() is True
 
     def test_check_psutil_import_error_returns_false(self):
-        from mcp_core.parameter_optimizer import _check_psutil
+        from pulse.tools.parameter_optimizer import _check_psutil
         saved = sys.modules.pop("psutil", None)
         saved_import = builtins.__import__
         def mock_import(name, *args, **kwargs):

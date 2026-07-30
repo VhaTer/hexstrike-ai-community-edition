@@ -17,7 +17,7 @@ import logging
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from server_core.hexstrike_middleware import (
+from pulse.infrastructure.hexstrike_middleware import (
     HexStrikeLoggingMiddleware,
     HexStrikeSessionMiddleware,
     _get_session_id,

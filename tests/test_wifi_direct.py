@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import patch
-from mcp_core._helpers import require
-from mcp_core.wifi_direct import wifi_exec
+from pulse.tools._helpers import require
+from pulse.tools.wifi_direct import wifi_exec
 
 
 @pytest.fixture
 def mock_exec():
-    with patch("mcp_core.wifi_direct.execute_command") as m:
+    with patch("pulse.tools.wifi_direct.execute_command") as m:
         m.return_value = {"success": True, "output": "ok", "returncode": 0}
         yield m
 
@@ -55,7 +55,7 @@ class TestWifiExecRouting:
         assert result["success"] is True
 
     def test_all_tools_covered(self):
-        from mcp_core.wifi_direct import _HANDLERS
+        from pulse.tools.wifi_direct import _HANDLERS
         expected = {
             "airmon_ng", "airodump_ng", "aireplay_ng", "aircrack_ng",
             "airbase_ng", "airdecap_ng", "hcxdumptool", "hcxpcapngtool",

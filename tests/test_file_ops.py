@@ -1,5 +1,5 @@
 import pytest
-from server_core.file_ops import FileOperationsManager
+from pulse.infrastructure.file_ops import FileOperationsManager
 
 
 @pytest.fixture

@@ -4,7 +4,7 @@ import os
 import tempfile
 import pytest
 
-from mcp_core.rev_direct import compute_entropy_map, _shannon_entropy
+from pulse.tools.rev_direct import compute_entropy_map, _shannon_entropy
 
 
 class TestShannonEntropy:

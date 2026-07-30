@@ -8,13 +8,13 @@ Covers: whatweb, commix, joomscan
 import pytest
 from unittest.mock import patch
 
-import mcp_core.web_probe_direct as _mod
+import pulse.tools.web_probe_direct as _mod
 
 MOCK_OK = {"success": True, "output": "tool output", "returncode": 0}
 
 
 def run_probe(tool: str, data: dict):
-    with patch("mcp_core.web_probe_direct.execute_command", return_value=MOCK_OK) as mock:
+    with patch("pulse.tools.web_probe_direct.execute_command", return_value=MOCK_OK) as mock:
         result = _mod.web_probe_exec(tool, data)
         return result, mock
 

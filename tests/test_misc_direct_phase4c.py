@@ -1,7 +1,7 @@
 """
 Phase 4c: misc_direct.py Binary Analysis & Misc Tools Coverage Tests
 
-Comprehensive test suite for mcp_core.misc_direct module.
+Comprehensive test suite for pulse.tools.misc_direct module.
 Tests 33+ miscellaneous tools covering:
 - Binary analysis (gadget search, disassembly, reverse engineering)
 - Memory forensics (volatility)
@@ -36,7 +36,7 @@ import json
 
 # Import the module under test
 try:
-    from mcp_core.misc_direct import (
+    from pulse.tools.misc_direct import (
         misc_exec,
         _ropgadget, _ropper, _one_gadget,
         _volatility, _volatility3,
@@ -174,7 +174,7 @@ REQUIRED_PARAMS = {
 @pytest.fixture
 def mock_execute_command():
     """Mock execute_command to avoid actual command execution"""
-    with patch('mcp_core.misc_direct.execute_command') as mock:
+    with patch('pulse.tools.misc_direct.execute_command') as mock:
         mock.return_value = {"success": True, "stdout": "test output"}
         yield mock
 
@@ -182,7 +182,7 @@ def mock_execute_command():
 @pytest.fixture
 def mock_pymysql():
     """Mock pymysql connection"""
-    with patch('mcp_core.misc_direct.pymysql') as mock:
+    with patch('pulse.tools.misc_direct.pymysql') as mock:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [{"id": 1, "name": "test"}]
@@ -196,7 +196,7 @@ def mock_pymysql():
 @pytest.fixture
 def mock_sqlite3():
     """Mock sqlite3 connection"""
-    with patch('mcp_core.misc_direct.sqlite3') as mock:
+    with patch('pulse.tools.misc_direct.sqlite3') as mock:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [(1, "test")]
