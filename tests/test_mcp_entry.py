@@ -29,7 +29,7 @@ def mock_scan_cache():
 def mock_op_metrics():
     """Patch _op_metrics in the seed function's import path."""
     fake = MagicMock()
-    with patch("pulse.infrastructure.operational_metrics._op_metrics", fake):
+    with patch("pulse.infrastructure.telemetry.operational_metrics._op_metrics", fake):
         yield fake
 
 

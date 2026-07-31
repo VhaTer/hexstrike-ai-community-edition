@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 
 from pulse.tools.password_cracking_direct import pwdcrack_exec
-from pulse.infrastructure.advanced_cache import AdvancedCache
+from pulse.infrastructure.storage.advanced_cache import AdvancedCache
 
 
 def test_advanced_cache_supports_len_and_items():

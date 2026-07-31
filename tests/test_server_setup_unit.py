@@ -503,7 +503,7 @@ class TestResourceTargetStore:
     """MCP resource endpoints for TargetStore (targets://, target://, findings, sessions)."""
 
     def _store(self, tmp_path):
-        from pulse.infrastructure.target_store import TargetStore
+        from pulse.infrastructure.storage.target_store import TargetStore
         return TargetStore(data_dir=str(tmp_path))
 
     def test_targets_list_empty(self, tmp_path):

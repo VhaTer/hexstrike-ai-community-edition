@@ -2,7 +2,7 @@ import re
 import time
 import logging
 from typing import Any, Dict, List
-from .CTFChallenge import CTFChallenge
+from .challenge import CTFChallenge
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from beartype import beartype
 from datetime import datetime
 from wcwidth import wcswidth as _wcswidth
 import pulse.infrastructure.config_core as config_core
-from pulse.infrastructure.process_manager import ProcessManager
+from pulse.infrastructure.execution.process_manager import ProcessManager
 from pulse.infrastructure.modern_visual_engine import ModernVisualEngine
 
 _ANSI = _re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -26,7 +26,7 @@ def _box_row(content_with_ansi: str) -> str:
     return f"{C['MATRIX_GREEN']}{C['BOLD']}│{C['RESET']}{content_with_ansi}{padding}{C['MATRIX_GREEN']}{C['BOLD']}│{C['RESET']}"
 
 # Global telemetry collector
-from pulse.infrastructure.telemetry_collector import TelemetryCollector
+from pulse.infrastructure.telemetry.telemetry_collector import TelemetryCollector
 telemetry = TelemetryCollector()
 
 logger = logging.getLogger(__name__)

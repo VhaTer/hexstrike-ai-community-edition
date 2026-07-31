@@ -14,7 +14,7 @@ Covers:
 
 import time
 import pytest
-from pulse.infrastructure.telemetry_collector import TelemetryCollector
+from pulse.infrastructure.telemetry.telemetry_collector import TelemetryCollector
 
 
 def test_constructor_defaults():

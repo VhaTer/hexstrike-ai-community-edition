@@ -1,7 +1,7 @@
 from typing import Any, Optional
 from beartype import beartype
 from pulse.infrastructure import config_core
-from pulse.infrastructure.enhanced_command_executor import EnhancedCommandExecutor
+from pulse.infrastructure.execution.enhanced_command_executor import EnhancedCommandExecutor
 from pulse.infrastructure.singletons import cache as _cache
 
 COMMAND_TIMEOUT = config_core.get("COMMAND_TIMEOUT", 300)  # Default to 5 minutes if not set

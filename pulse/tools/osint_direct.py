@@ -11,7 +11,7 @@ Usage:
     )
 """
 
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 from pulse.tools._helpers import require, reject_shell_metachars
 
 

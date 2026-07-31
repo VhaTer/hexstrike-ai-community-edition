@@ -51,7 +51,7 @@ from prefab_ui.rx import Rx
 from config import _config as app_config
 from pulse.interface.server_setup import _scan_cache, _rate_limit_events, _optimizer, TOOL_TIMEOUTS
 from pulse.tools.null_context import NullContext
-from pulse.infrastructure.operational_metrics import _op_metrics
+from pulse.infrastructure.telemetry.operational_metrics import _op_metrics
 from pulse.infrastructure.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store, get_ctf_manager
 from pulse.intelligence.exploit_rules import suggest_exploit, ESTIMATED_TIMES, compute_layer2_score
 from tool_registry import TOOLS

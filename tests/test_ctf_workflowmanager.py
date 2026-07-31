@@ -1,8 +1,8 @@
 """Test suite for CTF Workflow Manager"""
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.workflow_manager import CTFWorkflowManager
+from pulse.workflows.ctf.challenge import CTFChallenge
 
 
 class TestCTFWorkflowManager:

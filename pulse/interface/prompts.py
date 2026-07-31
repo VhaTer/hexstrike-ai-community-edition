@@ -443,7 +443,7 @@ async def ctf_web_challenge(url: str) -> list[Message]:
         url: Challenge URL (e.g. 'http://challenge.ctf.local:8080')
     """
     from pulse.infrastructure.singletons import get_ctf_manager
-    from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+    from pulse.workflows.ctf.challenge import CTFChallenge
 
     challenge = CTFChallenge(
         name="ctf_web",
@@ -559,8 +559,8 @@ async def ctf_challenge(
         points:      Challenge point value (optional)
     """
     from pulse.infrastructure.singletons import get_ctf_manager
-    from pulse.workflows.ctf.CTFChallenge import CTFChallenge
-    from pulse.workflows.ctf.toolManager import CTFToolManager
+    from pulse.workflows.ctf.challenge import CTFChallenge
+    from pulse.workflows.ctf.tool_manager import CTFToolManager
 
     try:
         points_int = int(points)

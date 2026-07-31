@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock, PropertyMock
 
 import pytest
 
-from pulse.infrastructure.process_manager import ProcessManager, active_processes, process_lock
+from pulse.infrastructure.execution.process_manager import ProcessManager, active_processes, process_lock
 
 
 @pytest.fixture(autouse=True)

@@ -1,11 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from pulse.infrastructure.python_env_manager import PythonEnvironmentManager
+from pulse.infrastructure.execution.python_env_manager import PythonEnvironmentManager
 
 
 @pytest.fixture
 def manager(tmp_path):
-    with patch("pulse.infrastructure.python_env_manager.venv.create"):
+    with patch("pulse.infrastructure.execution.python_env_manager.venv.create"):
         mgr = PythonEnvironmentManager(base_dir=str(tmp_path / "envs"))
         yield mgr
 
@@ -18,7 +18,7 @@ class TestPythonEnvironmentManager:
     def test_create_venv_already_exists(self, manager, tmp_path):
         env_dir = tmp_path / "envs" / "existing_env"
         env_dir.mkdir(parents=True)
-        with patch("pulse.infrastructure.python_env_manager.venv.create") as mock_venv:
+        with patch("pulse.infrastructure.execution.python_env_manager.venv.create") as mock_venv:
             env_path = manager.create_venv("existing_env")
             mock_venv.assert_not_called()
             assert str(env_path) == str(env_dir)
@@ -28,20 +28,20 @@ class TestPythonEnvironmentManager:
         env_path2 = manager.create_venv("test_env")
         assert env_path1 == env_path2
 
-    @patch("pulse.infrastructure.python_env_manager.subprocess.run")
+    @patch("pulse.infrastructure.execution.python_env_manager.subprocess.run")
     def test_install_package_success(self, mock_run, manager):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         result = manager.install_package("test_env", "requests")
         assert result is True
         mock_run.assert_called_once()
 
-    @patch("pulse.infrastructure.python_env_manager.subprocess.run")
+    @patch("pulse.infrastructure.execution.python_env_manager.subprocess.run")
     def test_install_package_failure(self, mock_run, manager):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
         result = manager.install_package("test_env", "nonexistent")
         assert result is False
 
-    @patch("pulse.infrastructure.python_env_manager.subprocess.run")
+    @patch("pulse.infrastructure.execution.python_env_manager.subprocess.run")
     def test_install_package_exception(self, mock_run, manager):
         mock_run.side_effect = Exception("network error")
         result = manager.install_package("test_env", "requests")
@@ -54,11 +54,11 @@ class TestPythonEnvironmentManager:
 
     def test_base_dir_creation(self, tmp_path):
         base = tmp_path / "custom_envs"
-        with patch("pulse.infrastructure.python_env_manager.venv.create"):
+        with patch("pulse.infrastructure.execution.python_env_manager.venv.create"):
             mgr = PythonEnvironmentManager(base_dir=str(base))
             assert base.exists()
 
     def test_global_env_manager_singleton(self):
-        from pulse.infrastructure.python_env_manager import env_manager
+        from pulse.infrastructure.execution.python_env_manager import env_manager
         assert isinstance(env_manager, PythonEnvironmentManager)
         assert str(env_manager.base_dir) == "/tmp/hexstrike_envs"

@@ -6,7 +6,7 @@ Phase 2 — Direct execution layer for smb_enum tools.
 
 import shlex
 from typing import Any, Dict
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 from pulse.tools._helpers import require
 
 

@@ -12,7 +12,7 @@ from shared.attack_step import AttackStep
 from shared.target_profile import TargetProfile
 
 from pulse.infrastructure.rate_limit_detector import RateLimitDetector
-from pulse.infrastructure.technology_detector import TechnologyDetector
+from pulse.infrastructure.advanced_technology_detector import AdvancedTechnologyDetector
 
 
 # =========================================================================
@@ -190,7 +190,7 @@ class _RecoveryStrategy:
 
 class TestRecoveryExecutorBranches:
     def test_switch_to_alternative_tool(self):
-        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.execution.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "tool failed"},
             {"success": True, "result": "alt tool worked"},
@@ -220,7 +220,7 @@ class TestRecoveryExecutorBranches:
         logger.warning.assert_called()
 
     def test_switch_to_alternative_no_fallback(self):
-        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.execution.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "failed"},
             {"success": False, "stderr": "still failed"},
@@ -247,7 +247,7 @@ class TestRecoveryExecutorBranches:
         assert result["success"] is False
 
     def test_switch_to_alternative_no_alt_tool(self):
-        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.execution.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "failed"},
             {"success": False, "stderr": "still failed"},
@@ -272,7 +272,7 @@ class TestRecoveryExecutorBranches:
         assert result["success"] is False
 
     def test_adjust_parameters(self):
-        from pulse.infrastructure.recovery_executor import execute_command_with_recovery
+        from pulse.infrastructure.execution.recovery_executor import execute_command_with_recovery
         exec_fn = Mock(side_effect=[
             {"success": False, "stderr": "bad params"},
             {"success": True, "result": "adjusted worked"},
@@ -300,13 +300,13 @@ class TestRecoveryExecutorBranches:
 
 class TestTechnologyDetectorBranches:
     def test_port_not_in_services(self):
-        detector = TechnologyDetector()
+        detector = AdvancedTechnologyDetector()
         result = detector.detect_technologies("example.com", ports=[9999, 80])
         assert "http" in result["services"]
         assert "9999" not in result["services"]
 
     def test_duplicate_ports_dedup(self):
-        detector = TechnologyDetector()
+        detector = AdvancedTechnologyDetector()
         result = detector.detect_technologies("example.com", ports=[80, 80])
         assert result["services"].count("http") == 1
         assert len(result["services"]) == 1

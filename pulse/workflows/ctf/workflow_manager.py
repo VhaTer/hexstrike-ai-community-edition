@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
-from .CTFChallenge import CTFChallenge
-from .toolManager import CTFToolManager
+from .challenge import CTFChallenge
+from .tool_manager import CTFToolManager
 
 class CTFWorkflowManager:
     """Specialized workflow manager for CTF competitions"""

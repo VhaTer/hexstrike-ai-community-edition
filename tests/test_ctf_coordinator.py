@@ -1,5 +1,5 @@
 import pytest
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.challenge import CTFChallenge
 from pulse.workflows.ctf.coordinator import CTFTeamCoordinator
 
 

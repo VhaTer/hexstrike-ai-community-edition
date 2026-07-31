@@ -21,7 +21,7 @@ Covers:
 
 import threading
 import pytest
-from pulse.infrastructure.telemetry_pipeline import TelemetryPipeline
+from pulse.infrastructure.telemetry.telemetry_pipeline import TelemetryPipeline
 
 
 @pytest.fixture

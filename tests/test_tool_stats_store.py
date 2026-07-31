@@ -5,7 +5,7 @@ import os
 import pytest
 from unittest.mock import patch
 
-from pulse.infrastructure.tool_stats_store import ToolStatsStore, STATS_FILE_NAME, MIN_RUNS_FOR_LIVE
+from pulse.infrastructure.storage.tool_stats_store import ToolStatsStore, STATS_FILE_NAME, MIN_RUNS_FOR_LIVE
 
 
 class TestToolStatsStore:

@@ -21,10 +21,10 @@ import pulse.infrastructure.config_core as config_core
 
 # ── GROUP A: Active path — always instantiated ────────────────────────────────
 
-from .cache import HexStrikeCache
-from .enhanced_process_manager import EnhancedProcessManager
+from pulse.infrastructure.storage.cache import HexStrikeCache
+from pulse.infrastructure.execution.enhanced_process_manager import EnhancedProcessManager
 from .error_handling import IntelligentErrorHandler, GracefulDegradation
-from .enhanced_command_executor import telemetry  # noqa: F401 — re-export
+from pulse.infrastructure.execution.enhanced_command_executor import telemetry  # noqa: F401 — re-export
 
 cache                = HexStrikeCache()
 enhanced_process_manager = EnhancedProcessManager()
@@ -62,7 +62,7 @@ def get_tool_stats_store():
     """ToolStatsStore — per-tool effectiveness tracker (persisted to JSON)."""
     global _tool_stats_store
     if _tool_stats_store is None:
-        from .tool_stats_store import ToolStatsStore
+        from pulse.infrastructure.storage.tool_stats_store import ToolStatsStore
         _tool_stats_store = ToolStatsStore()
     return _tool_stats_store
 
@@ -71,7 +71,7 @@ def get_target_store():
     """TargetStore — per-target findings and session history (persisted to JSON)."""
     global _target_store
     if _target_store is None:
-        from .target_store import TargetStore
+        from pulse.infrastructure.storage.target_store import TargetStore
         _target_store = TargetStore()
     return _target_store
 
@@ -79,7 +79,7 @@ def get_target_store():
 def get_session_store():
     global _session_store
     if _session_store is None:
-        from .session_store import SessionStore
+        from pulse.infrastructure.storage.session_store import SessionStore
         _session_store = SessionStore()
     return _session_store
 
@@ -87,7 +87,7 @@ def get_session_store():
 def get_wordlist_store():
     global _wordlist_store
     if _wordlist_store is None:
-        from .wordlist_store import WordlistStore
+        from pulse.infrastructure.storage.wordlist_store import WordlistStore
         _wordlist_store = WordlistStore()
     return _wordlist_store
 
@@ -149,7 +149,7 @@ def get_ctf_manager():
     """CTFWorkflowManager — per-category CTF workflows with parallel execution."""
     global _ctf_manager
     if _ctf_manager is None:
-        from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
+        from pulse.workflows.ctf.workflow_manager import CTFWorkflowManager
         _ctf_manager = CTFWorkflowManager()
     return _ctf_manager
 
@@ -157,7 +157,7 @@ def get_ctf_manager():
 def get_ctf_tools():
     global _ctf_tools
     if _ctf_tools is None:
-        from pulse.workflows.ctf.toolManager import CTFToolManager
+        from pulse.workflows.ctf.tool_manager import CTFToolManager
         _ctf_tools = CTFToolManager()
     return _ctf_tools
 

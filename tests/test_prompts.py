@@ -332,7 +332,7 @@ class TestCtfPrompts:
         """Message len ≥ 3, CTF context, call_tool."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -345,7 +345,7 @@ class TestCtfPrompts:
         """Messages contain call_tool from workflow steps."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -356,7 +356,7 @@ class TestCtfPrompts:
         """First message includes category marker (e.g. [WEB])."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -367,7 +367,7 @@ class TestCtfPrompts:
         """Strategies from stub appear in messages."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -378,7 +378,7 @@ class TestCtfPrompts:
         """Fallback strategies appear when strategies exist."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -400,7 +400,7 @@ class TestCtfPrompts:
                 "expected_artifacts": [],
                 "resource_requirements": {},
             }
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.side_effect = Exception("tool not found")
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 
@@ -412,7 +412,7 @@ class TestCtfPrompts:
         """Points as string '100' is parsed to int."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**{**self.CTF_CHALLENGE_KWARGS, "points": "500"}))
 
@@ -423,7 +423,7 @@ class TestCtfPrompts:
         """Target parameter is used in call_tool calls within steps."""
         with patch("pulse.infrastructure.singletons.get_ctf_manager") as gm:
             gm.return_value.create_ctf_challenge_workflow.return_value = _ctf_workflow_stub()
-            with patch("pulse.workflows.ctf.toolManager.CTFToolManager") as tm_cls:
+            with patch("pulse.workflows.ctf.tool_manager.CTFToolManager") as tm_cls:
                 tm_cls.return_value.get_tool_command.return_value = "nmap -sV target"
                 messages = run(ctf_challenge(**self.CTF_CHALLENGE_KWARGS))
 

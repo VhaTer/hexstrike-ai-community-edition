@@ -7,7 +7,7 @@ Coverage target: 50%+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
-from pulse.infrastructure.recovery_executor import execute_command_with_recovery
+from pulse.infrastructure.execution.recovery_executor import execute_command_with_recovery
 
 
 class RecoveryAction:

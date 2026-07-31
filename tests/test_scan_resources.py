@@ -9,7 +9,7 @@ import time
 import pytest
 from unittest.mock import patch
 
-from pulse.infrastructure.advanced_cache import AdvancedCache
+from pulse.infrastructure.storage.advanced_cache import AdvancedCache
 
 
 def _make_cache(entries: list[dict]) -> AdvancedCache:

@@ -47,7 +47,7 @@ def _seed_scan_cache(logger):
             },
         }
         _scan_cache.set(f"seed:{tool}:{seed_target}", entry, execution_time=exec_time)
-        from pulse.infrastructure.operational_metrics import _op_metrics
+        from pulse.infrastructure.telemetry.operational_metrics import _op_metrics
         _op_metrics.record({"tool": tool, "success": success,
                             "duration": exec_time, "timed_out": False, "cache_hit": False})
 

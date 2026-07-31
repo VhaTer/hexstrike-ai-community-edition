@@ -36,30 +36,23 @@ coverage.xml
 site-packages/
 pip-log.txt
 pip-delete-this-directory.txt
-.tox
 .mypy_cache/
 .ruff_cache/
-htmlcov/
 # Windows Zone.Identifier alternate data streams
 *:Zone.Identifier
-coverage.xml
 junit.xml
 results.xml
-.vscode/
-.coverage
 LOW_COVERAGE_ANALYSIS_REPORT.md
 COVERAGE_ANALYSIS.md
 EXECUTIVE_SUMMARY.md
 README_TESTS.md
 
 # Logs — never commit
-*.log
+hexstrike.log.*
 
 # Agent configs & VPN creds — never commit
 opencode.json
 *.ovpn
-hexstrike.log.*
-*.bak
 output/
 
 # Runtime state (auto-generated, re-creatable)

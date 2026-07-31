@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch, call
 
 from fastmcp import FastMCP
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.challenge import CTFChallenge
 
 
 # ---------------------------------------------------------------------------

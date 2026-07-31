@@ -1,16 +1,16 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from pulse.infrastructure.technology_detector import TechnologyDetector
+from pulse.infrastructure.advanced_technology_detector import AdvancedTechnologyDetector
 from pulse.infrastructure.rate_limit_detector import RateLimitDetector
 from pulse.infrastructure.failure_recovery_system import FailureRecoverySystem
-from pulse.infrastructure.performance_monitor import PerformanceMonitor
+from pulse.infrastructure.telemetry.performance_monitor import PerformanceMonitor
 from shared.target_profile import TargetProfile
 
-class ParameterOptimizer:
+class AdvancedParameterOptimizer:
     """Advanced parameter optimization system with intelligent context-aware selection"""
 
     def __init__(self):
-        self.tech_detector = TechnologyDetector()
+        self.tech_detector = AdvancedTechnologyDetector()
         self.rate_limiter = RateLimitDetector()
         self.failure_recovery = FailureRecoverySystem()
         self.performance_monitor = PerformanceMonitor()

@@ -4,7 +4,7 @@ import time
 import pytest
 from unittest.mock import patch, MagicMock
 
-from pulse.infrastructure.advanced_cache import AdvancedCache
+from pulse.infrastructure.storage.advanced_cache import AdvancedCache
 from pulse.interface.server_setup import _ScanCache, _cache_key_for, _collect_cached_scans
 
 

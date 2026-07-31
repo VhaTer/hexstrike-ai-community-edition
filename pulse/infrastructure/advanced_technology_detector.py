@@ -1,7 +1,7 @@
 from typing import Optional, Dict, List
 
 
-class TechnologyDetector:
+class AdvancedTechnologyDetector:
     """Advanced technology detection system for context-aware parameter selection"""
 
     def __init__(self):

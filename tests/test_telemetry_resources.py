@@ -4,7 +4,7 @@ Validates the TelemetryPipeline methods that back the resource URIs.
 """
 
 import pytest
-from pulse.infrastructure.telemetry_pipeline import TelemetryPipeline
+from pulse.infrastructure.telemetry.telemetry_pipeline import TelemetryPipeline
 
 
 @pytest.fixture

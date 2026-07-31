@@ -19,7 +19,7 @@ Covers:
 import threading
 import pytest
 from unittest.mock import patch
-from pulse.infrastructure.operational_metrics import OperationalMetricsStore
+from pulse.infrastructure.telemetry.operational_metrics import OperationalMetricsStore
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ class TestThreadSafety:
 
 class TestSystemMetrics:
     def test_system_metrics_exception(self):
-        with patch("pulse.infrastructure.operational_metrics.psutil") as mock_psutil:
+        with patch("pulse.infrastructure.telemetry.operational_metrics.psutil") as mock_psutil:
             mock_psutil.cpu_percent.side_effect = RuntimeError("oops")
             result = OperationalMetricsStore.system_metrics()
             assert result["status"] == "error"
@@ -283,9 +283,9 @@ class TestSystemMetrics:
     def test_system_metrics_unavailable_without_psutil(self):
         import importlib
         with patch.dict('sys.modules', {'psutil': None}):
-            mod = importlib.import_module('pulse.infrastructure.operational_metrics')
+            mod = importlib.import_module('pulse.infrastructure.telemetry.operational_metrics')
             importlib.reload(mod)
-            mod2 = importlib.import_module('pulse.infrastructure.operational_metrics')
+            mod2 = importlib.import_module('pulse.infrastructure.telemetry.operational_metrics')
             importlib.reload(mod2)
             result = mod2.OperationalMetricsStore.system_metrics()
             assert result == {"status": "unavailable", "reason": "psutil not installed"}

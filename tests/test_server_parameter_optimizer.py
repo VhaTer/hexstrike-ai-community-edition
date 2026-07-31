@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
-from pulse.infrastructure.parameter_optimizer import ParameterOptimizer
+from pulse.infrastructure.advanced_parameter_optimizer import AdvancedParameterOptimizer
 from shared.target_profile import TargetProfile
 
 
 @pytest.fixture
 def optimizer():
-    return ParameterOptimizer()
+    return AdvancedParameterOptimizer()
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def target():
 def mock_tech(tmp_path):
     """Mock TechnologyDetector to return specific technologies."""
     def _make(tech_dict):
-        with patch.object(ParameterOptimizer, "_apply_technology_optimizations") as mock:
+        with patch.object(AdvancedParameterOptimizer, "_apply_technology_optimizations") as mock:
             mock.side_effect = lambda t, p, d: {**p, "_tech_detected": d}
             yield mock
     return _make

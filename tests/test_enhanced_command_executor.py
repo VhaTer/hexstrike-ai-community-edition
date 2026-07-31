@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from pulse.infrastructure.enhanced_command_executor import EnhancedCommandExecutor, _box_row
+from pulse.infrastructure.execution.enhanced_command_executor import EnhancedCommandExecutor, _box_row
 from pulse.infrastructure.modern_visual_engine import ModernVisualEngine
 
 

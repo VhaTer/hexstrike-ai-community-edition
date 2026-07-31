@@ -3,10 +3,10 @@ import subprocess
 import os
 import time
 from typing import Dict, Any, Optional
-from pulse.infrastructure.process_pool import ProcessPool
-from pulse.infrastructure.advanced_cache import AdvancedCache
-from pulse.infrastructure.resource_monitor import ResourceMonitor
-from pulse.infrastructure.performance_dashboard import PerformanceDashboard
+from pulse.infrastructure.execution.process_pool import ProcessPool
+from pulse.infrastructure.storage.advanced_cache import AdvancedCache
+from pulse.infrastructure.telemetry.resource_monitor import ResourceMonitor
+from pulse.infrastructure.telemetry.performance_dashboard import PerformanceDashboard
 
 import logging
 logger = logging.getLogger(__name__)

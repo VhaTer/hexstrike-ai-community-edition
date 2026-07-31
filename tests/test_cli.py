@@ -726,8 +726,8 @@ class TestCmdCtf:
     @pytest.fixture
     def mock_ctf_imports(self):
         """Import paths used inside cmd_ctf():
-            from pulse.workflows.ctf.CTFChallenge import CTFChallenge
-            from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
+            from pulse.workflows.ctf.challenge import CTFChallenge
+            from pulse.workflows.ctf.workflow_manager import CTFWorkflowManager
         """
         mock_challenge_cls = MagicMock()
         mock_challenge_instance = MagicMock()
@@ -745,8 +745,8 @@ class TestCmdCtf:
         }
 
         with (
-            patch("pulse.workflows.ctf.CTFChallenge.CTFChallenge", mock_challenge_cls),
-            patch("pulse.workflows.ctf.workflowManager.CTFWorkflowManager",
+            patch("pulse.workflows.ctf.challenge.CTFChallenge", mock_challenge_cls),
+            patch("pulse.workflows.ctf.workflow_manager.CTFWorkflowManager",
                   return_value=mock_wm),
         ):
             yield
@@ -1030,8 +1030,8 @@ class TestMain:
             "success_probability": 0,
         }
         with (
-            patch("pulse.workflows.ctf.CTFChallenge.CTFChallenge"),
-            patch("pulse.workflows.ctf.workflowManager.CTFWorkflowManager",
+            patch("pulse.workflows.ctf.challenge.CTFChallenge"),
+            patch("pulse.workflows.ctf.workflow_manager.CTFWorkflowManager",
                   return_value=mock_wm),
             patch.object(sys, "argv", ["hexstrike", "ctf", "--category", "rev"]),
         ):

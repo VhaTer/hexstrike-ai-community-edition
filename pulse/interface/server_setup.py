@@ -16,14 +16,14 @@ from pulse.tools.parameter_optimizer import ParameterOptimizer
 from pulse.tools.technology_detector import TechProfile, TechnologyDetector
 from pulse.interface.elicitation import confirm_destructive_action
 from pulse.infrastructure.rate_limit_detector import RateLimitDetector
-from pulse.infrastructure.operational_metrics import _op_metrics
+from pulse.infrastructure.telemetry.operational_metrics import _op_metrics
 from pulse.infrastructure.singletons import get_tool_stats_store, get_target_store
 from pulse.infrastructure.hexstrike_middleware import HexStrikeLoggingMiddleware, HexStrikeSessionMiddleware
 from pulse.infrastructure.request_context import get_request_id
 from tool_registry import get_tool
 from pulse.tools.tool_routes import TOOL_ROUTES
 from pulse.tools.tool_registry_v2 import _registry
-from pulse.infrastructure.telemetry_pipeline import _pipeline
+from pulse.infrastructure.telemetry.telemetry_pipeline import _pipeline
 
 import importlib
 
@@ -71,7 +71,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # In-memory scan result cache — populated by run_security_tool
 # ---------------------------------------------------------------------------
-from pulse.infrastructure.advanced_cache import AdvancedCache as _AdvancedCache
+from pulse.infrastructure.storage.advanced_cache import AdvancedCache as _AdvancedCache
 
 
 class _ScanCache(_AdvancedCache):
@@ -1575,8 +1575,8 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         # CTF objective — use CTFWorkflowManager for rich per-category workflows
         # -----------------------------------------------------------------------
         if objective == "ctf":
-            from pulse.workflows.ctf.CTFChallenge import CTFChallenge
-            from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
+            from pulse.workflows.ctf.challenge import CTFChallenge
+            from pulse.workflows.ctf.workflow_manager import CTFWorkflowManager
             from shared.target_profile import TargetProfile
             from shared.attack_chain import AttackChain
             from shared.attack_step import AttackStep

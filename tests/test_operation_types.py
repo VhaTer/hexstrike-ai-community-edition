@@ -1,4 +1,4 @@
-from pulse.infrastructure.operation_types import determine_operation_type
+from pulse.infrastructure.execution.operation_types import determine_operation_type
 
 
 class TestDetermineOperationType:
