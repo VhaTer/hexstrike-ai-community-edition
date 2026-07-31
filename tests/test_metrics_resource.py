@@ -4,7 +4,7 @@ Validates that _op_metrics.summary() returns the expected structure.
 """
 
 import pytest
-from pulse.infrastructure.operational_metrics import OperationalMetricsStore
+from pulse.infrastructure.telemetry.operational_metrics import OperationalMetricsStore
 
 
 @pytest.fixture

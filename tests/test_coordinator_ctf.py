@@ -1,5 +1,5 @@
 from pulse.workflows.ctf.coordinator import CTFTeamCoordinator
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.challenge import CTFChallenge
 
 
 class TestCTFTeamCoordinator:

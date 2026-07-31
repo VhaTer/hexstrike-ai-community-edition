@@ -1,5 +1,5 @@
 import time
-from pulse.infrastructure.performance_dashboard import PerformanceDashboard
+from pulse.infrastructure.telemetry.performance_dashboard import PerformanceDashboard
 
 
 class TestPerformanceDashboard:

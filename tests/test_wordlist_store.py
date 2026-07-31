@@ -4,7 +4,7 @@ import tempfile
 
 import pytest
 
-from pulse.infrastructure.wordlist_store import WordlistStore
+from pulse.infrastructure.storage.wordlist_store import WordlistStore
 
 
 @pytest.fixture

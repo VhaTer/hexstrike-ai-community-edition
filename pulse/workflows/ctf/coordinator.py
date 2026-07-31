@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
-from .CTFChallenge import CTFChallenge
+from .challenge import CTFChallenge
 
 
 class ChallengeAssignment(TypedDict):

@@ -19,7 +19,7 @@ testssl.sh installation:
 import logging
 from typing import Any, Dict
 
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 
 logger = logging.getLogger(__name__)
 from pulse.tools._helpers import require

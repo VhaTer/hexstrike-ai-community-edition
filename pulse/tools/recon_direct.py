@@ -22,7 +22,7 @@ All functions return the same dict shape as before:
 import subprocess
 from typing import Any, Dict
 
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 from pulse.tools._helpers import require, reject_shell_metachars
 
 

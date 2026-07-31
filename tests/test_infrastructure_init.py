@@ -5,11 +5,11 @@ import pulse.infrastructure
 
 class TestLazyImports:
     def test_cache_resolves(self):
-        c = pulse.infrastructure.cache
+        c = pulse.infrastructure.storage.cache
         assert c is not None
 
     def test_enhanced_process_manager_resolves(self):
-        epm = pulse.infrastructure.enhanced_process_manager
+        epm = pulse.infrastructure.execution.enhanced_process_manager
         assert epm is not None
 
     def test_telemetry_resolves(self):
@@ -62,6 +62,6 @@ class TestLazyImports:
 
     def test_getattr_is_idempotent(self):
         """Second access returns cached value (no import)."""
-        c1 = pulse.infrastructure.cache
-        c2 = pulse.infrastructure.cache
+        c1 = pulse.infrastructure.storage.cache
+        c2 = pulse.infrastructure.storage.cache
         assert c1 is c2

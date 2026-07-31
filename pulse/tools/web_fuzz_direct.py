@@ -15,7 +15,7 @@ Usage:
 
 from typing import Any, Dict
 
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 from pulse.infrastructure.singletons import COMMON_DIRB_PATH, COMMON_DIRSEARCH_PATH
 from pulse.tools._helpers import require, reject_shell_metachars
 

@@ -22,10 +22,10 @@ class IntelligentDecisionEngine:
         self._parameter_optimizer = None
 
     def _get_parameter_optimizer(self):
-        """Lazy initializer for ParameterOptimizer (avoids blocking import time)."""
+        """Lazy initializer for AdvancedParameterOptimizer (avoids blocking import time)."""
         if self._parameter_optimizer is None:
-            from pulse.infrastructure.parameter_optimizer import ParameterOptimizer
-            self._parameter_optimizer = ParameterOptimizer()
+            from pulse.infrastructure.advanced_parameter_optimizer import AdvancedParameterOptimizer
+            self._parameter_optimizer = AdvancedParameterOptimizer()
         return self._parameter_optimizer
 
     def _initialize_tool_effectiveness(self) -> Dict[str, Dict[str, float]]:

@@ -18,7 +18,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 import shutil
 
-from pulse.infrastructure.command_executor import execute_command
+from pulse.infrastructure.execution.command_executor import execute_command
 from pulse.tools._helpers import require
 
 

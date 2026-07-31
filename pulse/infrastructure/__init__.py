@@ -17,21 +17,21 @@ import sys
 
 _LAZY: dict = {
     # Active path
-    "HexStrikeCache":                  "pulse.infrastructure.cache",
+    "HexStrikeCache":                  "pulse.infrastructure.storage.cache",
     "ModernVisualEngine":              "pulse.infrastructure.modern_visual_engine",
-    "_execute_command":                ("pulse.infrastructure.command_executor", "execute_command"),
-    "_execute_command_with_recovery":  ("pulse.infrastructure.recovery_executor", "execute_command_with_recovery"),
-    "EnhancedProcessManager":          "pulse.infrastructure.enhanced_process_manager",
-    "TechnologyDetector":              "pulse.infrastructure.technology_detector",
-    "ParameterOptimizer":              "pulse.infrastructure.parameter_optimizer",
+    "_execute_command":                ("pulse.infrastructure.execution.command_executor", "execute_command"),
+    "_execute_command_with_recovery":  ("pulse.infrastructure.execution.recovery_executor", "execute_command_with_recovery"),
+    "EnhancedProcessManager":          "pulse.infrastructure.execution.enhanced_process_manager",
+    "AdvancedTechnologyDetector":        "pulse.infrastructure.advanced_technology_detector",
+    "AdvancedParameterOptimizer":        "pulse.infrastructure.advanced_parameter_optimizer",
     "RateLimitDetector":               "pulse.infrastructure.rate_limit_detector",
-    "_op_metrics":                     "pulse.infrastructure.operational_metrics",
+    "_op_metrics":                     "pulse.infrastructure.telemetry.operational_metrics",
     "HexStrikeLoggingMiddleware":      "pulse.infrastructure.hexstrike_middleware",
     "HexStrikeSessionMiddleware":      "pulse.infrastructure.hexstrike_middleware",
-    "_rebuild_command_with_params":    ("pulse.infrastructure.command_params", "rebuild_command_with_params"),
-    "_determine_operation_type":       ("pulse.infrastructure.operation_types", "determine_operation_type"),
+    "_rebuild_command_with_params":    ("pulse.infrastructure.execution.command_params", "rebuild_command_with_params"),
+    "_determine_operation_type":       ("pulse.infrastructure.execution.operation_types", "determine_operation_type"),
     "file_manager":                    "pulse.infrastructure.file_ops",
-    "TelemetryCollector":              "pulse.infrastructure.telemetry_collector",
+    "TelemetryCollector":              "pulse.infrastructure.telemetry.telemetry_collector",
     # Error handling
     "ErrorType":                       "pulse.infrastructure.error_handling",
     "RecoveryAction":                  "pulse.infrastructure.error_handling",
@@ -55,17 +55,17 @@ _LAZY: dict = {
     "BugBountyWorkflowManager":        "pulse.workflows.bugbounty.workflow",
     "FileUploadTestingFramework":      "pulse.workflows.bugbounty.testing",
     "BugBountyTarget":                 "pulse.workflows.bugbounty.target",
-    "CTFChallenge":                    "pulse.workflows.ctf.CTFChallenge",
-    "CTFWorkflowManager":              "pulse.workflows.ctf.workflowManager",
-    "CTFToolManager":                  "pulse.workflows.ctf.toolManager",
+    "CTFChallenge":                    "pulse.workflows.ctf.challenge",
+    "CTFWorkflowManager":              "pulse.workflows.ctf.workflow_manager",
+    "CTFToolManager":                  "pulse.workflows.ctf.tool_manager",
     "CTFChallengeAutomator":           "pulse.workflows.ctf.automator",
     "CTFTeamCoordinator":              "pulse.workflows.ctf.coordinator",
     # Misc
-    "SessionStore":                    "pulse.infrastructure.session_store",
-    "WordlistStore":                   "pulse.infrastructure.wordlist_store",
-    "env_manager":                     "pulse.infrastructure.python_env_manager",
+    "SessionStore":                    "pulse.infrastructure.storage.session_store",
+    "WordlistStore":                   "pulse.infrastructure.storage.wordlist_store",
+    "env_manager":                     "pulse.infrastructure.execution.python_env_manager",
     "FailureRecoverySystem":           "pulse.infrastructure.failure_recovery_system",
-    "PerformanceMonitor":              "pulse.infrastructure.performance_monitor",
+    "PerformanceMonitor":              "pulse.infrastructure.telemetry.performance_monitor",
 }
 
 
@@ -87,7 +87,7 @@ def __getattr__(name: str):
 __all__ = [
     # Active path
     "HexStrikeCache", "ModernVisualEngine", "TelemetryCollector",
-    "EnhancedProcessManager", "TechnologyDetector", "ParameterOptimizer",
+    "EnhancedProcessManager", "AdvancedTechnologyDetector", "AdvancedParameterOptimizer",
     "RateLimitDetector", "HexStrikeLoggingMiddleware", "HexStrikeSessionMiddleware",
     "ErrorType", "RecoveryAction", "ErrorContext",
     "IntelligentErrorHandler", "GracefulDegradation",

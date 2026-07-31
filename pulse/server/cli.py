@@ -409,8 +409,8 @@ def cmd_ctf(args):
 
     # Build static workflow plan
     def build_workflow():
-        from pulse.workflows.ctf.CTFChallenge import CTFChallenge
-        from pulse.workflows.ctf.workflowManager import CTFWorkflowManager
+        from pulse.workflows.ctf.challenge import CTFChallenge
+        from pulse.workflows.ctf.workflow_manager import CTFWorkflowManager
         challenge = CTFChallenge(
             name=name, category=category, description=description,
             difficulty=difficulty, points=points, target=target or None,

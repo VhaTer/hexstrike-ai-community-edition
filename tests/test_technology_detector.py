@@ -1,10 +1,10 @@
 import pytest
-from pulse.infrastructure.technology_detector import TechnologyDetector
+from pulse.infrastructure.advanced_technology_detector import AdvancedTechnologyDetector
 
 
 @pytest.fixture
 def detector():
-    return TechnologyDetector()
+    return AdvancedTechnologyDetector()
 
 
 class TestTechnologyDetector:

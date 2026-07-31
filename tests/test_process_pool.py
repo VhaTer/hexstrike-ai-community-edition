@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from pulse.infrastructure.process_pool import ProcessPool
+from pulse.infrastructure.execution.process_pool import ProcessPool
 
 
 @pytest.fixture
 def pool():
-    with patch("pulse.infrastructure.process_pool.threading.Thread"), \
-         patch("pulse.infrastructure.process_pool.psutil"), \
-         patch("pulse.infrastructure.process_pool.time.sleep"):
+    with patch("pulse.infrastructure.execution.process_pool.threading.Thread"), \
+         patch("pulse.infrastructure.execution.process_pool.psutil"), \
+         patch("pulse.infrastructure.execution.process_pool.time.sleep"):
         p = ProcessPool(min_workers=2, max_workers=10)
         yield p
 
@@ -71,7 +71,7 @@ class TestGetTaskResult:
 
 class TestScaleUp:
     def test_adds_workers_and_starts_them(self, pool):
-        with patch("pulse.infrastructure.process_pool.threading.Thread") as t:
+        with patch("pulse.infrastructure.execution.process_pool.threading.Thread") as t:
             pool._scale_up(3)
         assert len(pool.workers) == 5
         assert t.call_count == 3
@@ -82,7 +82,7 @@ class TestScaleUp:
         assert len(pool.workers) == before
 
     def test_one_worker(self, pool):
-        with patch("pulse.infrastructure.process_pool.threading.Thread"):
+        with patch("pulse.infrastructure.execution.process_pool.threading.Thread"):
             pool._scale_up(1)
         assert len(pool.workers) == 3
 
@@ -233,7 +233,7 @@ class TestMonitorPerformance:
         pool.workers = [Mock(is_alive=Mock(return_value=True)) for _ in range(2)]
         pool.active_tasks = {"a": {}, "b": {}, "c": {}}
         pool.max_workers = 10
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
             with patch.object(pool, '_scale_up') as up:
                 with pytest.raises(BaseException, match="_brk_"):
@@ -244,7 +244,7 @@ class TestMonitorPerformance:
         pool.workers = [Mock(is_alive=Mock(return_value=True)) for _ in range(5)]
         pool.active_tasks = {}
         pool.min_workers = 2
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
             with patch.object(pool, '_scale_down') as down:
                 with pytest.raises(BaseException, match="_brk_"):
@@ -254,7 +254,7 @@ class TestMonitorPerformance:
     def test_no_action_when_load_balanced(self, pool):
         pool.workers = [Mock(is_alive=Mock(return_value=True)) for _ in range(4)]
         pool.active_tasks = {"a": {}, "b": {}}
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
             with patch.object(pool, '_scale_up') as up, \
                  patch.object(pool, '_scale_down') as down:
@@ -267,7 +267,7 @@ class TestMonitorPerformance:
         pool.workers = []
         pool.active_tasks = {"a": {}}
         pool.max_workers = 10
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
             with patch.object(pool, '_scale_up') as up:
                 with pytest.raises(BaseException, match="_brk_"):
@@ -277,9 +277,9 @@ class TestMonitorPerformance:
     def test_psutil_error_does_not_crash(self, pool):
         pool.workers = [Mock(is_alive=Mock(return_value=True)) for _ in range(2)]
         pool.active_tasks = {"a": {}, "b": {}}
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
-            with patch("pulse.infrastructure.process_pool.psutil.cpu_percent",
+            with patch("pulse.infrastructure.execution.process_pool.psutil.cpu_percent",
                        side_effect=Exception("no perm")):
                 with pytest.raises(BaseException, match="_brk_"):
                     pool._monitor_performance()
@@ -289,11 +289,11 @@ class TestMonitorPerformance:
         pool.active_tasks = {}
         pool.min_workers = 2
         pool.max_workers = 10
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[None, BaseException("_brk_")]):
-            with patch("pulse.infrastructure.process_pool.psutil.cpu_percent",
+            with patch("pulse.infrastructure.execution.process_pool.psutil.cpu_percent",
                        return_value=55.0), \
-                 patch("pulse.infrastructure.process_pool.psutil.virtual_memory") as vm:
+                 patch("pulse.infrastructure.execution.process_pool.psutil.virtual_memory") as vm:
                 vm.return_value.percent = 70.0
                 with pytest.raises(BaseException, match="_brk_"):
                     pool._monitor_performance()
@@ -302,7 +302,7 @@ class TestMonitorPerformance:
 
     def test_outer_exception_handler(self, pool):
         pool.workers = [Mock(is_alive=Mock(return_value=True)) for _ in range(2)]
-        with patch("pulse.infrastructure.process_pool.time.sleep",
+        with patch("pulse.infrastructure.execution.process_pool.time.sleep",
                    side_effect=[Exception("monitor crash"),
                                 BaseException("_brk_")]):
             with pytest.raises(BaseException, match="_brk_"):

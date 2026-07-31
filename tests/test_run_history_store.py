@@ -1,6 +1,6 @@
 """Coverage for run_history_store.py — 0% → 100%."""
 
-from pulse.infrastructure.run_history_store import RunHistoryStore
+from pulse.infrastructure.storage.run_history_store import RunHistoryStore
 
 
 class TestRunHistoryStore:

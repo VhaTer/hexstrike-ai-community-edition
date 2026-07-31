@@ -15,7 +15,7 @@ Canonical shape keys:
 
 import pytest
 from unittest.mock import MagicMock, patch
-from pulse.infrastructure.command_executor import _normalize_result
+from pulse.infrastructure.execution.command_executor import _normalize_result
 
 
 # ---------------------------------------------------------------------------
@@ -234,10 +234,10 @@ class TestExecuteCommandNormalization:
         mock_executor.execute.return_value = fake_raw
 
         with patch(
-            "pulse.infrastructure.command_executor.EnhancedCommandExecutor",
+            "pulse.infrastructure.execution.command_executor.EnhancedCommandExecutor",
             return_value=mock_executor,
         ):
-            from pulse.infrastructure.command_executor import execute_command
+            from pulse.infrastructure.execution.command_executor import execute_command
             result = execute_command("nmap -sV 127.0.0.1", use_cache=False)
 
         assert result["success"] is True
@@ -260,10 +260,10 @@ class TestExecuteCommandNormalization:
         mock_cache.get.return_value = None  # cache miss
 
         with patch(
-            "pulse.infrastructure.command_executor.EnhancedCommandExecutor",
+            "pulse.infrastructure.execution.command_executor.EnhancedCommandExecutor",
             return_value=mock_executor,
         ):
-            from pulse.infrastructure.command_executor import execute_command
+            from pulse.infrastructure.execution.command_executor import execute_command
             result = execute_command("nmap 1.2.3.4", use_cache=True, cache=mock_cache)
 
         # set() must be called with (command_str, result_dict) — not (command, {}, result)
@@ -277,7 +277,7 @@ class TestExecuteCommandNormalization:
 
     def test_execute_command_supports_legacy_hexstrike_cache_signature(self):
         """The shared HexStrikeCache uses get/set(command, params), unlike AdvancedCache."""
-        from pulse.infrastructure.cache import HexStrikeCache
+        from pulse.infrastructure.storage.cache import HexStrikeCache
 
         fake_raw = {
             "stdout": "legacy cache output\n", "stderr": "", "return_code": 0,
@@ -289,10 +289,10 @@ class TestExecuteCommandNormalization:
         legacy_cache = HexStrikeCache()
 
         with patch(
-            "pulse.infrastructure.command_executor.EnhancedCommandExecutor",
+            "pulse.infrastructure.execution.command_executor.EnhancedCommandExecutor",
             return_value=mock_executor,
         ):
-            from pulse.infrastructure.command_executor import execute_command
+            from pulse.infrastructure.execution.command_executor import execute_command
             result = execute_command("nmap 5.6.7.8", use_cache=True, cache=legacy_cache)
             cached = execute_command("nmap 5.6.7.8", use_cache=True, cache=legacy_cache)
 
@@ -315,10 +315,10 @@ class TestExecuteCommandNormalization:
         mock_executor.execute.return_value = fake_timeout
 
         with patch(
-            "pulse.infrastructure.command_executor.EnhancedCommandExecutor",
+            "pulse.infrastructure.execution.command_executor.EnhancedCommandExecutor",
             return_value=mock_executor,
         ):
-            from pulse.infrastructure.command_executor import execute_command
+            from pulse.infrastructure.execution.command_executor import execute_command
             result = execute_command("masscan 10.0.0.0/8", use_cache=False)
 
         assert result["success"] is False

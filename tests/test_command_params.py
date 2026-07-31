@@ -1,4 +1,4 @@
-from pulse.infrastructure.command_params import rebuild_command_with_params
+from pulse.infrastructure.execution.command_params import rebuild_command_with_params
 
 
 class TestRebuildCommandWithParams:

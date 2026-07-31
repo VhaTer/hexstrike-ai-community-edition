@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
+from pulse.workflows.ctf.challenge import CTFChallenge
 from pulse.workflows.ctf.automator import CTFChallengeAutomator
 
 

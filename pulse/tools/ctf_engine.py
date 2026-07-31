@@ -35,8 +35,8 @@ import re
 from fastmcp import FastMCP, Context
 from fastmcp.server.dependencies import get_context
 
-from pulse.workflows.ctf.CTFChallenge import CTFChallenge
-from pulse.workflows.ctf.toolManager import CTFToolManager
+from pulse.workflows.ctf.challenge import CTFChallenge
+from pulse.workflows.ctf.tool_manager import CTFToolManager
 from pulse.infrastructure.singletons import get_ctf_manager, get_ctf_tools, get_ctf_automator, get_ctf_coordinator
 from pulse.interface.server_setup import _scan_cache
 
