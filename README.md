@@ -4,10 +4,10 @@
 
 # HexStrike AI-PULSE
 
-AI-powered security orchestration engine — 150+ tools, live Prefab dashboards, any MCP client.
+AI-powered security orchestration engine — 163 tools, live Prefab dashboards, any MCP client.
 
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)]()
-[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-purple)]()
+[![Python](https://img.shields.io/badge/Python-3.11%2B-red)]()
+[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-red)]()
 [![Coverage](https://img.shields.io/badge/Coverage-99%25-brightgreen)]()
 [![License](https://img.shields.io/badge/License-AGPLv3-green)]()
 
@@ -247,7 +247,7 @@ Pulse is organized into 6 modules under `pulse/`:
 | Module | Role |
 |--------|------|
 | `pulse/interface/` | MCP server setup, tool binding, typed tool docs |
-| `pulse/tools/` | 150+ tool handlers, CTF engine, null context, tool registry |
+| `pulse/tools/` | 163 tool handlers, CTF engine, null context, tool registry |
 | `pulse/intelligence/` | Decision engine, parameter optimizer, error correlation |
 | `pulse/infrastructure/` | Cache, metrics, storage, logging, config |
 | `pulse/server/` | HTTP server, CLI, MCP entry point, stdio bridge |
