@@ -48,13 +48,11 @@ EXECUTIVE_SUMMARY.md
 README_TESTS.md
 
 # Logs — never commit
-*.log
 hexstrike.log.*
 
 # Agent configs & VPN creds — never commit
 opencode.json
 *.ovpn
-*.bak
 output/
 
 # Runtime state (auto-generated, re-creatable)
