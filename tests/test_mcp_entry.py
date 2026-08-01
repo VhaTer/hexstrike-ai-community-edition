@@ -6,6 +6,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
+import unittest
 import pytest
 
 from pulse.server import mcp_entry
@@ -258,3 +259,73 @@ class TestAcquireLock:
         """_release_lock handles None _lock_fh."""
         mcp_entry._lock_fh = None
         mcp_entry._release_lock()
+
+
+# ── run_mcp (http transport) ──────────────────────────────────────────────────
+
+
+class TestRunMcpHttp:
+    def test_http_transport_registers_routes_and_runs(self):
+        """run_mcp http: registers web routes, runs with http transport."""
+        fake_mcp = MagicMock()
+        with (
+            patch("pulse.server.mcp_entry.setup_mcp_server_standalone",
+                  return_value=fake_mcp),
+            patch("pulse.server.mcp_entry._seed_scan_cache") as seed,
+            patch("pulse.server.mcp_entry._prewarm_singletons") as prewarm,
+            patch("pulse.server.web_server.register_http_routes") as reg,
+        ):
+            mcp_entry.run_mcp(
+                MagicMock(transport="http", host="127.0.0.1", port=9999,
+                          debug=False), MagicMock())
+
+        reg.assert_called_once_with(fake_mcp, unittest.mock.ANY)
+        seed.assert_called_once()
+        prewarm.assert_called_once()
+        fake_mcp.run.assert_called_once()
+        kwargs = fake_mcp.run.call_args.kwargs
+        assert kwargs["transport"] == "http"
+        assert kwargs["host"] == "127.0.0.1"
+        assert kwargs["port"] == 9999
+
+    def test_stdio_transport_does_not_register_routes(self):
+        """run_mcp stdio: no HTTP routes, plain run."""
+        fake_mcp = MagicMock()
+        with (
+            patch("pulse.server.mcp_entry.setup_mcp_server_standalone",
+                  return_value=fake_mcp),
+            patch("pulse.server.mcp_entry._seed_scan_cache"),
+            patch("pulse.server.mcp_entry._prewarm_singletons"),
+            patch("pulse.server.web_server.register_http_routes") as reg,
+        ):
+            mcp_entry.run_mcp(
+                MagicMock(transport="stdio", host="127.0.0.1", port=8888,
+                          debug=False), MagicMock())
+
+        reg.assert_not_called()
+        fake_mcp.run.assert_called_once()
+        assert fake_mcp.run.call_args.kwargs.get("transport") is None
+
+
+class TestMain:
+    def test_main_calls_run_mcp(self):
+        """main() parses args and dispatches to run_mcp."""
+        fake_args = MagicMock(transport="http", host="127.0.0.1", port=8888,
+                              debug=False)
+        with (
+            patch("pulse.server.args.parse_args", return_value=fake_args),
+            patch("pulse.server.mcp_entry.run_mcp") as run,
+        ):
+            mcp_entry.main()
+        run.assert_called_once_with(fake_args, mcp_entry.logger)
+
+    def test_entrypoint_guarded(self):
+        """Module has a real __main__ entry point (S80 regression)."""
+        import runpy
+        import subprocess
+        import sys
+        proc = subprocess.run(
+            [sys.executable, "-m", "pulse.server.mcp_entry", "--help"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0

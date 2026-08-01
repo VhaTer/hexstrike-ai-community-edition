@@ -93,7 +93,7 @@ def cmd_serve(args):
     """Start the Pulse HTTP/SSE server."""
     from pulse.interface.server_setup import setup_mcp_server_standalone
     from pulse.infrastructure.modern_visual_engine import ModernVisualEngine
-    server_setup = importlib.import_module("hexstrike_server")
+    from pulse.server import web_server as server_setup
 
     host = args.host or os.environ.get("HEXSTRIKE_HOST", DEFAULT_HOST)
     port = args.port or int(os.environ.get("HEXSTRIKE_PORT", DEFAULT_PORT))
