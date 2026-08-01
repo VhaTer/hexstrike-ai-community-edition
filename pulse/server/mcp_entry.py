@@ -1,10 +1,9 @@
 """
-pulse.tools/mcp_entry.py
+pulse/server/mcp_entry.py
 
-Entry point for stdio transport used by Claude Desktop
-and other MCP clients that speak stdio.
-
-hexstrike_mcp.py calls run_mcp().
+Entry point for stdio and HTTP transports:
+    python3 -m pulse.server.mcp_entry            # stdio (Claude Desktop)
+    python3 -m pulse.server.mcp_entry --transport http   # HTTP/SSE server
 """
 
 import os

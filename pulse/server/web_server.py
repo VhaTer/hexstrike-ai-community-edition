@@ -315,10 +315,10 @@ def register_http_routes(mcp, logger, static_dir=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="python3 hexstrike_server.py",
+        prog="python3 -m pulse.server.web_server",
         description="HexStrike AI-PULSE — FastMCP Standalone Server",
     )
-    parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.8.0')}")
+    parser.add_argument("--version", action="version", version=f"hexstrike_server {config_core.get('VERSION', '0.13.1')}")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--host", default=None, help=f"Bind address (default: {API_HOST})")
     parser.add_argument("--port", type=int, default=None, help=f"Bind port (default: {API_PORT})")
