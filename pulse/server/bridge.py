@@ -83,8 +83,25 @@ def _send(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _warn_server_down(exc: Exception) -> None:
+    """Log a clear diagnostic to stderr (visible in Claude Desktop logs)."""
+    print(
+        "⚠️  Pulse bridge: cannot reach the HTTP server at "
+        f"{PULSE_URL} ({exc}). Start it first with: ./hexstrike-pulse",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def main():
     global _session_id
+
+    try:
+        with urllib.request.urlopen(PULSE_URL.replace("/mcp", "/health"), timeout=5) as resp:
+            if resp.status != 200:
+                _warn_server_down(f"health returned HTTP {resp.status}")
+    except Exception as exc:
+        _warn_server_down(exc)
 
     for line in sys.stdin:
         line = line.strip()
