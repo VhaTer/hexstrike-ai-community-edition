@@ -28,7 +28,7 @@ def _gobuster(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "mode", "wordlist")
     if err:
         return err
 
@@ -50,7 +50,7 @@ def _ffuf(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "mode", "wordlist", "match_codes")
     if err:
         return err
 
@@ -81,7 +81,7 @@ def _feroxbuster(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "wordlist", "threads")
     if err:
         return err
 
@@ -100,7 +100,7 @@ def _dirsearch(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "extensions", "wordlist", "threads")
     if err:
         return err
 
@@ -122,7 +122,7 @@ def _dirb(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "wordlist")
     if err:
         return err
 
@@ -140,7 +140,7 @@ def _wfuzz(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "wordlist")
     if err:
         return err
 
@@ -158,7 +158,7 @@ def _dotdotpwn(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "module")
     if err:
         return err
 

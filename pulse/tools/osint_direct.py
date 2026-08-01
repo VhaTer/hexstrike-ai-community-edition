@@ -43,7 +43,7 @@ def _sublist3r(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
-    err = reject_shell_metachars(data, "domain")
+    err = reject_shell_metachars(data, "domain", "threads", "engine")
     if err:
         return err
     domain  = data["domain"].strip()
