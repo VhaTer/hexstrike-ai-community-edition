@@ -71,11 +71,12 @@ class TestMCPServerSetup:
             mock_setup.return_value = Mock()
             from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
-            with patch.object(mock_setup.return_value, 'run'):
-                try:
-                    run_mcp(args, mock_logger)
-                except Exception:
-                    pass
+            with patch('pulse.server.mcp_entry._acquire_lock'):
+                with patch.object(mock_setup.return_value, 'run'):
+                    try:
+                        run_mcp(args, mock_logger)
+                    except Exception:
+                        pass
             mock_setup.assert_called_once()
 
     def test_setup_mcp_with_profiles(self, mock_logger):
@@ -100,18 +101,20 @@ class TestStartupErrorHandling:
                    side_effect=RuntimeError("setup failed")):
             from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
-            with patch('sys.exit') as mock_exit:
-                run_mcp(args, mock_logger)
-                mock_exit.assert_called_with(1)
+            with patch('pulse.server.mcp_entry._acquire_lock'):
+                with patch('sys.exit') as mock_exit:
+                    run_mcp(args, mock_logger)
+                    mock_exit.assert_called_with(1)
 
     def test_exception_during_mcp_setup(self, mock_logger):
         with patch('pulse.server.mcp_entry.setup_mcp_server_standalone',
                    side_effect=RuntimeError("MCP setup failed")):
             from pulse.server.mcp_entry import run_mcp
             args = SimpleNamespace(debug=False)
-            with patch('sys.exit') as mock_exit:
-                run_mcp(args, mock_logger)
-                mock_exit.assert_called_with(1)
+            with patch('pulse.server.mcp_entry._acquire_lock'):
+                with patch('sys.exit') as mock_exit:
+                    run_mcp(args, mock_logger)
+                    mock_exit.assert_called_with(1)
 
     def test_exception_during_mcp_run(self, mock_mcp_server, mock_logger):
         mock_mcp_server.run.side_effect = Exception("Server failed to start")

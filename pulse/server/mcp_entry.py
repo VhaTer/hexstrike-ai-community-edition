@@ -210,7 +210,7 @@ def run_mcp(args, logger):
         if transport == 'http':
             host = getattr(args, 'host', '127.0.0.1')
             port = getattr(args, 'port', 8888)
-            from hexstrike_server import register_http_routes
+            from pulse.server.web_server import register_http_routes
             register_http_routes(mcp, logger)
             logger.info(f"🌐 HTTP transport on {host}:{port} — MCP SSE at /mcp")
             mcp.run(transport="http", host=host, port=port, show_banner=False, log_level="WARNING", stateless=True)
@@ -223,3 +223,18 @@ def run_mcp(args, logger):
         import traceback
         logger.error(traceback.format_exc())
         sys.exit(1)
+
+
+def main():
+    """CLI entry point: python3 -m pulse.server.mcp_entry [--transport http|stdio]"""
+    from pulse.server.args import parse_args
+    args = parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    run_mcp(args, logger)
+
+
+if __name__ == "__main__":
+    main()

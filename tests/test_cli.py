@@ -5,7 +5,7 @@ import logging
 import sys
 import argparse
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 import urllib.error
 
 import pytest
@@ -200,6 +200,22 @@ class TestBuildParser:
         assert args.host == "0.0.0.0"
         assert args.port == 9999
         assert args.debug is True
+
+    def test_serve_registers_http_routes(self):
+        """cmd_serve wires the web_server routes (S80 regression: stale import)."""
+        fake_mcp = MagicMock()
+        args = MagicMock(host="0.0.0.0", port=9999, debug=False)
+        with (
+            patch("pulse.interface.server_setup.setup_mcp_server_standalone",
+                  return_value=fake_mcp),
+            patch("pulse.server.web_server.register_http_routes") as reg,
+            patch.object(fake_mcp, "run") as run,
+        ):
+            cmd_serve(args)
+        reg.assert_called_once_with(fake_mcp, ANY)
+        run.assert_called_once()
+        assert run.call_args.kwargs["transport"] == "http"
+        assert run.call_args.kwargs["port"] == 9999
 
     def test_scan_subcommand(self):
         parser = build_parser()

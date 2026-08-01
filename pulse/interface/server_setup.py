@@ -2189,7 +2189,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
         Next: check get_active_tools() to monitor, or continue with other work
         """
         # Lazy imports to avoid circular dependency (pulse_app imports from us)
-        from pulse_app import (
+        from pulse.interface.pulse_app import (
             get_scope, get_surface, get_findings, get_plan,
             _cache_for_target, _suggest_next_from_context,
             TOOLS_BY_INTENSITY,
@@ -2330,7 +2330,7 @@ def setup_mcp_server_standalone(logger=None) -> FastMCP:
     # Add pulse_app provider so its tools (scan, get_surface, etc.) are
     # visible through the RegexSearchTransform alongside exec tools.
     try:
-        from pulse_app import app as _pulse_app
+        from pulse.interface.pulse_app import app as _pulse_app
         mcp.add_provider(_pulse_app)
         logger.info("📊 Pulse dashboard tools registered")
     except Exception as exc:
