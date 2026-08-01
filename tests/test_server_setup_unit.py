@@ -633,7 +633,7 @@ class TestScanBackground:
         mock_pulse.get_findings.return_value = []
         mock_pulse.get_plan.return_value = {}
 
-        with patch.dict("sys.modules", {"pulse_app": mock_pulse}):
+        with patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}):
             result = run(tool.fn(ctx))
 
         assert "error" in result
@@ -655,7 +655,7 @@ class TestScanBackground:
         mock_pulse._cache_for_target.return_value = []
 
         with (
-            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}),
         ):
             result = run(tool.fn(ctx, intensity="extreme"))
 
@@ -683,7 +683,7 @@ class TestScanBackground:
         ])
 
         with (
-            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}),
             patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.5"))
@@ -715,7 +715,7 @@ class TestScanBackground:
         mock_run = AsyncMock(return_value={"success": True, "output": "", "stdout": "", "returncode": 0})
 
         with (
-            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}),
             patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.10"))
@@ -746,7 +746,7 @@ class TestScanBackground:
         ])
 
         with (
-            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}),
             patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.20"))
@@ -774,7 +774,7 @@ class TestScanBackground:
         mock_run = AsyncMock(return_value={"success": True, "output": "22/tcp open  ssh", "stdout": "22/tcp open  ssh", "returncode": 0})
 
         with (
-            patch.dict("sys.modules", {"pulse_app": mock_pulse}),
+            patch.dict("sys.modules", {"pulse.interface.pulse_app": mock_pulse}),
             patch("pulse.interface.server_setup.run_security_tool", mock_run),
         ):
             result = run(tool.fn(ctx, target="10.0.0.30"))
