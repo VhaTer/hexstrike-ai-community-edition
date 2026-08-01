@@ -21,11 +21,12 @@ All functions return the same dict shape as before:
 import logging
 import os
 import tempfile
+import shlex
 import subprocess
 from typing import Any, Dict
 
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ def _airmon_ng(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "channel")
+    if err:
+        return err
     interface = data["interface"].strip()
     action    = data["action"].strip()
     channel   = data.get("channel", "")
@@ -61,6 +65,9 @@ def _airodump_ng(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "output_prefix", "bssid", "channel", "essid")
+    if err:
+        return err
     interface = data["interface"].strip()
     prefix    = data.get("output_prefix", "capture")
     bssid     = data.get("bssid", "")
@@ -81,6 +88,9 @@ def _aireplay_ng(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "bssid", "client_mac")
+    if err:
+        return err
     interface = data["interface"].strip()
     try:
         mode = int(data.get("attack_mode"))
@@ -112,6 +122,15 @@ def _aircrack_ng(data: dict) -> dict:
         return {"success": False, "error": "capture_files is required"}
     if not wordlist:
         return {"success": False, "error": "wordlist is required"}
+    err = reject_shell_metachars(data, "bssid", "wordlist")
+    if err:
+        return err
+    for cf in capture_files:
+        if not isinstance(cf, str):
+            continue
+        err = reject_shell_metachars({"capture_file": cf}, "capture_file")
+        if err:
+            return err
 
     command = f"aircrack-ng {' '.join(capture_files)} -w {wordlist}"
     if bssid:
@@ -125,6 +144,9 @@ def _airbase_ng(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "essid", "channel", "bssid")
+    if err:
+        return err
     interface = data["interface"].strip()
     essid     = data["essid"].strip()
     channel   = data.get("channel", 6)
@@ -145,6 +167,9 @@ def _airdecap_ng(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "capture_file", "wep_key", "bssid", "essid")
+    if err:
+        return err
     cap_file = data["capture_file"].strip()
     password = data.get("password", "")
     wep_key  = data.get("wep_key", "")
@@ -153,7 +178,7 @@ def _airdecap_ng(data: dict) -> dict:
 
     command = "airdecap-ng"
     if wep_key:    command += f" -w {wep_key}"
-    elif password: command += f" -p {password}"
+    elif password: command += f" -p {shlex.quote(password)}"
     if bssid:      command += f" -b {bssid}"
     if essid:      command += f" -e {essid}"
     command += f" {cap_file}"
@@ -166,6 +191,9 @@ def _hcxdumptool(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "output_file")
+    if err:
+        return err
     interface    = data["interface"].strip()
     output_file  = data.get("output_file", "pmkid_capture.pcapng")
     target_bssid = data.get("target_bssid", "").strip()
@@ -206,6 +234,9 @@ def _hcxpcapngtool(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "input_file", "output_file")
+    if err:
+        return err
     inp = data["input_file"].strip()
     out = data["output_file"].strip()
 
@@ -219,6 +250,9 @@ def _wifite2(data: dict) -> dict:
         return err
 
     interface = data["interface"].strip()
+    err = reject_shell_metachars(data, "interface", "target_essid", "target_bssid", "wordlist")
+    if err:
+        return err
     command   = f"wifite -i {interface} --kill --no-wps"
 
     if data.get("target_essid"):           command += f" --essid {data['target_essid']}"
@@ -236,6 +270,9 @@ def _eaphammer(data: dict) -> dict:
     if err:
         return err
 
+    err = reject_shell_metachars(data, "interface", "essid", "channel", "auth_mode", "attack_type", "negotiate", "cert_path")
+    if err:
+        return err
     interface   = data["interface"].strip()
     essid       = data["essid"].strip()
     channel     = data.get("channel", 6)
@@ -260,6 +297,9 @@ def _bettercap_wifi(data: dict) -> dict:
     bssid     = data.get("target_bssid", "")
     caplet    = data.get("caplet", "")
 
+    err = reject_shell_metachars(data, "interface", "mode", "target_bssid", "caplet")
+    if err:
+        return err
     if not interface:
         return {"success": False, "error": "interface is required"}
     if mode in ("deauth", "evil-twin") and not bssid and not caplet:
@@ -296,6 +336,9 @@ def _mdk4(data: dict) -> dict:
     interface = data.get("interface", "").strip()
     mode      = data.get("attack_mode", "").strip()
 
+    err = reject_shell_metachars(data, "interface", "target_bssid", "ssid_wordlist")
+    if err:
+        return err
     if not interface:
         return {"success": False, "error": "interface is required"}
     if mode not in VALID_MODES:
@@ -316,6 +359,9 @@ def _mdk4(data: dict) -> dict:
 def _tcpdump(data: dict) -> dict:
     err = require(data, "interface")
     if err: return err
+    err = reject_shell_metachars(data, "interface", "filter", "output_file")
+    if err:
+        return err
     interface   = data["interface"].strip()
     count       = data.get("count", 10)
     filter_expr = data.get("filter", "")
@@ -330,6 +376,9 @@ def _tcpdump(data: dict) -> dict:
 
 
 def _tshark(data: dict) -> dict:
+    err = reject_shell_metachars(data, "interface", "file", "filter")
+    if err:
+        return err
     interface = data.get("interface", "").strip()
     file_path = data.get("file", "").strip()
     if not interface and not file_path:
