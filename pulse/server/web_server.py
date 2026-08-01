@@ -304,8 +304,9 @@ def register_http_routes(mcp, logger, static_dir=None):
         async def root_static(request):
             """Serve root static files (favicon, icons)."""
             filename = request.path_params.get("filename", "")
-            file_path = static_dir / filename
-            if file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt"):
+            file_path = (static_dir / filename).resolve()
+            if (file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt")
+                    and file_path.is_relative_to(static_dir.resolve())):
                 return FileResponse(str(file_path))
             return Response("Not found", status_code=404)
 

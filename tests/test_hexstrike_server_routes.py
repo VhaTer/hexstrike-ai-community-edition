@@ -171,6 +171,28 @@ def test_ping_route_returns_ok(tmp_path):
     assert json.loads(response.body) == {"status": "ok", "server": "hexstrike-ai-pulse"}
 
 
+def test_root_static_rejects_path_traversal(tmp_path):
+    from pulse.server.web_server import register_http_routes
+
+    mcp = FakeMCP()
+    static_dir = tmp_path / "server_static"
+    static_dir.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("top-secret", encoding="utf-8")
+
+    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    static_route = mcp.routes[("/{filename:str}", ("GET",))]
+
+    request = MagicMock(path_params={"filename": "../secret.txt"})
+    response = run(static_route(request))
+    assert response.status_code == 404
+
+    (static_dir / "ok.txt").write_text("fine", encoding="utf-8")
+    request_ok = MagicMock(path_params={"filename": "ok.txt"})
+    response_ok = run(static_route(request_ok))
+    assert response_ok.status_code == 200
+
+
 def test_build_dashboard_status_degraded_when_tools_missing():
     from pulse.server.web_server import _build_dashboard_response
 
