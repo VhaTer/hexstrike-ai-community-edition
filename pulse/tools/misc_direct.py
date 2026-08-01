@@ -432,14 +432,14 @@ def _graphql_scanner(data: dict) -> dict:
 
     if introspection:
         q = '{ __schema { types { name fields { name type { name } } } } }'
-        r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{q}\"}}' '{endpoint}'", use_cache=False)
+        r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{q}\"}}' {shlex.quote(endpoint)}", use_cache=False)
         results["tests_performed"].append("introspection_query")
         if "data" in r.get("stdout", ""):
             results["vulnerabilities"].append({"type": "introspection_enabled", "severity": "MEDIUM",
                                                "description": "GraphQL introspection enabled"})
 
     deep = "{ " * query_depth + "field" + " }" * query_depth
-    r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{deep}\"}}' {endpoint}", use_cache=False)
+    r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{deep}\"}}' {shlex.quote(endpoint)}", use_cache=False)
     results["tests_performed"].append("query_depth_analysis")
     if "error" not in r.get("stdout", "").lower():
         results["vulnerabilities"].append({"type": "no_query_depth_limit", "severity": "HIGH",
