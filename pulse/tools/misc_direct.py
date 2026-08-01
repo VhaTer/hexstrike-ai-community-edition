@@ -54,14 +54,14 @@ def _ropgadget(data: dict) -> dict:
 def _ropper(data: dict) -> dict:
     err = require(data, "binary")
     if err: return err
-    err = reject_shell_metachars(data, "binary", "search", "arch")
+    err = reject_shell_metachars(data, "binary", "arch")
     if err: return err
     binary          = data["binary"].strip()
     search          = data.get("search", "")
     arch            = data.get("arch", "")
     additional_args = data.get("additional_args", "")
     command = f"ropper --file {binary}"
-    if search:          command += f" --search '{search}'"
+    if search:          command += f" --search {shlex.quote(search)}"
     if arch:            command += f" --arch {arch}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)

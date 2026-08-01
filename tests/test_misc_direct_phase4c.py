@@ -42,7 +42,7 @@ try:
         _volatility, _volatility3,
         _gdb, _radare2,
         _strings, _objdump, _libc, _xxd, _checksec, _angr, _ghidra, _binwalk,
-        _mysql, _sqlite, _postgresql,
+        _mysql, _sqlite,
         _api_schema_analyzer, _graphql_scanner, _jwt_analyzer,
         _foremost, _falco, _steghide, _anew, _exiftool, _hashpump, _qsreplace, _uro,
         _responder, _api_fuzzer, _bbot, _nuclei,
@@ -152,7 +152,6 @@ REQUIRED_PARAMS = {
     "binwalk": ["binary"],
     "mysql": ["host", "user", "database", "query"],
     "sqlite": ["db_path", "query"],
-    "postgresql": [],
     "api_schema_analyzer": ["schema_url"],
     "graphql_scanner": ["endpoint"],
     "jwt_analyzer": ["jwt_token"],
@@ -488,12 +487,6 @@ class TestDatabaseQueryTools:
         """Test SQLite error on missing parameters"""
         result = _sqlite({"db_path": "/tmp/test.db"})
         assert result["success"] == False
-
-    def test_postgresql_stub(self):
-        """Test PostgreSQL not implemented"""
-        result = _postgresql({})
-        assert result["success"] == False
-        assert "psycopg2" in result["error"]
 
 
 # ============================================================================
