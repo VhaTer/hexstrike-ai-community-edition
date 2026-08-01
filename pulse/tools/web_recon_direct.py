@@ -17,9 +17,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 import shutil
+import shlex
 
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,8 @@ from pulse.tools._helpers import require
 
 def _katana(data: dict) -> dict:
     err = require(data, "url")
+    if err: return err
+    err = reject_shell_metachars(data, "url", "depth")
     if err: return err
     url             = data["url"].strip()
     depth           = data.get("depth", 3)
@@ -48,6 +51,8 @@ def _katana(data: dict) -> dict:
 def _hakrawler(data: dict) -> dict:
     err = require(data, "url")
     if err: return err
+    err = reject_shell_metachars(data, "url", "depth")
+    if err: return err
     url             = data["url"].strip()
     depth           = data.get("depth", 2)
     forms           = data.get("forms", True)
@@ -56,7 +61,7 @@ def _hakrawler(data: dict) -> dict:
     wayback         = data.get("wayback", False)
     additional_args = data.get("additional_args", "")
 
-    command = f"echo '{url}' | hakrawler -d {depth}"
+    command = f"echo {shlex.quote(url)} | hakrawler -d {depth}"
     if forms: command += " -s"
     if robots or sitemap or wayback: command += " -subs"
     command += " -u"
@@ -71,6 +76,8 @@ def _hakrawler(data: dict) -> dict:
 
 def _gau(data: dict) -> dict:
     err = require(data, "domain")
+    if err: return err
+    err = reject_shell_metachars(data, "domain", "providers", "blacklist")
     if err: return err
     domain          = data["domain"].strip()
     providers       = data.get("providers", "wayback,commoncrawl,otx,urlscan")
@@ -90,6 +97,8 @@ def _gau(data: dict) -> dict:
 
 def _waybackurls(data: dict) -> dict:
     err = require(data, "domain")
+    if err: return err
+    err = reject_shell_metachars(data, "domain")
     if err: return err
     domain          = data["domain"].strip()
     get_versions    = data.get("get_versions", False)
@@ -129,6 +138,8 @@ def _resolve_httpx() -> str:
 
 def _httpx(data: dict) -> dict:
     err = require(data, "target")
+    if err: return err
+    err = reject_shell_metachars(data, "target", "threads")
     if err: return err
 
     httpx_bin = _resolve_httpx()
@@ -172,6 +183,8 @@ def _wafw00f(data: dict) -> dict:
         data["target"] = data["url"]
     err = require(data, "target")
     if err: return err
+    err = reject_shell_metachars(data, "target")
+    if err: return err
     target          = data["target"].strip()
     additional_args = data.get("additional_args", "")
 
@@ -187,6 +200,8 @@ def _wafw00f(data: dict) -> dict:
 
 def _arjun(data: dict) -> dict:
     err = require(data, "url")
+    if err: return err
+    err = reject_shell_metachars(data, "url", "method", "wordlist", "delay", "threads")
     if err: return err
     url             = data["url"].strip()
     method          = data.get("method", "GET")
@@ -208,6 +223,8 @@ def _arjun(data: dict) -> dict:
 def _paramspider(data: dict) -> dict:
     err = require(data, "domain")
     if err: return err
+    err = reject_shell_metachars(data, "domain", "level", "exclude", "output")
+    if err: return err
     domain          = data["domain"].strip()
     level           = data.get("level", 2)
     exclude         = data.get("exclude", "png,jpg,gif,jpeg,swf,woff,svg,pdf,css,ico")
@@ -225,6 +242,8 @@ def _paramspider(data: dict) -> dict:
 def _x8(data: dict) -> dict:
     err = require(data, "url")
     if err: return err
+    err = reject_shell_metachars(data, "url", "wordlist", "method")
+    if err: return err
     url             = data["url"].strip()
     wordlist        = data.get("wordlist", "/usr/share/wordlists/x8/params.txt")
     method          = data.get("method", "GET")
@@ -233,8 +252,8 @@ def _x8(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     command = f"x8 -u {url} -w {wordlist} -X {method}"
-    if body:    command += f" -b '{body}'"
-    if headers: command += f" -H '{headers}'"
+    if body:    command += f" -b {shlex.quote(body)}"
+    if headers: command += f" -H {shlex.quote(headers)}"
     if additional_args: command += f" {additional_args}"
 
     return execute_command(command)
