@@ -20,6 +20,7 @@ from unittest.mock import mock_open, patch
 import pytest
 
 from pulse.tools.exploit_framework_direct import _metasploit, _pwntools
+from pulse.tools.misc_direct import _http_request
 from pulse.tools.security_direct import _pacu
 from pulse.tools.wifi_direct import _bettercap_wifi
 
@@ -179,3 +180,27 @@ class TestMultiLineByDesign:
                 result = _angr({"binary": "/bin/ls", "script_content": "import angr\np = angr.Project('/bin/ls')\n"})
         assert result["success"] is True
         assert m.call_args[0][0].endswith("/tmp/angr_script.py")
+
+
+# ---------------------------------------------------------------------------
+# http_request — cookie CRLF (RFC 6265: line breaks never legitimate)
+# ---------------------------------------------------------------------------
+
+class TestHttpRequestCookieCrlf:
+    def test_cookie_with_crlf_rejected(self):
+        with patch("pulse.tools.misc_direct.execute_command",
+                   return_value={"success": True}) as m:
+            result = _http_request({"url": "http://example.com/",
+                                    "cookie": "sid=1\r\nX-Evil: 1"})
+        assert result["success"] is False
+        assert "line break" in result["error"]
+        m.assert_not_called()
+
+    def test_clean_cookie_passed(self):
+        with patch("pulse.tools.misc_direct.execute_command",
+                   return_value={"success": True, "stdout": "200"}) as m:
+            result = _http_request({"url": "http://example.com/",
+                                    "cookie": "sid=abc; session=xyz"})
+        assert result["success"] is True
+        assert "--cookie" in m.call_args[0][0]
+        assert "abc; session=xyz" in m.call_args[0][0]

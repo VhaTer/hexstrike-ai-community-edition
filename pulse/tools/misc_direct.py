@@ -757,6 +757,8 @@ def _http_request(data: dict) -> dict:
     headers_raw = data.get("headers", "")
     err = reject_shell_metachars(data, "url", "method")
     if err: return err
+    if cookie and ("\r" in cookie or "\n" in cookie):
+        return {"success": False, "error": "'cookie' contains disallowed line break"}
     follow = data.get("follow_redirects", True)
     max_body = data.get("max_body_size", 5000)
     additional_args = data.get("additional_args", "")
