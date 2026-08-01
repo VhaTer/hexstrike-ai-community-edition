@@ -18,7 +18,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 from typing import Any, Dict
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,8 @@ from pulse.tools._helpers import require
 # ---------------------------------------------------------------------------
 
 def _prowler(data: dict) -> dict:
+    err = reject_shell_metachars(data, "provider", "profile", "region", "checks", "output_dir", "output_format")
+    if err: return err
     provider        = data.get("provider", "aws")
     profile         = data.get("profile", "default")
     region          = data.get("region", "")
@@ -49,6 +51,8 @@ def _prowler(data: dict) -> dict:
 
 
 def _scout_suite(data: dict) -> dict:
+    err = reject_shell_metachars(data, "provider", "profile", "report_dir", "services", "exceptions")
+    if err: return err
     provider        = data.get("provider", "aws")
     profile         = data.get("profile", "default")
     report_dir      = data.get("report_dir", "/tmp/scout-suite")
@@ -75,6 +79,8 @@ def _scout_suite(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _pacu(data: dict) -> dict:
+    err = reject_shell_metachars(data, "session_name", "modules", "data_services", "regions")
+    if err: return err
     session_name    = data.get("session_name", "hexstrike_session")
     modules         = data.get("modules", "")
     data_services   = data.get("data_services", "")
@@ -105,6 +111,8 @@ def _pacu(data: dict) -> dict:
 
 
 def _cloudmapper(data: dict) -> dict:
+    err = reject_shell_metachars(data, "action", "account", "config")
+    if err: return err
     action          = data.get("action", "collect")
     account         = data.get("account", "")
     config          = data.get("config", "config.json")
@@ -128,6 +136,8 @@ def _cloudmapper(data: dict) -> dict:
 def _trivy(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
+    err = reject_shell_metachars(data, "target", "scan_type", "output_format", "severity", "output_file")
+    if err: return err
     target          = data["target"].strip()
     scan_type       = data.get("scan_type", "image")
     output_format   = data.get("output_format", "json")
@@ -147,6 +157,8 @@ def _trivy(data: dict) -> dict:
 
 
 def _docker_bench(data: dict) -> dict:
+    err = reject_shell_metachars(data, "checks", "exclude", "output_file")
+    if err: return err
     checks          = data.get("checks", "")
     exclude         = data.get("exclude", "")
     output_file     = data.get("output_file", "/tmp/docker-bench-results.json")
@@ -166,6 +178,8 @@ def _docker_bench(data: dict) -> dict:
 def _clair(data: dict) -> dict:
     err = require(data, "image")
     if err: return err
+    err = reject_shell_metachars(data, "image", "config", "output_format")
+    if err: return err
     image           = data["image"].strip()
     config          = data.get("config", "/etc/clair/config.yaml")
     output_format   = data.get("output_format", "json")
@@ -184,6 +198,8 @@ def _clair(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _kube_hunter(data: dict) -> dict:
+    err = reject_shell_metachars(data, "target", "remote", "cidr", "interface", "report")
+    if err: return err
     target          = data.get("target", "")
     remote          = data.get("remote", "")
     cidr            = data.get("cidr", "")
@@ -207,6 +223,8 @@ def _kube_hunter(data: dict) -> dict:
 
 
 def _kube_bench(data: dict) -> dict:
+    err = reject_shell_metachars(data, "targets", "version", "config_dir", "output_format")
+    if err: return err
     targets         = data.get("targets", "")
     version         = data.get("version", "")
     config_dir      = data.get("config_dir", "")
@@ -228,6 +246,8 @@ def _kube_bench(data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _checkov(data: dict) -> dict:
+    err = reject_shell_metachars(data, "directory", "framework", "check", "skip_check", "output_format")
+    if err: return err
     directory       = data.get("directory", ".")
     framework       = data.get("framework", "")
     check           = data.get("check", "")
@@ -246,6 +266,8 @@ def _checkov(data: dict) -> dict:
 
 
 def _terrascan(data: dict) -> dict:
+    err = reject_shell_metachars(data, "scan_type", "iac_dir", "policy_type", "output_format", "severity")
+    if err: return err
     scan_type       = data.get("scan_type", "all")
     iac_dir         = data.get("iac_dir", ".")
     policy_type     = data.get("policy_type", "")

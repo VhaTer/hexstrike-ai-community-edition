@@ -25,7 +25,7 @@ from typing import Any, Dict
 import pymysql
 
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ def _ropgadget(data: dict) -> dict:
         data["binary"] = data["file"]
     err = require(data, "binary")
     if err: return err
+    err = reject_shell_metachars(data, "binary", "gadget_type")
+    if err: return err
     binary          = data["binary"].strip()
     gadget_type     = data.get("gadget_type", "")
     additional_args = data.get("additional_args", "")
@@ -52,12 +54,14 @@ def _ropgadget(data: dict) -> dict:
 def _ropper(data: dict) -> dict:
     err = require(data, "binary")
     if err: return err
+    err = reject_shell_metachars(data, "binary", "arch")
+    if err: return err
     binary          = data["binary"].strip()
     search          = data.get("search", "")
     arch            = data.get("arch", "")
     additional_args = data.get("additional_args", "")
     command = f"ropper --file {binary}"
-    if search:          command += f" --search '{search}'"
+    if search:          command += f" --search {shlex.quote(search)}"
     if arch:            command += f" --arch {arch}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
@@ -68,6 +72,8 @@ def _one_gadget(data: dict) -> dict:
     if "libc" not in data and "libc_path" in data:
         data["libc"] = data["libc_path"]
     err = require(data, "libc")
+    if err: return err
+    err = reject_shell_metachars(data, "libc")
     if err: return err
     libc            = data["libc"].strip()
     level           = data.get("level", 0)
@@ -87,6 +93,8 @@ def _volatility(data: dict) -> dict:
     plugin      = data.get("plugin", "").strip()
     if not memory_file: return {"success": False, "error": "memory_file is required"}
     if not plugin:      return {"success": False, "error": "plugin is required"}
+    err = reject_shell_metachars(data, "memory_file", "plugin", "profile")
+    if err: return err
     profile         = data.get("profile", "")
     additional_args = data.get("additional_args", "")
     command = f"volatility -f {memory_file}"
@@ -101,6 +109,8 @@ def _volatility3(data: dict) -> dict:
     plugin      = data.get("plugin", "").strip()
     if not memory_file: return {"success": False, "error": "memory_file is required"}
     if not plugin:      return {"success": False, "error": "plugin is required"}
+    err = reject_shell_metachars(data, "memory_file", "plugin", "output_file")
+    if err: return err
     output_file     = data.get("output_file", "")
     additional_args = data.get("additional_args", "")
     command = f"vol -f {memory_file} {plugin}"
@@ -115,6 +125,8 @@ def _volatility3(data: dict) -> dict:
 
 def _gdb(data: dict) -> dict:
     err = require(data, "binary")
+    if err: return err
+    err = reject_shell_metachars(data, "binary", "script_file")
     if err: return err
     binary          = data["binary"].strip()
     commands        = data.get("commands", "")
@@ -140,6 +152,8 @@ def _radare2(data: dict) -> dict:
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
     err = require(data, "binary")
+    if err: return err
+    err = reject_shell_metachars(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     commands        = data.get("commands", "")
@@ -168,6 +182,8 @@ def _strings(data: dict) -> dict:
         data["file_path"] = data["file"]
     err = require(data, "file_path")
     if err: return err
+    err = reject_shell_metachars(data, "file_path")
+    if err: return err
     file_path       = data["file_path"].strip()
     min_len         = data.get("min_len", 4)
     additional_args = data.get("additional_args", "")
@@ -179,6 +195,8 @@ def _strings(data: dict) -> dict:
 
 def _objdump(data: dict) -> dict:
     err = require(data, "binary")
+    if err: return err
+    err = reject_shell_metachars(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     disassemble     = data.get("disassemble", True)
@@ -214,6 +232,8 @@ def _libc(data: dict) -> dict:
 def _xxd(data: dict) -> dict:
     err = require(data, "file_path")
     if err: return err
+    err = reject_shell_metachars(data, "file_path", "offset", "length")
+    if err: return err
     file_path       = data["file_path"].strip()
     offset          = data.get("offset", "0")
     length          = data.get("length", "")
@@ -230,6 +250,8 @@ def _file_type(data: dict) -> dict:
         data["file_path"] = data["file"]
     err = require(data, "file_path")
     if err: return err
+    err = reject_shell_metachars(data, "file_path")
+    if err: return err
     file_path = data["file_path"].strip()
     return execute_command(f"file {file_path}")
 
@@ -239,6 +261,8 @@ def _checksec(data: dict) -> dict:
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
     err = require(data, "binary")
+    if err: return err
+    err = reject_shell_metachars(data, "binary")
     if err: return err
     binary = data["binary"].strip()
     return execute_command(f"checksec --file={binary}")
@@ -260,6 +284,8 @@ def _autopsy(data: dict) -> dict:
 def _angr(data: dict) -> dict:
     err = require(data, "binary")
     if err: return err
+    err = reject_shell_metachars(data, "binary")
+    if err: return err
     binary          = data["binary"].strip()
     script_content  = data.get("script_content", "")
     find_address    = data.get("find_address", "")
@@ -280,6 +306,8 @@ def _angr(data: dict) -> dict:
 def _ghidra(data: dict) -> dict:
     err = require(data, "binary")
     if err: return err
+    err = reject_shell_metachars(data, "binary", "project_dir", "project_name", "script")
+    if err: return err
     binary          = data["binary"].strip()
     project_dir     = data.get("project_dir", "/tmp/ghidra_projects")
     project_name    = data.get("project_name", "hexstrike_analysis")
@@ -297,6 +325,8 @@ def _binwalk(data: dict) -> dict:
     if "binary" not in data and "file" in data:
         data["binary"] = data["file"]
     err = require(data, "binary")
+    if err: return err
+    err = reject_shell_metachars(data, "binary")
     if err: return err
     binary          = data["binary"].strip()
     extract         = data.get("extract", False)
@@ -351,6 +381,8 @@ def _api_schema_analyzer(data: dict) -> dict:
     schema_url = data.get("schema_url", "").strip()
     schema_type = data.get("schema_type", "openapi")
     if not schema_url: return {"success": False, "error": "schema_url is required (use http://host[:port])"}
+    err = reject_shell_metachars(data, "schema_url")
+    if err: return err
 
     result = execute_command(f"curl -s '{schema_url}'", use_cache=True)
     if not result.get("success"): return {"success": False, "error": "Failed to fetch API schema"}
@@ -392,20 +424,22 @@ def _api_schema_analyzer(data: dict) -> dict:
 def _graphql_scanner(data: dict) -> dict:
     endpoint = data.get("endpoint", "").strip()
     if not endpoint: return {"success": False, "error": "endpoint is required"}
+    err = reject_shell_metachars(data, "endpoint")
+    if err: return err
     introspection = data.get("introspection", True)
     query_depth   = data.get("query_depth", 10)
     results = {"endpoint": endpoint, "tests_performed": [], "vulnerabilities": [], "recommendations": []}
 
     if introspection:
         q = '{ __schema { types { name fields { name type { name } } } } }'
-        r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{q}\"}}' '{endpoint}'", use_cache=False)
+        r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{q}\"}}' {shlex.quote(endpoint)}", use_cache=False)
         results["tests_performed"].append("introspection_query")
         if "data" in r.get("stdout", ""):
             results["vulnerabilities"].append({"type": "introspection_enabled", "severity": "MEDIUM",
                                                "description": "GraphQL introspection enabled"})
 
     deep = "{ " * query_depth + "field" + " }" * query_depth
-    r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{deep}\"}}' {endpoint}", use_cache=False)
+    r = execute_command(f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"query\":\"{deep}\"}}' {shlex.quote(endpoint)}", use_cache=False)
     results["tests_performed"].append("query_depth_analysis")
     if "error" not in r.get("stdout", "").lower():
         results["vulnerabilities"].append({"type": "no_query_depth_limit", "severity": "HIGH",
@@ -419,6 +453,8 @@ def _jwt_analyzer(data: dict) -> dict:
     jwt_token  = data.get("jwt_token", "").strip()
     target_url = data.get("target_url", "")
     if not jwt_token: return {"success": False, "error": "jwt_token is required"}
+    err = reject_shell_metachars(data, "target_url")
+    if err: return err
 
     results = {"token": jwt_token[:50] + "..." if len(jwt_token) > 50 else jwt_token,
                "vulnerabilities": [], "token_info": {}, "attack_vectors": []}
@@ -465,6 +501,8 @@ def _foremost(data: dict) -> dict:
     err = require(data, "input_file")
     if err: return err
     from pathlib import Path
+    err = reject_shell_metachars(data, "input_file", "output_dir", "file_types")
+    if err: return err
     input_file      = data["input_file"].strip()
     output_dir      = data.get("output_dir", "/tmp/foremost_output")
     file_types      = data.get("file_types", "")
@@ -478,6 +516,8 @@ def _foremost(data: dict) -> dict:
 
 
 def _falco(data: dict) -> dict:
+    err = reject_shell_metachars(data, "config_file", "rules_file")
+    if err: return err
     config_file     = data.get("config_file", "/etc/falco/falco.yaml")
     rules_file      = data.get("rules_file", "")
     output_format   = data.get("output_format", "json")
@@ -499,6 +539,8 @@ def _steghide(data: dict) -> dict:
     embed_file      = data.get("embed_file", "")
     passphrase      = data.get("passphrase", "")
     output_file     = data.get("output_file", "")
+    err = reject_shell_metachars(data, "cover_file", "embed_file", "output_file")
+    if err: return err
     additional_args = data.get("additional_args", "")
     if action == "extract":
         command = f"steghide extract -sf {cover_file}"
@@ -510,7 +552,7 @@ def _steghide(data: dict) -> dict:
         command = f"steghide info {cover_file}"
     else:
         return {"success": False, "error": f"Invalid action: {action}"}
-    if passphrase:      command += f" -p '{passphrase}'"
+    if passphrase:      command += f" -p {shlex.quote(passphrase)}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -530,6 +572,8 @@ def _anew(data: dict) -> dict:
 
 def _exiftool(data: dict) -> dict:
     err = require(data, "file_path")
+    if err: return err
+    err = reject_shell_metachars(data, "file_path", "output_format", "tags")
     if err: return err
     file_path       = data["file_path"].strip()
     output_format   = data.get("output_format", "")
@@ -551,7 +595,9 @@ def _hashpump(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
     if not all([signature, orig_data, key_length, append_data]):
         return {"success": False, "error": "signature, data, key_length, append_data required"}
-    command = f"hashpump -s {signature} -d '{orig_data}' -k {key_length} -a '{append_data}'"
+    err = reject_shell_metachars(data, "signature", "key_length")
+    if err: return err
+    command = f"hashpump -s {signature} -d {shlex.quote(orig_data)} -k {key_length} -a {shlex.quote(append_data)}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -561,6 +607,8 @@ def _qsreplace(data: dict) -> dict:
     replacement     = data.get("replacement", "FUZZ")
     additional_args = data.get("additional_args", "")
     if not urls: return {"success": False, "error": "urls is required"}
+    err = reject_shell_metachars(data, "replacement")
+    if err: return err
     command = f"echo {shlex.quote(urls)} | qsreplace {replacement}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
@@ -572,6 +620,8 @@ def _uro(data: dict) -> dict:
     blacklist       = data.get("blacklist", "")
     additional_args = data.get("additional_args", "")
     if not urls: return {"success": False, "error": "urls is required"}
+    err = reject_shell_metachars(data, "whitelist", "blacklist")
+    if err: return err
     command = f"echo {shlex.quote(urls)} | uro"
     if whitelist:       command += f" -w {whitelist}"
     if blacklist:       command += f" -b {blacklist}"
@@ -580,6 +630,8 @@ def _uro(data: dict) -> dict:
 
 
 def _responder(data: dict) -> dict:
+    err = reject_shell_metachars(data, "interface")
+    if err: return err
     interface       = data.get("interface", "eth0")
     analyze         = data.get("analyze", False)
     wpad            = data.get("wpad", True)
@@ -604,6 +656,13 @@ def _api_fuzzer(data: dict) -> dict:
     methods         = data.get("methods", ["GET", "POST"])
     wordlist        = data.get("wordlist", "/usr/share/wordlists/api/api-endpoints.txt")
     additional_args = data.get("additional_args", "")
+    err = reject_shell_metachars(data, "base_url", "wordlist")
+    if err: return err
+    for m in (methods if isinstance(methods, list) else [methods]):
+        if not isinstance(m, str):
+            continue
+        err = reject_shell_metachars({"method": m}, "method")
+        if err: return err
     # Use ffuf for API fuzzing
     command = f"ffuf -u {base_url}/FUZZ -w {wordlist}"
     if isinstance(methods, list): methods_str = ",".join(methods)
@@ -617,8 +676,16 @@ def _bbot(data: dict) -> dict:
     target      = data.get("target", "").strip()
     parameters  = data.get("parameters", {})
     if not target: return {"success": False, "error": "target is required (use an IP or hostname)"}
+    err = reject_shell_metachars(data, "target")
+    if err: return err
     flags = ""
     for k, v in parameters.items():
+        if isinstance(k, str):
+            err = reject_shell_metachars({"parameter_key": k}, "parameter_key")
+            if err: return err
+        if isinstance(v, str):
+            err = reject_shell_metachars({"parameter_value": v}, "parameter_value")
+            if err: return err
         flags += f" -{k} {v}"
     command = f"bbot -t {target}{flags}"
     return execute_command(command)
@@ -627,6 +694,8 @@ def _bbot(data: dict) -> dict:
 def _nuclei(data: dict) -> dict:
     target          = data.get("target", "").strip()
     if not target: return {"success": False, "error": "target is required (use an IP or hostname, or http://host[:port] for URL)"}
+    err = reject_shell_metachars(data, "target", "severity", "tags", "template", "ports")
+    if err: return err
     severity        = data.get("severity", "")
     tags            = data.get("tags", "")
     template        = data.get("template", "")
@@ -652,6 +721,8 @@ def _nuclei(data: dict) -> dict:
 def _bulk_extractor(data: dict) -> dict:
     err = require(data, "input_file")
     if err: return err
+    err = reject_shell_metachars(data, "input_file", "output_dir")
+    if err: return err
     input_file  = data["input_file"].strip()
     output_dir  = data.get("output_dir", "/tmp/bulk_extractor_output")
     additional  = data.get("additional_args", "")
@@ -662,6 +733,8 @@ def _bulk_extractor(data: dict) -> dict:
 
 def _scalpel(data: dict) -> dict:
     err = require(data, "input_file")
+    if err: return err
+    err = reject_shell_metachars(data, "input_file", "output_dir", "config")
     if err: return err
     input_file  = data["input_file"].strip()
     output_dir  = data.get("output_dir", "/tmp/scalpel_output")
@@ -682,6 +755,8 @@ def _http_request(data: dict) -> dict:
     post_data = data.get("data", "")
     cookie = data.get("cookie", "")
     headers_raw = data.get("headers", "")
+    err = reject_shell_metachars(data, "url", "method")
+    if err: return err
     follow = data.get("follow_redirects", True)
     max_body = data.get("max_body_size", 5000)
     additional_args = data.get("additional_args", "")
@@ -695,14 +770,14 @@ def _http_request(data: dict) -> dict:
         cmd = "curl -s -L" if follow else "curl -s"
         cmd += f" -X {method} -D '{hf_path}' -o '{bf_path}' --write-out \"%{{http_code}}\""
         if cookie:
-            cmd += f" --cookie '{cookie}'"
+            cmd += f" --cookie {shlex.quote(cookie)}"
         for h in headers_raw.splitlines():
             h = h.strip()
             if h:
-                cmd += f" -H '{h}'"
+                cmd += f" -H {shlex.quote(h)}"
         if post_data:
-            cmd += f" --data-raw '{post_data}'"
-        cmd += f" '{url}'"
+            cmd += f" --data-raw {shlex.quote(post_data)}"
+        cmd += f" {shlex.quote(url)}"
         if additional_args:
             cmd += f" {additional_args}"
 
@@ -776,6 +851,8 @@ def _strace(data: dict) -> dict:
     binary = data.get("binary") or data.get("target") or data.get("file_path", "")
     if not binary:
         return {"success": False, "error": "binary, target, or file_path required"}
+    err = reject_shell_metachars(data, "binary", "target", "file_path")
+    if err: return err
     cmd = data.get("additional_args", "")
     return execute_command(f"strace {cmd} {binary}")
 
@@ -784,6 +861,8 @@ def _ltrace(data: dict) -> dict:
     binary = data.get("binary") or data.get("target") or data.get("file_path", "")
     if not binary:
         return {"success": False, "error": "binary, target, or file_path required"}
+    err = reject_shell_metachars(data, "binary", "target", "file_path")
+    if err: return err
     cmd = data.get("additional_args", "")
     return execute_command(f"ltrace {cmd} {binary}")
 
@@ -792,6 +871,8 @@ def _gdb_peda(data: dict) -> dict:
     binary = data.get("binary") or data.get("target") or data.get("file_path", "")
     if not binary:
         return {"success": False, "error": "binary, target, or file_path required"}
+    err = reject_shell_metachars(data, "binary", "target", "file_path", "script_file")
+    if err: return err
     commands = data.get("commands", "")
     script = data.get("script_file", "")
     cmd = f"gdb {binary}"
