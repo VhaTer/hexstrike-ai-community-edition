@@ -9,7 +9,7 @@ CLI (hexstrike.py) ──→ DIRECT_ROUTES ──→ *_direct.py ──→ subpr
 MCP Client ──→ server_setup.py ──→ DIRECT_TOOLS ──→ *_direct.py ──→ subprocess
                (FastMCP 3)         (130 entries)
 
-HTTP/SSE ──→ hexstrike_server.py ──→ DIRECT_TOOLS ──→ *_direct.py
+HTTP/SSE ──→ mcp_entry.py ──→ DIRECT_TOOLS ──→ *_direct.py
 ```
 
 **Key principle**: No Flask. Every tool executes directly through a `*_direct.py` module.
@@ -84,17 +84,19 @@ python3 hexstrike.py ctf pwn/hard    # CTF workflow plan
 
 Flags: `--json` (structured output), `-o FILE` (write output).
 
-### 2. HTTP/SSE Server (`hexstrike_server.py`)
+### 2. HTTP/SSE Server (`pulse/server/web_server.py` — via `pulse/server/mcp_entry.py`)
 
 ```
+python3 -m pulse.server.mcp_entry --transport http   # or ./hexstrike-pulse
 http://127.0.0.1:8888/mcp           # SSE endpoint
 http://127.0.0.1:8888/dashboard     # Web UI dashboard (requires `ui/` build)
 ```
 
-### 3. MCP stdio (`hexstrike_mcp.py`)
+### 3. MCP stdio (`pulse/server/mcp_entry.py`)
 
 ```
-python3 hexstrike_mcp.py             # stdio MCP (for Claude Desktop)
+python3 hexstrike.py mcp             # stdio MCP (for Claude Desktop)
+./hexstrike-pulse --bridge           # stdio→HTTP bridge (Claude Desktop, needs HTTP server)
 ```
 
 Config: `hexstrike-ai-mcp.json` (example MCP client config).

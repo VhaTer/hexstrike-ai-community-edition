@@ -177,9 +177,9 @@ cmd_background() {
     local pid=$!
     echo "$pid" > "$PIDFILE"
 
-    # Wait for port to be ready (up to 8 seconds)
+    # Wait for port to be ready (up to 30 seconds — server takes ~15-20s to start)
     local waited=0
-    while [ $waited -lt 8 ]; do
+    while [ $waited -lt 30 ]; do
         if _port_listening; then
             _print_connection_info
             echo "  PID $pid — tail -f hexstrike.log"

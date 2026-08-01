@@ -83,7 +83,7 @@ class ModernVisualEngine:
         host: str = "127.0.0.1",
         port: int = 8888,
         tools_count: int = 130,
-        version: str = "0.8.0",
+        version: str = "0.13.1",
     ) -> str:
         C = ModernVisualEngine.COLORS
         b = C['ACCENT_LINE']

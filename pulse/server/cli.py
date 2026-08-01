@@ -38,7 +38,7 @@ from pulse.tools.tool_routes import TOOL_ROUTES
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 logger = logging.getLogger("hexstrike")
 
-VERSION = "0.13.0"
+VERSION = "0.13.1"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8888
 

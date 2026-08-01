@@ -13,7 +13,7 @@ Panels (Session B — Header + Scope + Surface + Findings):
 
 Usage:
     # Via Claude Desktop (stdio):
-    python3 hexstrike_mcp.py
+    python3 hexstrike.py mcp
 
     # Via FastMCP dev server (validation only):
     fastmcp dev apps pulse_app.py
