@@ -27,7 +27,7 @@ def _nmap(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "scan_type", "ports")
     if err:
         return err
 
@@ -48,7 +48,7 @@ def _nmap_advanced(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "scan_type", "ports", "timing", "nse_scripts")
     if err:
         return err
 
@@ -89,7 +89,7 @@ def _masscan(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "ports", "interface", "router_mac", "source_ip")
     if err:
         return err
 
@@ -116,7 +116,7 @@ def _rustscan(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "ports", "ulimit", "batch_size", "timeout")
     if err:
         return err
 
@@ -142,7 +142,7 @@ def _arp_scan(data: dict) -> dict:
 
     if not target and not local_network:
         return {"success": False, "error": "target or local_network flag is required"}
-    err = reject_shell_metachars(data, "target", "interface")
+    err = reject_shell_metachars(data, "target", "interface", "timeout", "retry")
     if err:
         return err
 

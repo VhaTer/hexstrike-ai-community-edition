@@ -34,7 +34,7 @@ def _amass(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
-    err = reject_shell_metachars(data, "domain")
+    err = reject_shell_metachars(data, "domain", "mode")
     if err:
         return err
 
@@ -74,7 +74,7 @@ def _autorecon(data: dict) -> dict:
     err = require(data, "target")
     if err:
         return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "output_dir", "port_scans", "service_scans", "heartbeat", "timeout")
     if err:
         return err
 
@@ -118,7 +118,7 @@ def _dnsenum(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
-    err = reject_shell_metachars(data, "domain")
+    err = reject_shell_metachars(data, "domain", "dns_server", "wordlist")
     if err:
         return err
 
@@ -139,7 +139,7 @@ def _fierce(data: dict) -> dict:
     err = require(data, "domain")
     if err:
         return err
-    err = reject_shell_metachars(data, "domain")
+    err = reject_shell_metachars(data, "domain", "dns_server")
     if err:
         return err
 

@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import shlex
 from typing import Any, Dict
 
 from pulse.infrastructure.execution.command_executor import execute_command
@@ -31,7 +32,7 @@ def _hydra(data: dict) -> dict:
 
     if not target or not service:
         return {"success": False, "error": "target and service are required"}
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "service", "username_file", "password_file")
     if err:
         return err
 
@@ -45,9 +46,9 @@ def _hydra(data: dict) -> dict:
         return {"success": False, "error": "username/username_file and password/password_file are required"}
 
     command = "hydra -t 4"
-    if username:       command += f" -l {username}"
+    if username:        command += f" -l {shlex.quote(username)}"
     elif username_file: command += f" -L {username_file}"
-    if password:       command += f" -p {password}"
+    if password:        command += f" -p {shlex.quote(password)}"
     elif password_file: command += f" -P {password_file}"
     if additional_args: command += f" {additional_args}"
     command += f" {target} {service}"
@@ -63,6 +64,9 @@ def _hashcat(data: dict) -> dict:
         return {"success": False, "error": "hash_file is required"}
     if not hash_type:
         return {"success": False, "error": "hash_type is required"}
+    err = reject_shell_metachars(data, "hash_file", "hash_type", "attack_mode", "wordlist", "mask")
+    if err:
+        return err
 
     attack_mode     = data.get("attack_mode", "0")
     wordlist        = data.get("wordlist", ROCKYOU_PATH)
@@ -79,6 +83,9 @@ def _hashcat(data: dict) -> dict:
 
 def _john(data: dict) -> dict:
     err = require(data, "hash_file")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "hash_file", "format", "wordlist")
     if err:
         return err
 
@@ -102,7 +109,7 @@ def _medusa(data: dict) -> dict:
 
     if not target or not module:
         return {"success": False, "error": "target and module are required"}
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "module", "username_file", "password_file")
     if err:
         return err
 
@@ -113,9 +120,9 @@ def _medusa(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     command = f"medusa -h {target} -M {module}"
-    if username:        command += f" -u {username}"
+    if username:        command += f" -u {shlex.quote(username)}"
     elif username_file: command += f" -U {username_file}"
-    if password:        command += f" -p {password}"
+    if password:        command += f" -p {shlex.quote(password)}"
     elif password_file: command += f" -P {password_file}"
     if additional_args: command += f" {additional_args}"
 
@@ -128,7 +135,7 @@ def _patator(data: dict) -> dict:
 
     if not module or not target:
         return {"success": False, "error": "module and target are required"}
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "module", "username_file", "password_file")
     if err:
         return err
 
@@ -149,9 +156,9 @@ def _patator(data: dict) -> dict:
         return {"success": False, "error": f"password_file not found: {password_file}"}
 
     command = f"patator {module} host={target}"
-    if username:        command += f" user={username}"
+    if username:        command += f" user={shlex.quote(username)}"
     elif username_file: command += f" user=FILE:{username_file}"
-    if password:        command += f" password={password}"
+    if password:        command += f" password={shlex.quote(password)}"
     elif password_file: command += f" password=FILE:{password_file}"
     if additional_args: command += f" {additional_args}"
 
@@ -165,7 +172,7 @@ def _hashid(data: dict) -> dict:
 
     additional_args = data.get("additional_args", "")
 
-    command = f"hashid {hash_value} {additional_args}"
+    command = f"hashid {shlex.quote(hash_value)} {additional_args}"
     return execute_command(command, use_cache=True)
 
 
@@ -177,6 +184,9 @@ def _ophcrack(data: dict) -> dict:
 
     if not hash_file:
         return {"success": False, "error": "hash_file is required"}
+    err = reject_shell_metachars(data, "hash_file", "tables_dir", "tables")
+    if err:
+        return err
     if not os.path.isfile(hash_file):
         return {"success": False, "error": f"Hash file not found: {hash_file}"}
     if tables_dir and not os.path.isdir(tables_dir):
@@ -200,6 +210,15 @@ def _aircrack_ng(data: dict) -> dict:
         return {"success": False, "error": "capture_files is required"}
     if not wordlist:
         return {"success": False, "error": "wordlist is required"}
+    err = reject_shell_metachars(data, "bssid", "wordlist")
+    if err:
+        return err
+    for cf in capture_files:
+        if not isinstance(cf, str):
+            continue
+        err = reject_shell_metachars({"capture_file": cf}, "capture_file")
+        if err:
+            return err
 
     command = f"aircrack-ng {' '.join(capture_files)} -w {wordlist}"
     if bssid: command += f" -b {bssid}"

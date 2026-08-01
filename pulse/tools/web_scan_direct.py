@@ -120,7 +120,7 @@ def _jaeles(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "signatures", "config", "threads", "timeout")
     if err:
         return err
 
@@ -143,7 +143,7 @@ def _xsser(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
-    err = reject_shell_metachars(data, "url")
+    err = reject_shell_metachars(data, "url", "params")
     if err:
         return err
 
@@ -173,7 +173,7 @@ def _zap(data: dict) -> dict:
 
     if not target and scan_type != "daemon":
         return {"success": False, "error": "target is required for scans (use an IP or hostname)"}
-    err = reject_shell_metachars(data, "target", "host")
+    err = reject_shell_metachars(data, "target", "host", "api_key", "format", "output_file", "port")
     if err:
         return err
 

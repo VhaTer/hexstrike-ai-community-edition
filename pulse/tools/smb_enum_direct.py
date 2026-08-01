@@ -23,7 +23,7 @@ def _enum4linux(data: dict) -> dict:
 def _enum4linux_ng(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "domain")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -36,8 +36,8 @@ def _enum4linux_ng(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     command = f"enum4linux-ng {target}"
-    if username: command += f" -u {username}"
-    if password: command += f" -p {password}"
+    if username: command += f" -u {shlex.quote(username)}"
+    if password: command += f" -p {shlex.quote(password)}"
     if domain:   command += f" -d {domain}"
 
     opts = []
@@ -72,7 +72,7 @@ def _nbtscan(data: dict) -> dict:
 def _netexec(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "protocol", "module")
     if err: return err
     target          = data["target"].strip()
     protocol        = data.get("protocol", "smb")
@@ -83,9 +83,9 @@ def _netexec(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     command = f"nxc {protocol} {target}"
-    if username:    command += f" -u {username}"
-    if password:    command += f" -p {password}"
-    if hash_value:  command += f" -H {hash_value}"
+    if username:    command += f" -u {shlex.quote(username)}"
+    if password:    command += f" -p {shlex.quote(password)}"
+    if hash_value:  command += f" -H {shlex.quote(hash_value)}"
     if module:      command += f" -M {module}"
     if additional_args: command += f" {additional_args}"
 
@@ -103,9 +103,9 @@ def _rpcclient(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     if username and password:
-        auth = f"-U {username}%{password}"
+        auth = f"-U {shlex.quote(username)}%{shlex.quote(password)}"
     elif username:
-        auth = f"-U {username}"
+        auth = f"-U {shlex.quote(username)}"
     else:
         auth = "-U ''"
     if domain: auth += f" -W {domain}"
@@ -120,7 +120,7 @@ def _rpcclient(data: dict) -> dict:
 def _smbmap(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "domain")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -129,8 +129,8 @@ def _smbmap(data: dict) -> dict:
     additional_args = data.get("additional_args", "")
 
     command = f"smbmap -H {target}"
-    if username: command += f" -u {username}"
-    if password: command += f" -p {password}"
+    if username: command += f" -u {shlex.quote(username)}"
+    if password: command += f" -p {shlex.quote(password)}"
     if domain:   command += f" -d {domain}"
     if additional_args: command += f" {additional_args}"
 
@@ -145,16 +145,16 @@ def _nxc(data: dict) -> dict:
 def _evil_winrm(data: dict) -> dict:
     err = require(data, "target", "username")
     if err: return err
-    err = reject_shell_metachars(data, "target")
+    err = reject_shell_metachars(data, "target", "script")
     if err: return err
     target   = data["target"].strip()
     username = data["username"].strip()
     password = data.get("password", "")
     hash_v   = data.get("hash", "")
     script   = data.get("script", "")
-    command  = f"evil-winrm -i {target} -u {username}"
-    if password: command += f" -p {password}"
-    if hash_v:   command += f" -H {hash_v}"
+    command  = f"evil-winrm -i {target} -u {shlex.quote(username)}"
+    if password: command += f" -p {shlex.quote(password)}"
+    if hash_v:   command += f" -H {shlex.quote(hash_v)}"
     if script:   command += f" -s {script}"
     return execute_command(command)
 
