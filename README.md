@@ -10,6 +10,7 @@ AI-powered security orchestration engine — 163 tools, live Prefab dashboards, 
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-red)]()
 [![Coverage](https://img.shields.io/badge/Coverage-99%25-brightgreen)]()
 [![License](https://img.shields.io/badge/License-AGPLv3-green)]()
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VhaTer/hexstrike-ai-community-edition)
 
 ---
 
