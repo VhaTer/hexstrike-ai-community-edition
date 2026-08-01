@@ -7,11 +7,13 @@ Phase 2 — Direct execution layer for smb_enum tools.
 import shlex
 from typing import Any, Dict
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 def _enum4linux(data: dict) -> dict:
     err = require(data, "target")
+    if err: return err
+    err = reject_shell_metachars(data, "target")
     if err: return err
     target          = data["target"].strip()
     additional_args = data.get("additional_args", "-a")
@@ -20,6 +22,8 @@ def _enum4linux(data: dict) -> dict:
 
 def _enum4linux_ng(data: dict) -> dict:
     err = require(data, "target")
+    if err: return err
+    err = reject_shell_metachars(data, "target")
     if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
@@ -50,6 +54,8 @@ def _enum4linux_ng(data: dict) -> dict:
 def _nbtscan(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
+    err = reject_shell_metachars(data, "target")
+    if err: return err
     target          = data["target"].strip()
     verbose         = data.get("verbose", False)
     timeout         = data.get("timeout", 2)
@@ -65,6 +71,8 @@ def _nbtscan(data: dict) -> dict:
 
 def _netexec(data: dict) -> dict:
     err = require(data, "target")
+    if err: return err
+    err = reject_shell_metachars(data, "target")
     if err: return err
     target          = data["target"].strip()
     protocol        = data.get("protocol", "smb")
@@ -112,6 +120,8 @@ def _rpcclient(data: dict) -> dict:
 def _smbmap(data: dict) -> dict:
     err = require(data, "target")
     if err: return err
+    err = reject_shell_metachars(data, "target")
+    if err: return err
     target          = data["target"].strip()
     username        = data.get("username", "")
     password        = data.get("password", "")
@@ -134,6 +144,8 @@ def _nxc(data: dict) -> dict:
 
 def _evil_winrm(data: dict) -> dict:
     err = require(data, "target", "username")
+    if err: return err
+    err = reject_shell_metachars(data, "target")
     if err: return err
     target   = data["target"].strip()
     username = data["username"].strip()
