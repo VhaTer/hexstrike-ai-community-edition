@@ -46,7 +46,7 @@ def _ropgadget(data: dict) -> dict:
     gadget_type     = data.get("gadget_type", "")
     additional_args = data.get("additional_args", "")
     command = f"ROPgadget --binary {binary}"
-    if gadget_type:     command += f" --only '{gadget_type}'"
+    if gadget_type:     command += f" --only {shlex.quote(gadget_type)}"
     if additional_args: command += f" {additional_args}"
     return execute_command(command)
 
@@ -384,7 +384,7 @@ def _api_schema_analyzer(data: dict) -> dict:
     err = reject_shell_metachars(data, "schema_url")
     if err: return err
 
-    result = execute_command(f"curl -s '{schema_url}'", use_cache=True)
+    result = execute_command(f"curl -s {shlex.quote(schema_url)}", use_cache=True)
     if not result.get("success"): return {"success": False, "error": "Failed to fetch API schema"}
 
     schema_content = result.get("stdout", "")
@@ -483,7 +483,7 @@ def _jwt_analyzer(data: dict) -> dict:
         if len(parts) >= 2:
             nh = base64.b64encode(b'{"alg":"none","typ":"JWT"}').decode().rstrip('=')
             none_tok = f"{nh}.{parts[1]}."
-            r = execute_command(f"curl -s -H 'Authorization: Bearer {none_tok}' '{target_url}'", use_cache=False)
+            r = execute_command(f"curl -s -H 'Authorization: Bearer {none_tok}' {shlex.quote(target_url)}", use_cache=False)
             if "200" in r.get("stdout", "") or "success" in r.get("stdout", "").lower():
                 results["vulnerabilities"].append({"type": "none_algorithm_accepted", "severity": "CRITICAL",
                                                    "description": "Server accepts 'none' algorithm tokens"})

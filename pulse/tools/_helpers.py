@@ -65,11 +65,29 @@ _SHELL_METACHARS = ('|', '>', '<', '&&', '||', ';', '`', '$(', '${', '\n', '\r')
 def reject_shell_metachars(data: dict, *keys: str) -> Dict[str, Any]:
     """Return error dict if any of the given fields contain shell metacharacters.
 
-    Call this AFTER require() for any field that gets interpolated directly
-    into a command string in a *_direct.py handler that does not itself rely
-    on shell operators (pipes, &&, ||) by design. For handlers that DO need
-    shell features intentionally, quote the user-controlled value with
-    shlex.quote() at the interpolation site instead of calling this.
+    Two categories of user-controlled fields in *_direct.py handlers:
+
+    Structural fields — target/url/domain/host/interface/wordlist/mode/
+    ports/format/output_file/... — must be validated with this helper, called
+    AFTER require(). No legitimate structural value contains shell
+    metacharacters, so rejection is safe.
+
+    Free-text fields — password, hash, hash_value, username (target-side
+    login), passphrase, cookie/header values, gadget search strings... —
+    MUST NOT be validated with this helper: legit values (``P@ss;word``,
+    ``pop rdi; ret``, multi-cookie ``a=1; b=2``) contain metacharacters.
+    Quote them instead with shlex.quote() at the interpolation site:
+
+        command += f" -p {shlex.quote(password)}"
+
+    Never quote at extraction time — shlex.quote("") returns "''" which is
+    truthy and would silently break optional-field logic.
+
+    ``additional_args`` is a documented exception in every handler: raw
+    extra flags are passed through untouched by design.
+
+    Note: non-string values (ints, lists) are skipped — validate list
+    elements individually in a loop if a list is joined into the command.
 
     Usage::
 

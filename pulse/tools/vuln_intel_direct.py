@@ -18,9 +18,10 @@ vulnx installation:
 """
 
 import logging
+import shlex
 
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require_one
+from pulse.tools._helpers import require_one, reject_shell_metachars
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ def _vulnx(data: dict) -> dict:
     err = require_one(data, "cve_id", "search")
     if err:
         return err
+    err = reject_shell_metachars(data, "cve_id", "output")
+    if err:
+        return err
 
     cve_id   = data.get("cve_id", "").strip()
     search   = data.get("search", "").strip()
@@ -55,10 +59,10 @@ def _vulnx(data: dict) -> dict:
         command += f" --cve-id {cve_id}"
 
     if search:
-        command += f" --search {search}"
+        command += f" --search {shlex.quote(search)}"
 
     if auth_key:
-        command += f" --auth-key {auth_key}"
+        command += f" --auth-key {shlex.quote(auth_key)}"
 
     output = data.get("output", "")
     if output:

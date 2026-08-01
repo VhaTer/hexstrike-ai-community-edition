@@ -14,7 +14,7 @@ Usage:
 
 import shlex
 from pulse.infrastructure.execution.command_executor import execute_command
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 # ---------------------------------------------------------------------------
 # Validated Impacket scripts available on Kali
@@ -78,6 +78,9 @@ def _ldapdomaindump(data: dict) -> dict:
     err = require(data, "hostname")
     if err:
         return err
+    err = reject_shell_metachars(data, "hostname", "authtype")
+    if err:
+        return err
 
     hostname = data["hostname"].strip()
     username = data.get("username", "").strip()
@@ -86,13 +89,16 @@ def _ldapdomaindump(data: dict) -> dict:
 
     command = f"ldapdomaindump {hostname} --authtype {authtype}"
     if username and password:
-        command += f" --user {username} --password {password}"
+        command += f" --user {shlex.quote(username)} --password {shlex.quote(password)}"
 
     return execute_command(command)
 
 
 def _adidnsdump(data: dict) -> dict:
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target", "zone")
     if err:
         return err
 
@@ -104,9 +110,9 @@ def _adidnsdump(data: dict) -> dict:
 
     command = f"adidnsdump {target}"
     if username:
-        command += f" -u {username}"
+        command += f" -u {shlex.quote(username)}"
     if password:
-        command += f" -p {password}"
+        command += f" -p {shlex.quote(password)}"
     if zone:
         command += f" --zone {zone}"
     if extra:
@@ -117,6 +123,9 @@ def _adidnsdump(data: dict) -> dict:
 
 def _certipy_ad(data: dict) -> dict:
     err = require(data, "action")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "action", "target", "dc_ip")
     if err:
         return err
 
@@ -131,9 +140,9 @@ def _certipy_ad(data: dict) -> dict:
     if target:
         command += f" -target {target}"
     if username:
-        command += f" -u {username}"
+        command += f" -u {shlex.quote(username)}"
     if password:
-        command += f" -p {password}"
+        command += f" -p {shlex.quote(password)}"
     if dc_ip:
         command += f" -dc-ip {dc_ip}"
     if extra:
@@ -144,6 +153,9 @@ def _certipy_ad(data: dict) -> dict:
 
 def _mitm6(data: dict) -> dict:
     err = require(data, "interface")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "interface", "domain")
     if err:
         return err
 
@@ -164,6 +176,9 @@ def _pywerview(data: dict) -> dict:
     err = require(data, "request", "target")
     if err:
         return err
+    err = reject_shell_metachars(data, "request", "target", "dc_ip")
+    if err:
+        return err
 
     request_type = data["request"].strip()   # get-netuser, get-netgroup, etc.
     target       = data["target"].strip()
@@ -174,9 +189,9 @@ def _pywerview(data: dict) -> dict:
 
     command = f"pywerview {request_type} -t {target}"
     if username:
-        command += f" -u {username}"
+        command += f" -u {shlex.quote(username)}"
     if password:
-        command += f" -p {password}"
+        command += f" -p {shlex.quote(password)}"
     if dc_ip:
         command += f" --dc-ip {dc_ip}"
     if extra:
@@ -189,6 +204,9 @@ def _bloodhound(data: dict) -> dict:
     err = require(data, "domain", "username", "password", "dc_ip")
     if err:
         return err
+    err = reject_shell_metachars(data, "domain", "dc_ip")
+    if err:
+        return err
 
     domain   = data["domain"].strip()
     username = data["username"].strip()
@@ -197,8 +215,8 @@ def _bloodhound(data: dict) -> dict:
     extra    = data.get("additional_args", "").strip()
 
     command = (
-        f"bloodhound-python -d {domain} -u {username} -p {password} "
-        f"--dc {dc_ip} -c All --zip"
+        f"bloodhound-python -d {domain} -u {shlex.quote(username)} "
+        f"-p {shlex.quote(password)} --dc {dc_ip} -c All --zip"
     )
     if extra:
         command += f" {extra}"

@@ -22,7 +22,7 @@ from typing import Any, Dict
 from pulse.infrastructure.execution.command_executor import execute_command
 
 logger = logging.getLogger(__name__)
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +47,9 @@ def _testssl(data: dict) -> dict:
         additional_args: Raw extra flags passed to testssl.sh
     """
     err = require(data, "target")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "target", "starttls", "severity", "jsonfile", "proxy", "ip")
     if err:
         return err
 

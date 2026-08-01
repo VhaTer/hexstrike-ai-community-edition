@@ -16,12 +16,13 @@ Usage:
 """
 
 import logging
+import shlex
 from typing import Any, Dict
 
 from pulse.infrastructure.execution.command_executor import execute_command
 
 logger = logging.getLogger(__name__)
-from pulse.tools._helpers import require
+from pulse.tools._helpers import require, reject_shell_metachars
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +41,9 @@ def _whatweb(data: dict) -> dict:
         additional_args: Raw extra flags
     """
     err = require(data, "url")
+    if err:
+        return err
+    err = reject_shell_metachars(data, "url", "aggression")
     if err:
         return err
 
@@ -87,6 +91,9 @@ def _commix(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url", "level", "technique", "os", "crawl", "proxy")
+    if err:
+        return err
 
     url   = data["url"].strip()
     level = data.get("level", "")
@@ -115,11 +122,11 @@ def _commix(data: dict) -> dict:
 
     cookie = data.get("cookie", "")
     if cookie:
-        command += f" --cookie='{cookie}'"
+        command += f" --cookie={shlex.quote(cookie)}"
 
     header = data.get("header", "")
     if header:
-        command += f" --header='{header}'"
+        command += f" --header={shlex.quote(header)}"
 
     proxy = data.get("proxy", "")
     if proxy:
@@ -152,6 +159,9 @@ def _joomscan(data: dict) -> dict:
     err = require(data, "url")
     if err:
         return err
+    err = reject_shell_metachars(data, "url")
+    if err:
+        return err
 
     url = data["url"].strip()
     additional_args = data.get("additional_args", "")
@@ -166,7 +176,7 @@ def _joomscan(data: dict) -> dict:
 
     cookie = data.get("cookie", "")
     if cookie:
-        command += f" --cookie '{cookie}'"
+        command += f" --cookie {shlex.quote(cookie)}"
 
     if additional_args:
         command += f" {additional_args}"
