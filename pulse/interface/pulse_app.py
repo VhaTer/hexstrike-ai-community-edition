@@ -2021,13 +2021,143 @@ def scan(target: str = "", intensity: str = "quick", objective: str = "comprehen
 # UI entry point
 # ═════════════════════════════════════════════════════════════════════════════
 
-@app.ui()
-def pulse_dashboard() -> PrefabApp:
-    """Open the Pulse dashboard (3+2+1 grid layout)."""
-    st = _collect_dashboard_state()
+# Documented contract: every key in _build_ui_state() must be traceable to
+# a source in _collect_dashboard_state() or a documented derived field.
+# Any divergence between this mapping and the real state fails the parity
+# test (test_state_keys_match_documented_contract) — the guard rail against
+# silent key drift. Source of truth lives here, imported by the tests.
+_STATE_KEY_SOURCES: dict[str, str] = {
+    # ── Overview (st["overview"]) ──────────────────────────────────────────
+    "version":               "overview['version']",
+    "version_display":       "overview['version_display']",
+    "uptime_display":        "overview['uptime_display']",
+    "ram_display":           "overview['ram_display']",
+    "tools_display":         "overview['tools_display']",
+    "uptime_seconds":        "overview['uptime_seconds']",
+    "ram_percent":           "overview['ram_percent']",
+    "ram_available_gb":      "overview['ram_available_gb']",
+    "ram_total_gb":          "overview['ram_total_gb']",
+    "disk_percent":          "overview['disk_percent']",
+    "cpu_percent":           "overview['cpu_percent']",
+    "cpu_history":           "overview['cpu_history']",
+    "cpu_display":           "overview['cpu_display']",
+    "ram_detail_display":    "overview['ram_detail_display']",
+    "disk_display":          "overview['disk_display']",
+    "server_status":         "overview['server_status']",
+    "server_status_variant": "overview['server_status_variant']",
+    "tools_count":           "overview['tools_count']",
+    "total_runs":            "overview['total_runs']",
+    "total_errors":          "overview['total_errors']",
+    # ── Footer stats ────────────────────────────────────────────────────────
+    "total_runs_display":    "st['total_runs_display']",
+    # ── Scope ───────────────────────────────────────────────────────────────
+    "scope_target":          "scope['active_target']",
+    "scope_type":            "scope['target_type']",
+    "scope_tools":           "scope['tools_used']",
+    "scope_tools_count":     "scope['tools_count']",
+    "scope_last_seen_ago":   "scope['last_seen_ago']",
+    "scope_age":             "scope['age_seconds']",
+    "scope_summary":         "scope['scope_summary']",
+    # ── Surface ─────────────────────────────────────────────────────────────
+    "surface_target":        "surface['target']",
+    "risk_level":            "surface['risk_level']",
+    "risk_variant":          "surface['risk_variant']",
+    "ports_display":         "surface['ports_display']",
+    "ports_count":           "surface['ports_count']",
+    "surface_ports":         "surface['ports']",
+    "surface_techs":         "surface['technologies']",
+    # ── Findings / system ───────────────────────────────────────────────────
+    "findings":              "st['findings']",
+    "system":                "st['sys']",
+    # ── Plan IDE ────────────────────────────────────────────────────────────
+    "plan_target":           "plan['target']",
+    "plan_steps":            "plan['steps']",
+    "plan_summary":          "plan['summary']",
+    # ── Active Tools ────────────────────────────────────────────────────────
+    "active_processes":      "active['active_processes']",
+    "active_workers":        "active['active_workers']",
+    "active_queue":          "active['queue_size']",
+    "active_summary":        "active['summary']",
+    # ── History ─────────────────────────────────────────────────────────────
+    "history":               "st['history']",
+    # ── Rate Limit ──────────────────────────────────────────────────────────
+    "rl_profile":            "rl['profile']",
+    "rl_variant":            "_rl_variant(rl['profile'])",
+    "rl_confidence":         "rl['confidence']",
+    "rl_delay":              "rl['timing']['delay']",
+    "rl_threads":            "rl['timing']['threads']",
+    "rl_timeout":            "rl['timing']['timeout']",
+    "rl_summary":            "_fmt_rl_summary(rl)",
+    "rl_confidence_display": "derived: confidence → %",
+    "rl_delay_display":      "derived: delay → ms",
+    "rl_events":             "st['rl_events_table']",
+    # ── Errors & Failures ───────────────────────────────────────────────────
+    "error_total":               "err['total_errors']",
+    "error_success_rate_display": "st['error_success_rate_display']",
+    "error_summary":             "st['error_summary']",
+    "error_by_tool":             "err['error_by_tool']",
+    "timeout_by_tool":           "err['timeout_by_tool']",
+    "slowest_tools":             "err['slowest_tools']",
+    "error_by_type":             "err['error_by_type']",
+    "recent_errors":             "err['recent_errors']",
+    # ── Tool Performance ────────────────────────────────────────────────────
+    "tool_performance":   "perf['tools']",
+    "perf_timeouts":      "perf['timeouts']",
+    "perf_summary":       "perf['summary']",
+    # ── Missing Tools ───────────────────────────────────────────────────────
+    "missing_tools":  "st['missing_tools']",
+    "missing_count":  "derived: len(st['missing_tools'])",
+    # ── Cache Status ────────────────────────────────────────────────────────
+    "cache_hits":              "cache_status['hits']",
+    "cache_misses":            "cache_status['misses']",
+    "cache_hit_ratio_display": "st['cache_hit_ratio_display']",
+    "cache_size":              "cache_status['cache_size']",
+    "cache_max_size":          "cache_status['max_size']",
+    "cache_util_display":      "st['cache_util_display']",
+    "cache_summary_text":      "st['cache_summary_text']",
+    "cache_by_tool":           "cache_status['by_tool']",
+    # ── Cache Intelligence ──────────────────────────────────────────────────
+    "cache_ttl_scores":  "st['cache_ttl_scores']",
+    "cache_ttl_summary": "st['cache_ttl_summary']",
+    # ── System Trends ───────────────────────────────────────────────────────
+    "trend_cpu_avg_display": "st['trend_cpu_avg_display']",
+    "trend_mem_avg_display": "st['trend_mem_avg_display']",
+    "trend_period_display":  "st['trend_period_display']",
+    "trend_measurements":    "trends['measurements']",
+    "trend_cpu_history":     "trends['cpu_history']",
+    "trend_mem_history":     "trends['mem_history']",
+    "trend_disk_display":    "trends['disk_display']",
+    # ── Sessions ────────────────────────────────────────────────────────────
+    "sessions_active":    "sessions['active']",
+    "sessions_completed": "sessions['completed']",
+    "sessions_summary":   "sessions['summary']",
+    # ── Confirmations ───────────────────────────────────────────────────────
+    "conf_accepted": "confirmations['accepted']",
+    "conf_denied":   "confirmations['denied']",
+    "conf_skipped":  "confirmations['skipped']",
+    "conf_summary":  "confirmations['summary']",
+    # ── Network I/O ─────────────────────────────────────────────────────────
+    "net_sent_display":  "netio['bytes_sent_display']",
+    "net_recv_display":  "netio['bytes_recv_display']",
+    "net_total_display": "netio['total_display']",
+    # ── Async scans ─────────────────────────────────────────────────────────
+    "async_scans_running":  "st['async_scans_running']",
+    "async_scans_complete": "st['async_scans_complete']",
+    "async_scans_summary":  "st['async_scans_summary']",
+    # ── Intelligence ────────────────────────────────────────────────────────
+    "intelligence":          "get_tool_intelligence()",
+}
+
+
+def _build_ui_state(st: dict) -> dict:
+    """Flatten _collect_dashboard_state() into the PrefabApp state dict (R3).
+
+    Single source of truth for the UI state keys. Every key must stay in
+    sync with _STATE_KEY_SOURCES below — the parity test
+    (test_state_keys_match_documented_contract) fails on any drift.
+    """
     overview = st["overview"]
     scope = st["scope"]
-    active_target = st["active_target"]
     surface = st["surface"]
     findings = st["findings"]
     plan = st["plan"]
@@ -2036,7 +2166,6 @@ def pulse_dashboard() -> PrefabApp:
     rl = st["rl"]
     rl_events_table = st["rl_events_table"]
     sys = st["sys"]
-    ops = st["ops"]
     err = st["err"]
     perf = st["perf"]
     cache_status = st["cache_status"]
@@ -2059,6 +2188,136 @@ def pulse_dashboard() -> PrefabApp:
     running_list = st["async_scans_running"]
     complete_list = st["async_scans_complete"]
     async_scans_summary = st["async_scans_summary"]
+
+    return {
+        # Overview
+        "version":               overview["version"],
+        "version_display":       overview["version_display"],
+        "uptime_display":        overview["uptime_display"],
+        "ram_display":           overview["ram_display"],
+        "tools_display":         overview["tools_display"],
+        "uptime_seconds":        overview["uptime_seconds"],
+        "ram_percent":           overview["ram_percent"],
+        "ram_available_gb":      overview["ram_available_gb"],
+        "ram_total_gb":          overview["ram_total_gb"],
+        "disk_percent":          overview["disk_percent"],
+        "cpu_percent":           overview["cpu_percent"],
+        "cpu_history":           overview.get("cpu_history", []),
+        "cpu_display":           overview.get("cpu_display", "0%"),
+        "ram_detail_display":    overview.get("ram_detail_display", "0/0 GB"),
+        "disk_display":          overview.get("disk_display", "0%"),
+        "server_status":         overview["server_status"],
+        "server_status_variant": overview["server_status_variant"],
+        "tools_count":           overview["tools_count"],
+        "total_runs":            overview["total_runs"],
+        "total_errors":          overview["total_errors"],
+        # Footer stats
+        "total_runs_display":    total_runs_display,
+        # Scope
+        "scope_target":          scope.get("active_target"),
+        "scope_type":            scope.get("target_type"),
+        "scope_tools":           scope.get("tools_used", []),
+        "scope_tools_count":     scope.get("tools_count", 0),
+        "scope_last_seen_ago":   scope.get("last_seen_ago"),
+        "scope_age":             scope.get("age_seconds"),
+        "scope_summary":         scope.get("scope_summary"),
+        # Surface
+        "surface_target":        surface.get("target"),
+        "risk_level":            surface.get("risk_level", "unknown"),
+        "risk_variant":          surface.get("risk_variant", "default"),
+        "ports_display":         surface.get("ports_display", "No ports detected"),
+        "ports_count":           surface.get("ports_count", 0),
+        "surface_ports":         surface.get("ports", []),
+        "surface_techs":         surface.get("technologies", []),
+        # Findings
+        "findings":              findings,
+        # System resources
+        "system":                sys,
+        # Plan IDE
+        "plan_target":           plan.get("target"),
+        "plan_steps":            plan.get("steps", []),
+        "plan_summary":          plan.get("summary", "No plan available"),
+        # Active Tools
+        "active_processes":      active.get("active_processes", 0),
+        "active_workers":        active.get("active_workers", 0),
+        "active_queue":          active.get("queue_size", 0),
+        "active_summary":        active.get("summary", "No active tasks"),
+        # History
+        "history":               history,
+        # Rate Limit
+        "rl_profile":            rl.get("profile", "normal"),
+        "rl_variant":            _rl_variant(rl.get("profile", "normal")),
+        "rl_confidence":         rl.get("confidence", 0),
+        "rl_delay":              rl.get("timing", {}).get("delay", 0.5),
+        "rl_threads":            rl.get("timing", {}).get("threads", 20),
+        "rl_timeout":            rl.get("timing", {}).get("timeout", 10),
+        "rl_summary":            _fmt_rl_summary(rl),
+        "rl_confidence_display": f"{int(rl.get('confidence', 0) * 100)}%",
+        "rl_delay_display":      f"Delay {int(rl.get('timing', {}).get('delay', 0.5) * 1000)}ms",
+        "rl_events":             rl_events_table,
+        # Errors & Failures
+        "error_total":               err.get("total_errors", 0),
+        "error_success_rate_display": error_success_rate_display,
+        "error_summary":             error_summary,
+        "error_by_tool":             err.get("error_by_tool", []),
+        "timeout_by_tool":           err.get("timeout_by_tool", []),
+        "slowest_tools":             err.get("slowest_tools", []),
+        "error_by_type":             err.get("error_by_type", []),
+        "recent_errors":             err.get("recent_errors", []),
+        # Tool Performance
+        "tool_performance":   perf.get("tools", []),
+        "perf_timeouts":      perf.get("timeouts", []),
+        "perf_summary":       perf.get("summary", "No data"),
+        # Missing Tools
+        "missing_tools":  st.get("missing_tools", []),
+        "missing_count":  len(st.get("missing_tools", [])),
+        # Cache Status
+        "cache_hits":              cache_status.get("hits", 0),
+        "cache_misses":            cache_status.get("misses", 0),
+        "cache_hit_ratio_display": cache_hit_ratio_display,
+        "cache_size":              cache_status.get("cache_size", 0),
+        "cache_max_size":          cache_status.get("max_size", 500),
+        "cache_util_display":      cache_util_display,
+        "cache_summary_text":      cache_summary_text,
+        "cache_by_tool":           cache_status.get("by_tool", []),
+        # Cache Intelligence
+        "cache_ttl_scores":  cache_ttl_scores,
+        "cache_ttl_summary": cache_ttl_summary,
+        # System Trends
+        "trend_cpu_avg_display": trend_cpu_avg_display,
+        "trend_mem_avg_display": trend_mem_avg_display,
+        "trend_period_display":  trend_period_display,
+        "trend_measurements":    trends.get("measurements", 0),
+        "trend_cpu_history":     trends.get("cpu_history", []),
+        "trend_mem_history":     trends.get("mem_history", []),
+        "trend_disk_display":    trends.get("disk_display", "0%"),
+        # Sessions
+        "sessions_active":    sessions.get("active", []),
+        "sessions_completed": sessions.get("completed", []),
+        "sessions_summary":   sessions.get("summary", "No sessions"),
+        # Confirmations
+        "conf_accepted": confirmations.get("accepted", 0),
+        "conf_denied":   confirmations.get("denied", 0),
+        "conf_skipped":  confirmations.get("skipped", 0),
+        "conf_summary":  confirmations.get("summary", "No confirmation events"),
+        # Network I/O
+        "net_sent_display":  netio.get("bytes_sent_display", "0 B"),
+        "net_recv_display":  netio.get("bytes_recv_display", "0 B"),
+        "net_total_display": netio.get("total_display", "0 B"),
+        # Async scans
+        "async_scans_running":  running_list,
+        "async_scans_complete": complete_list,
+        "async_scans_summary":  async_scans_summary,
+        # Intelligence
+        "intelligence":          get_tool_intelligence(),
+    }
+
+
+@app.ui()
+def pulse_dashboard() -> PrefabApp:
+    """Open the Pulse dashboard (3+2+1 grid layout)."""
+    st = _collect_dashboard_state()
+    overview = st["overview"]
 
     with Column(gap=0) as view:
 
@@ -2456,128 +2715,7 @@ def pulse_dashboard() -> PrefabApp:
 
     return PrefabApp(
         view=view,
-        state={
-            # Overview
-            "version":               overview["version"],
-            "version_display":       overview["version_display"],
-            "uptime_display":        overview["uptime_display"],
-            "ram_display":           overview["ram_display"],
-            "tools_display":         overview["tools_display"],
-            "uptime_seconds":        overview["uptime_seconds"],
-            "ram_percent":           overview["ram_percent"],
-            "ram_available_gb":      overview["ram_available_gb"],
-            "ram_total_gb":          overview["ram_total_gb"],
-            "disk_percent":          overview["disk_percent"],
-            "cpu_percent":           overview["cpu_percent"],
-            "cpu_history":           overview.get("cpu_history", []),
-            "cpu_display":           overview.get("cpu_display", "0%"),
-            "ram_detail_display":    overview.get("ram_detail_display", "0/0 GB"),
-            "disk_display":          overview.get("disk_display", "0%"),
-            "server_status":         overview["server_status"],
-            "server_status_variant": overview["server_status_variant"],
-            "tools_count":           overview["tools_count"],
-            "total_runs":            overview["total_runs"],
-            "total_errors":          overview["total_errors"],
-            # Footer stats
-            "total_runs_display":    total_runs_display,
-            # Scope
-            "scope_target":          scope.get("active_target"),
-            "scope_type":            scope.get("target_type"),
-            "scope_tools":           scope.get("tools_used", []),
-            "scope_tools_count":     scope.get("tools_count", 0),
-            "scope_last_seen_ago":   scope.get("last_seen_ago"),
-            "scope_age":             scope.get("age_seconds"),
-            "scope_summary":         scope.get("scope_summary"),
-            # Surface
-            "surface_target":        surface.get("target"),
-            "risk_level":            surface.get("risk_level", "unknown"),
-            "risk_variant":          surface.get("risk_variant", "default"),
-            "ports_display":         surface.get("ports_display", "No ports detected"),
-            "ports_count":           surface.get("ports_count", 0),
-            "surface_ports":         surface.get("ports", []),
-            "surface_techs":         surface.get("technologies", []),
-            # Findings
-            "findings":              findings,
-            # System resources
-            "system":                sys,
-            # Plan IDE
-            "plan_target":           plan.get("target"),
-            "plan_steps":            plan.get("steps", []),
-            "plan_summary":          plan.get("summary", "No plan available"),
-            # Active Tools
-            "active_processes":      active.get("active_processes", 0),
-            "active_workers":        active.get("active_workers", 0),
-            "active_queue":          active.get("queue_size", 0),
-            "active_summary":        active.get("summary", "No active tasks"),
-            # History
-            "history":               history,
-            # Rate Limit
-            "rl_profile":            rl.get("profile", "normal"),
-            "rl_variant":            _rl_variant(rl.get("profile", "normal")),
-            "rl_confidence":         rl.get("confidence", 0),
-            "rl_delay":              rl.get("timing", {}).get("delay", 0.5),
-            "rl_threads":            rl.get("timing", {}).get("threads", 20),
-            "rl_timeout":            rl.get("timing", {}).get("timeout", 10),
-            "rl_summary":            _fmt_rl_summary(rl),
-            "rl_confidence_display": f"{int(rl.get('confidence', 0) * 100)}%",
-            "rl_delay_display":      f"Delay {int(rl.get('timing', {}).get('delay', 0.5) * 1000)}ms",
-            "rl_events":             rl_events_table,
-            # Errors & Failures
-            "error_total":               err.get("total_errors", 0),
-            "error_success_rate_display": error_success_rate_display,
-            "error_summary":             error_summary,
-            "error_by_tool":             err.get("error_by_tool", []),
-            "timeout_by_tool":           err.get("timeout_by_tool", []),
-            "slowest_tools":             err.get("slowest_tools", []),
-            "error_by_type":             err.get("error_by_type", []),
-            "recent_errors":             err.get("recent_errors", []),
-            # Tool Performance
-            "tool_performance":   perf.get("tools", []),
-            "perf_timeouts":      perf.get("timeouts", []),
-            "perf_summary":       perf.get("summary", "No data"),
-            # Missing Tools
-            "missing_tools":  st.get("missing_tools", []),
-            "missing_count":  len(st.get("missing_tools", [])),
-            # Cache Status
-            "cache_hits":              cache_status.get("hits", 0),
-            "cache_misses":            cache_status.get("misses", 0),
-            "cache_hit_ratio_display": cache_hit_ratio_display,
-            "cache_size":              cache_status.get("cache_size", 0),
-            "cache_max_size":          cache_status.get("max_size", 500),
-            "cache_util_display":      cache_util_display,
-            "cache_summary_text":      cache_summary_text,
-            "cache_by_tool":           cache_status.get("by_tool", []),
-            # Cache Intelligence
-            "cache_ttl_scores":  cache_ttl_scores,
-            "cache_ttl_summary": cache_ttl_summary,
-            # System Trends
-            "trend_cpu_avg_display": trend_cpu_avg_display,
-            "trend_mem_avg_display": trend_mem_avg_display,
-            "trend_period_display":  trend_period_display,
-            "trend_measurements":    trends.get("measurements", 0),
-            "trend_cpu_history":     trends.get("cpu_history", []),
-            "trend_mem_history":     trends.get("mem_history", []),
-            "trend_disk_display":    trends.get("disk_display", "0%"),
-            # Sessions
-            "sessions_active":    sessions.get("active", []),
-            "sessions_completed": sessions.get("completed", []),
-            "sessions_summary":   sessions.get("summary", "No sessions"),
-            # Confirmations
-            "conf_accepted": confirmations.get("accepted", 0),
-            "conf_denied":   confirmations.get("denied", 0),
-            "conf_skipped":  confirmations.get("skipped", 0),
-            "conf_summary":  confirmations.get("summary", "No confirmation events"),
-            # Network I/O
-            "net_sent_display":  netio.get("bytes_sent_display", "0 B"),
-            "net_recv_display":  netio.get("bytes_recv_display", "0 B"),
-            "net_total_display": netio.get("total_display", "0 B"),
-            # Async scans
-            "async_scans_running":  running_list,
-            "async_scans_complete": complete_list,
-            "async_scans_summary":  async_scans_summary,
-            # Intelligence
-            "intelligence":          get_tool_intelligence(),
-        },
+        state=_build_ui_state(st),
     )
 
 
