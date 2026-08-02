@@ -142,9 +142,29 @@ def _json_status_response(data):
     return JSONResponse(data, status_code=status_code)
 
 
+def _resolve_static_dir(static_dir=None):
+    """Resolve the dashboard frontend directory.
+
+    Prefers the repository checkout (server_static/ at the repo root, where
+    the frontend lives), then the packaged layout next to the module
+    (pulse/server/server_static/). Returns the repo path even when missing
+    so the caller can log a clear warning.
+    """
+    if static_dir is not None:
+        return Path(static_dir)
+    module_dir = Path(__file__).resolve().parent
+    repo_static = module_dir.parent.parent / "server_static"
+    module_static = module_dir / "server_static"
+    if (repo_static / "index.html").exists():
+        return repo_static
+    if (module_static / "index.html").exists():
+        return module_static
+    return repo_static
+
+
 def register_http_routes(mcp, logger, static_dir=None):
     """Attach lightweight dashboard and health HTTP routes."""
-    static_dir = Path(static_dir) if static_dir is not None else Path(__file__).parent / "server_static"
+    static_dir = _resolve_static_dir(static_dir)
 
     if static_dir.exists():
         @mcp.custom_route("/dashboard", methods=["GET"])

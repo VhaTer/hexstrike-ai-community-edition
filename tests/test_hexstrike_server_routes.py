@@ -56,6 +56,14 @@ def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
     }
 
 
+def test_resolve_static_dir_defaults_to_repo_frontend():
+    from pulse.server.web_server import _resolve_static_dir
+
+    resolved = _resolve_static_dir()
+    assert resolved.name == "server_static"
+    assert (resolved / "index.html").exists()
+
+
 def test_register_http_routes_adds_health_and_ping(tmp_path):
     from pulse.server.web_server import register_http_routes
 
