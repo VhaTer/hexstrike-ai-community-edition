@@ -62,8 +62,6 @@ output/
 # Node.js — unused (only typescript dep)
 package.json
 package-lock.json
-tests/test_hexstrike_cli.py
-tests/test_pulse_app.py
 CTF/
 hexstrike-sft/
 Projects_reports_docs/
