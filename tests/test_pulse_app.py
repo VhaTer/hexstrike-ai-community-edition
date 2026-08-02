@@ -577,6 +577,30 @@ class TestPulseDashboard:
         assert isinstance(async_scans, dict)
         assert set(async_scans.keys()) == {"running", "complete", "summary"}
 
+    def test_next_suggested_tool_state_and_display(self):
+        """R4: next_suggested_tool is exposed in the UI state with display fields."""
+        app = pulse_app.pulse_dashboard()
+        state = getattr(app, "state", None) or getattr(app, "_state", None)
+        for key in ("next_suggested_tool", "nst_tool", "nst_reason", "nst_time", "nst_variant"):
+            assert key in state, f"missing state key: {key}"
+
+        st = pulse_app._collect_dashboard_state()
+        st["next_suggested_tool"] = {
+            "tool": "gobuster", "reason": "Web server detected",
+            "expected_time": "1-5 min", "priority": "high",
+        }
+        ui = pulse_app._build_ui_state(st)
+        assert ui["nst_tool"] == "gobuster"
+        assert ui["nst_reason"] == "Web server detected"
+        assert ui["nst_time"] == "1-5 min"
+        assert ui["nst_variant"] == "warning"
+        ui_empty = pulse_app._build_ui_state({**st, "next_suggested_tool": {}})
+        assert ui_empty["nst_tool"] == ""
+        assert ui_empty["nst_variant"] == "default"
+
+        view = str(app.view)
+        assert "NEXT TOOL" in view
+
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 

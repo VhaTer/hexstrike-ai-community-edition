@@ -200,6 +200,13 @@ def _rl_variant(profile: str) -> str:
     return _RL_VARIANTS.get(profile, "default")
 rx_rl_var = Rx("rl_variant").default("default")
 
+# Badge variant for next suggested tool priority
+_NST_VARIANTS = {"critical": "destructive", "high": "warning", "medium": "default", "low": "secondary"}
+rx_nst_tool   = Rx("nst_tool").default("No suggestion")
+rx_nst_reason = Rx("nst_reason").default("Run a scan to get a recommendation")
+rx_nst_time   = Rx("nst_time").default("")
+rx_nst_var    = Rx("nst_variant").default("default")
+
 # Footer
 TOTAL_RUNS_DISP = Rx("total_runs_display").default("0 runs")
 rx_runs      = TOTAL_RUNS_DISP
@@ -2146,6 +2153,12 @@ _STATE_KEY_SOURCES: dict[str, str] = {
     "async_scans_summary":  "st['async_scans_summary']",
     # ── Intelligence ────────────────────────────────────────────────────────
     "intelligence":          "get_tool_intelligence()",
+    # ── Next suggested tool ─────────────────────────────────────────────────
+    "next_suggested_tool":   "st['next_suggested_tool']",
+    "nst_tool":              "derived: nst['tool']",
+    "nst_reason":            "derived: nst['reason']",
+    "nst_time":              "derived: nst['expected_time']",
+    "nst_variant":           "derived: _NST_VARIANTS[nst['priority']]",
 }
 
 
@@ -2188,6 +2201,7 @@ def _build_ui_state(st: dict) -> dict:
     running_list = st["async_scans_running"]
     complete_list = st["async_scans_complete"]
     async_scans_summary = st["async_scans_summary"]
+    nst = st.get("next_suggested_tool", {}) or {}
 
     return {
         # Overview
@@ -2310,6 +2324,12 @@ def _build_ui_state(st: dict) -> dict:
         "async_scans_summary":  async_scans_summary,
         # Intelligence
         "intelligence":          get_tool_intelligence(),
+        # Next suggested tool
+        "next_suggested_tool":   st.get("next_suggested_tool", {}),
+        "nst_tool":              nst.get("tool", ""),
+        "nst_reason":            nst.get("reason", ""),
+        "nst_time":              nst.get("expected_time", ""),
+        "nst_variant":           _NST_VARIANTS.get(nst.get("priority", ""), "default"),
     }
 
 
@@ -2705,6 +2725,15 @@ def pulse_dashboard() -> PrefabApp:
             ],
             rows=Rx("intelligence"),
         )
+
+        Separator()
+
+        # ── Next suggested tool ─────────────────────────────────────────
+        with Row(gap=3, align="center", css_class="p-2 px-4 bg-muted/10 border-b flex-wrap"):
+            Muted("NEXT TOOL", css_class="text-xs uppercase tracking-wider")
+            Badge(f"{rx_nst_tool}", variant=rx_nst_var)
+            Muted(f"{rx_nst_reason}", css_class="text-sm flex-1 min-w-0 truncate")
+            Muted(f"{rx_nst_time}", css_class="text-xs whitespace-nowrap")
 
         Separator()
 
