@@ -825,7 +825,7 @@ async def ctf_5phase_loop(
             f"PHASE 1 — RECON [target: {target or 'unknown'}] [{challenge_type}] [{hint}]\n"
             "Gather everything: ports, services, technology stack, files, hints. "
             "Use get_surface() for ports/tech, get_findings() for vulns, "
-            "and rev_entropy_map() for binaries. "
+            "and search_tools('ctf') to discover analysis primitives. "
             "Expected artifacts: port list, technology badges, entropy map.\n\n"
             "If target is unknown, use search_tools('ctf') to discover relevant tools.\n\n"
             "Use run_security_tool() for raw tools, or search_tools() + call_tool() for Pulse tools."
@@ -833,10 +833,8 @@ async def ctf_5phase_loop(
         Message(
             "PHASE 2 — ANALYZE\n"
             "Deep analysis of recon data. "
-            "For crypto challenges: use crypto_xor_crack() on ciphertext.\n"
-            "For reversing: combine rev_entropy_map() with rev_strings.\n"
+            "For crypto challenges: search_tools('crypto') for analysis primitives.\n"
             "For web: analyze http_request() responses, cookies, endpoints.\n"
-            "Use crypto_z3_solve() for constraint-based puzzles.\n"
             "Expected: key derivation, vulnerability identification, attack plan."
         ),
         Message(
@@ -855,14 +853,14 @@ async def ctf_5phase_loop(
             "For crypto: the flag is usually in the decoded plaintext. "
             "For rev: look for hardcoded strings or decoded payloads.\n\n"
             "Use http_request() for authenticated access if login was required. "
-            "Use crypto_xor_crack(known_plaintext='flag{') for XOR'd flag files."
+            "If the flag is encoded, use search_tools() to find a decoding primitive."
         ),
         Message(
             "PHASE 5 — ITERATE\n"
             "If you found a flag: submit it and confirm. "
             "If not: return to PHASE 1 with new knowledge. "
             "What did PHASE 2-4 reveal? Update your mental model. "
-            "Try a different tool. Change key_length_range in xor_crack. "
+            "Try a different tool or approach. "
             "Use different search_tools() queries.\n\n"
             "Key question: 'What information do I have now that I didn't have before?'"
         ),
