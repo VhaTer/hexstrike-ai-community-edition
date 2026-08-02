@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 
 from pulse.interface import pulse_app
+from pulse.interface.dashboards import _build_ui_state
 
 _SYNTHETIC_NUCLEI_OUTPUT = """\
 [critical] [apache-path-traversal] [http://192.168.1.165/DVWA/login.php]
@@ -507,9 +508,10 @@ class TestGetHistory:
 # ── pulse_dashboard (UI entry) ────────────────────────────────────────────────
 
 
-# Source of truth: _STATE_KEY_SOURCES lives in pulse_app.py next to
-# _build_ui_state(). Any divergence between the real state and the contract
-# fails the parity test below — this is the guard rail against silent key drift.
+# Source of truth: _STATE_KEY_SOURCES lives in dashboards/pulse_dashboard.py
+# next to _build_ui_state(), re-exported by pulse_app. Any divergence between
+# the real state and the contract fails the parity test below — this is the
+# guard rail against silent key drift.
 _STATE_KEY_SOURCES = pulse_app._STATE_KEY_SOURCES
 
 # Documented contract: get_live_dashboard() returns exactly these top-level keys.
@@ -589,12 +591,12 @@ class TestPulseDashboard:
             "tool": "gobuster", "reason": "Web server detected",
             "expected_time": "1-5 min", "priority": "high",
         }
-        ui = pulse_app._build_ui_state(st)
+        ui = _build_ui_state(st)
         assert ui["nst_tool"] == "gobuster"
         assert ui["nst_reason"] == "Web server detected"
         assert ui["nst_time"] == "1-5 min"
         assert ui["nst_variant"] == "warning"
-        ui_empty = pulse_app._build_ui_state({**st, "next_suggested_tool": {}})
+        ui_empty = _build_ui_state({**st, "next_suggested_tool": {}})
         assert ui_empty["nst_tool"] == ""
         assert ui_empty["nst_variant"] == "default"
 
