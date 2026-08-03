@@ -1078,6 +1078,7 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
     that would exceed Claude Desktop's stdio timeout (~300s).
 
     The scan runs on the server in background. Poll status with get_scan_status(scan_id).
+    Cancel it at any time with cancel_scan(scan_id).
     Completed results also appear in get_history().
 
     Args:
@@ -1116,7 +1117,11 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
             from pulse.interface.server_setup import run_security_tool
 
             with _async_scans_lock:
-                _async_scans[scan_id]["status"] = "running"
+                entry = _async_scans[scan_id]
+                if entry.get("cancel_requested"):
+                    entry.update({"status": "cancelled", "end_time": time.time()})
+                    return
+                entry["status"] = "running"
 
             start = time.time()
             null_ctx = NullContext()
@@ -1124,24 +1129,23 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
             elapsed = time.time() - start
 
             with _async_scans_lock:
-                _async_scans[scan_id].update({
-                    "status": "completed",
-                    "end_time": time.time(),
-                    "result": {
-                        "success": result.get("success", False),
-                        "stdout": (result.get("output", "") or "")[:2000],
-                        "execution_time": elapsed,
-                        "error": (result.get("error", "") or "")[:200],
-                        "returncode": result.get("returncode", -1),
-                    },
-                })
+                entry = _async_scans[scan_id]
+                entry["end_time"] = time.time()
+                entry["status"] = "cancelled" if entry.get("cancel_requested") else "completed"
+                entry["result"] = {
+                    "success": result.get("success", False),
+                    "stdout": (result.get("output", "") or "")[:2000],
+                    "execution_time": elapsed,
+                    "error": (result.get("error", "") or "")[:200],
+                    "returncode": result.get("returncode", -1),
+                }
 
         except Exception as e:
             with _async_scans_lock:
-                _async_scans[scan_id].update({
-                    "status": "failed", "end_time": time.time(),
-                    "error": str(e)[:200],
-                })
+                entry = _async_scans[scan_id]
+                entry["status"] = "cancelled" if entry.get("cancel_requested") else "failed"
+                entry["end_time"] = time.time()
+                entry["error"] = str(e)[:200]
 
     threading.Thread(target=_run, daemon=True, name=f"async-{tool}").start()
     _cleanup_old_scans()
@@ -1153,29 +1157,21 @@ def run_async_tool(tool: str = "nmap", target: str = "", params: str = "") -> di
 def get_scan_status(scan_id: str) -> dict:
     """Poll the status of an async scan launched via run_async_tool().
 
-    Returns current state: running (with elapsed time), completed (with output + duration),
-    or failed (with error message). Each call is idempotent and lightweight (~0ms).
-
-    Returns: status (running/completed/failed/not_found), tool, target, start_time,
-    end_time, duration_display, output (truncated), error.
-
-    Call AFTER run_async_tool() to retrieve results.
-    Poll every 2-5 seconds for running scans.
-    Returns 'not_found' for invalid or expired scan_ids.
-
-    Example: get_scan_status('async_scan_abc123')
-    """
-    """Poll status of an async scan started by run_async_tool.
-
-    Returns current status, elapsed time, and result when complete.
-    For completed scans, result includes execution_time, returncode, error (no full stdout).
+    Returns current state: running (with elapsed time + ETA), cancelled,
+    completed (with result), failed (with error message), or not_found.
 
     Args:
         scan_id: The scan_id returned by run_async_tool()
 
     Returns:
-        dict with scan_id, status (started/running/completed/failed/not_found),
-        tool, target, elapsed (seconds), result (if completed), error (if failed)
+        dict with scan_id, status (starting/running/cancelled/completed/failed/not_found),
+        tool, target, elapsed (seconds), eta_seconds + eta_display (when running),
+        result (if completed/cancelled), error (if failed)
+
+    Each call is idempotent and lightweight (~0ms). Poll every 2-5 seconds
+    for running scans. Returns 'not_found' for invalid or expired scan_ids.
+
+    Example: get_scan_status('scan_abc123')
     """
     with _async_scans_lock:
         entry = _async_scans.get(scan_id)
@@ -1196,6 +1192,11 @@ def get_scan_status(scan_id: str) -> dict:
         "elapsed_display": _fmt_duration(elapsed),
     }
 
+    if entry["status"] in ("starting", "running"):
+        avg = _op_metrics.avg_duration_by_tool().get(entry["tool"], 0.0)
+        result["eta_seconds"] = round(max(avg - elapsed, 0.0), 1) if avg else None
+        result["eta_display"] = ESTIMATED_TIMES.get(entry["tool"], "1-10 min")
+
     if entry["result"]:
         r = entry["result"]
         result["result"] = {
@@ -1212,6 +1213,54 @@ def get_scan_status(scan_id: str) -> dict:
         result["error"] = entry["error"]
 
     return result
+
+
+@app.tool()
+def cancel_scan(scan_id: str) -> dict:
+    """Cancel a background scan launched via run_async_tool().
+
+    Marks the task as cancelled immediately (polling sees it right away) and
+    best-effort terminates the running command. To avoid killing a parallel
+    scan of the same tool, the command is only terminated when this is the
+    only running scan for that tool; otherwise only the task status changes.
+
+    Args:
+        scan_id: The scan_id returned by run_async_tool()
+
+    Returns:
+        dict with scan_id, status (cancelled/not_found), already_final (when
+        the scan had already finished), terminated_pids (commands killed).
+    """
+    with _async_scans_lock:
+        entry = _async_scans.get(scan_id)
+        if entry is None:
+            return {"scan_id": scan_id, "status": "not_found"}
+        current = entry["status"]
+        if current in ("completed", "failed", "cancelled"):
+            return {"scan_id": scan_id, "status": current, "already_final": True}
+        tool = entry.get("tool", "")
+        entry["cancel_requested"] = True
+        entry["status"] = "cancelled"
+        same_tool_running = sum(
+            1 for s in _async_scans.values()
+            if s.get("tool") == tool and s.get("status") in ("starting", "running")
+        )
+
+    terminated: list[int] = []
+    if same_tool_running <= 1:
+        for pid, info in ProcessManager.list_active_processes().items():
+            command = str(info.get("command", ""))
+            if info.get("status") == "running" and command.startswith(tool + " "):
+                if ProcessManager.terminate_process(pid):
+                    terminated.append(pid)
+                    logger.info(f"🛑 cancel_scan({scan_id}): terminated pid {pid} ({command[:60]})")
+
+    return {
+        "scan_id": scan_id,
+        "status": "cancelled",
+        "terminated_pids": terminated,
+        "note": "scan marked cancelled — poll get_scan_status(scan_id) for the final state",
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════

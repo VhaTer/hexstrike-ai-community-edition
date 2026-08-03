@@ -506,6 +506,120 @@ class TestGetActiveTools:
         assert result["async_scans"][0]["tool"] == "nmap"
 
 
+# ── cancel_scan ────────────────────────────────────────────────────────────────
+
+
+class TestCancelScan:
+
+    def _seed(self, scan_id="scan_cancel1", tool="nmap", status="running"):
+        with pulse_app._async_scans_lock:
+            pulse_app._async_scans[scan_id] = {
+                "tool": tool, "target": "10.0.0.1", "status": status,
+                "start_time": time.time() - 5, "end_time": None,
+                "result": None, "progress": 0, "error": None,
+            }
+        return scan_id
+
+    def _seed_many(self, *specs):
+        with pulse_app._async_scans_lock:
+            for scan_id, tool, status in specs:
+                pulse_app._async_scans[scan_id] = {
+                    "tool": tool, "target": "10.0.0.1", "status": status,
+                    "start_time": time.time() - 5, "end_time": None,
+                    "result": None, "progress": 0, "error": None,
+                }
+
+    def _teardown(self, *scan_ids):
+        with pulse_app._async_scans_lock:
+            for scan_id in scan_ids:
+                pulse_app._async_scans.pop(scan_id, None)
+
+    def test_cancel_marks_cancelled(self):
+        scan_id = self._seed()
+        try:
+            result = pulse_app.cancel_scan(scan_id)
+            assert result["status"] == "cancelled"
+            assert result["terminated_pids"] == []
+            with pulse_app._async_scans_lock:
+                entry = pulse_app._async_scans[scan_id]
+            assert entry["status"] == "cancelled"
+            assert entry["cancel_requested"] is True
+        finally:
+            self._teardown(scan_id)
+
+    def test_cancel_unknown_scan(self):
+        assert pulse_app.cancel_scan("scan_ghost")["status"] == "not_found"
+
+    def test_cancel_already_final(self):
+        scan_id = self._seed(status="completed")
+        try:
+            result = pulse_app.cancel_scan(scan_id)
+            assert result["already_final"] is True
+            assert result["status"] == "completed"
+        finally:
+            self._teardown(scan_id)
+
+    def test_cancel_terminates_matching_command(self):
+        scan_id = self._seed(tool="nmap")
+        fake_registry = {
+            7777: {"pid": 7777, "command": "nmap -sV 10.0.0.1", "status": "running",
+                   "process": None},
+            8888: {"pid": 8888, "command": "curl http://other", "status": "running",
+                   "process": None},
+        }
+        try:
+            with patch("pulse.infrastructure.execution.process_manager.active_processes", fake_registry):
+                with patch("pulse.infrastructure.execution.process_manager.ProcessManager.terminate_process",
+                           return_value=True) as mock_kill:
+                    result = pulse_app.cancel_scan(scan_id)
+            assert result["terminated_pids"] == [7777]
+            mock_kill.assert_called_once_with(7777)
+        finally:
+            self._teardown(scan_id)
+
+    def test_cancel_spares_parallel_same_tool(self):
+        scan_id_a = self._seed("scan_par_a", tool="nmap")
+        self._seed_many(("scan_par_b", "nmap", "running"))
+        try:
+            with patch("pulse.infrastructure.execution.process_manager.ProcessManager.terminate_process",
+                       return_value=True) as mock_kill:
+                result = pulse_app.cancel_scan(scan_id_a)
+            assert result["terminated_pids"] == []
+            mock_kill.assert_not_called()
+        finally:
+            self._teardown(scan_id_a, "scan_par_b")
+
+    def test_get_scan_status_reports_cancelled(self):
+        scan_id = self._seed()
+        try:
+            pulse_app.cancel_scan(scan_id)
+            result = pulse_app.get_scan_status(scan_id)
+            assert result["status"] == "cancelled"
+        finally:
+            self._teardown(scan_id)
+
+    def test_get_scan_status_running_has_eta(self):
+        scan_id = self._seed()
+        try:
+            with patch.object(pulse_app._op_metrics, "avg_duration_by_tool",
+                              return_value={"nmap": 60.0}):
+                result = pulse_app.get_scan_status(scan_id)
+            assert result["status"] == "running"
+            assert result["eta_seconds"] == 55.0
+            assert result["eta_display"]
+        finally:
+            self._teardown(scan_id)
+
+    def test_get_scan_status_eta_none_without_history(self):
+        scan_id = self._seed()
+        try:
+            result = pulse_app.get_scan_status(scan_id)
+            assert result["eta_seconds"] is None
+            assert result["eta_display"]
+        finally:
+            self._teardown(scan_id)
+
+
 # ── get_history ────────────────────────────────────────────────────────────────
 
 
