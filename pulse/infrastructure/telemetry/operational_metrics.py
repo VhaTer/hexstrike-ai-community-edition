@@ -187,6 +187,16 @@ class OperationalMetricsStore:
             return rows[:top_n]
 
     @beartype
+    def avg_duration_by_tool(self) -> dict[str, float]:
+        """Return per-tool average duration in seconds (tools with runs only)."""
+        with self._lock:
+            return {
+                tool: round(e["total_duration"] / e["runs"], 1)
+                for tool, e in self._tools.items()
+                if e["runs"] > 0
+            }
+
+    @beartype
     def cache_summary(self) -> dict[str, Any]:
         """Return global cache hit/miss ratio."""
         with self._lock:

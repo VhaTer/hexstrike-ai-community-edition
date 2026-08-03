@@ -198,6 +198,24 @@ class TestViews:
         slow = m.slowest_tools(top_n=1)
         assert len(slow) == 1
 
+    def test_avg_duration_by_tool(self):
+        m = self._populated()
+        avgs = m.avg_duration_by_tool()
+        assert avgs["sqlmap"] == 6.0   # (5+7)/2
+        assert avgs["nmap"] == 2.0
+        assert avgs["nikto"] == 0.5
+
+    def test_avg_duration_by_tool_excludes_untracked(self):
+        m = OperationalMetricsStore()
+        m.record(_tel("nmap", success=True, duration=4.0))
+        avgs = m.avg_duration_by_tool()
+        assert avgs == {"nmap": 4.0}
+        assert "never_recorded" not in avgs
+
+    def test_avg_duration_by_tool_empty(self):
+        m = OperationalMetricsStore()
+        assert m.avg_duration_by_tool() == {}
+
     def test_cache_summary_ratio(self):
         m = OperationalMetricsStore()
         m.record(_tel("nmap", cache_hit=True))
