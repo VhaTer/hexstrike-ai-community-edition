@@ -3,7 +3,7 @@
 HexStrike AI-PULSE — FastMCP Standalone Server
 
 🚀 Direct tool execution, native HTTP/SSE transport
-📊 Dashboard served from server_static/ via Starlette StaticFiles
+📊 Dashboard JSON endpoints (/web-dashboard, /api/dashboard.json, /web-dashboard/stream)
 """
 
 import os
@@ -23,7 +23,7 @@ if str(_root) not in sys.path:
 from pathlib import Path
 from datetime import datetime
 
-from starlette.responses import FileResponse, Response, StreamingResponse, JSONResponse
+from starlette.responses import Response, StreamingResponse, JSONResponse
 
 from pulse.interface.server_setup import setup_mcp_server_standalone, _op_metrics, _scan_cache
 from pulse.infrastructure.modern_visual_engine import ModernVisualEngine
@@ -142,43 +142,8 @@ def _json_status_response(data):
     return JSONResponse(data, status_code=status_code)
 
 
-def _resolve_static_dir(static_dir=None):
-    """Resolve the dashboard frontend directory.
-
-    Prefers the repository checkout (server_static/ at the repo root, where
-    the frontend lives), then the packaged layout next to the module
-    (pulse/server/server_static/). Returns the repo path even when missing
-    so the caller can log a clear warning.
-    """
-    if static_dir is not None:
-        return Path(static_dir)
-    module_dir = Path(__file__).resolve().parent
-    repo_static = module_dir.parent.parent / "server_static"
-    module_static = module_dir / "server_static"
-    if (repo_static / "index.html").exists():
-        return repo_static
-    if (module_static / "index.html").exists():
-        return module_static
-    return repo_static
-
-
-def register_http_routes(mcp, logger, static_dir=None):
+def register_http_routes(mcp, logger):
     """Attach lightweight dashboard and health HTTP routes."""
-    static_dir = _resolve_static_dir(static_dir)
-
-    if static_dir.exists():
-        @mcp.custom_route("/dashboard", methods=["GET"])
-        async def dashboard_index(request):
-            """Serve lightweight dashboard page."""
-            index = static_dir / "index.html"
-            if index.exists():
-                return FileResponse(str(index), media_type="text/html")
-            return Response("Dashboard not found", status_code=404)
-
-        logger.info(f"📊 Dashboard at http://{API_HOST}:{API_PORT}/dashboard")
-    else:
-        logger.warning("⚠️ server_static/ not found — dashboard not available")
-
     @mcp.custom_route("/ping", methods=["GET"])
     async def ping(request):
         """Minimal liveness probe — is the process alive?"""
@@ -318,17 +283,6 @@ def register_http_routes(mcp, logger, static_dir=None):
                 "X-Accel-Buffering": "no",
             }
         )
-
-    if static_dir.exists():
-        @mcp.custom_route("/{filename:str}", methods=["GET"])
-        async def root_static(request):
-            """Serve root static files (favicon, icons)."""
-            filename = request.path_params.get("filename", "")
-            file_path = (static_dir / filename).resolve()
-            if (file_path.is_file() and file_path.suffix in (".svg", ".ico", ".png", ".txt")
-                    and file_path.is_relative_to(static_dir.resolve())):
-                return FileResponse(str(file_path))
-            return Response("Not found", status_code=404)
 
     logger.info("✅ Web dashboard endpoints registered")
 

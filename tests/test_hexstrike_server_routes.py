@@ -56,43 +56,32 @@ def _mock_dashboard_state(server_status="healthy", version="0.11.0"):
     }
 
 
-def test_resolve_static_dir_defaults_to_repo_frontend():
-    from pulse.server.web_server import _resolve_static_dir
+def test_resolve_static_dir_removed():
+    """_resolve_static_dir and static routes were removed with server_static/."""
+    from pulse.server import web_server as ws
 
-    resolved = _resolve_static_dir()
-    assert resolved.name == "server_static"
-    assert (resolved / "index.html").exists()
+    assert not hasattr(ws, "_resolve_static_dir")
 
 
-def test_register_http_routes_adds_health_and_ping(tmp_path):
+def test_register_http_routes_adds_health_and_ping():
     from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-    assets_dir = static_dir / "assets"
-    assets_dir.mkdir()
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    register_http_routes(mcp, MagicMock())
 
     assert ("/health", ("GET",)) in mcp.routes
     assert ("/ping", ("GET",)) in mcp.routes
     assert ("/web-dashboard", ("GET",)) in mcp.routes
-    assert ("/dashboard", ("GET",)) in mcp.routes
-    assert mcp.route_order.index(("/health", ("GET",))) < mcp.route_order.index(("/{filename:str}", ("GET",)))
-    assert mcp.route_order.index(("/ping", ("GET",))) < mcp.route_order.index(("/{filename:str}", ("GET",)))
+    assert ("/web-dashboard/stream", ("GET",)) in mcp.routes
+    assert ("/dashboard", ("GET",)) not in mcp.routes
+    assert ("/{filename:str}", ("GET",)) not in mcp.routes
 
 
 def test_health_route_returns_ready_when_all_ok(tmp_path):
     from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    register_http_routes(mcp, MagicMock())
     health_route = mcp.routes[("/health", ("GET",))]
 
     all_tools_ok = {
@@ -120,11 +109,7 @@ def test_health_route_returns_503_when_degraded(tmp_path):
     from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    register_http_routes(mcp, MagicMock())
     health_route = mcp.routes[("/health", ("GET",))]
 
     no_tools = {
@@ -148,11 +133,7 @@ def test_health_route_returns_500_on_exception(tmp_path):
     from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    register_http_routes(mcp, MagicMock())
     health_route = mcp.routes[("/health", ("GET",))]
 
     with patch("pulse.server.web_server._get_tool_availability", side_effect=RuntimeError("boom")):
@@ -167,38 +148,12 @@ def test_ping_route_returns_ok(tmp_path):
     from pulse.server.web_server import register_http_routes
 
     mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    (static_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
+    register_http_routes(mcp, MagicMock())
     ping_route = mcp.routes[("/ping", ("GET",))]
     response = run(ping_route(MagicMock()))
 
     assert response.status_code == 200
     assert json.loads(response.body) == {"status": "ok", "server": "hexstrike-ai-pulse"}
-
-
-def test_root_static_rejects_path_traversal(tmp_path):
-    from pulse.server.web_server import register_http_routes
-
-    mcp = FakeMCP()
-    static_dir = tmp_path / "server_static"
-    static_dir.mkdir()
-    secret = tmp_path / "secret.txt"
-    secret.write_text("top-secret", encoding="utf-8")
-
-    register_http_routes(mcp, MagicMock(), static_dir=static_dir)
-    static_route = mcp.routes[("/{filename:str}", ("GET",))]
-
-    request = MagicMock(path_params={"filename": "../secret.txt"})
-    response = run(static_route(request))
-    assert response.status_code == 404
-
-    (static_dir / "ok.txt").write_text("fine", encoding="utf-8")
-    request_ok = MagicMock(path_params={"filename": "ok.txt"})
-    response_ok = run(static_route(request_ok))
-    assert response_ok.status_code == 200
 
 
 def test_build_dashboard_status_degraded_when_tools_missing():
