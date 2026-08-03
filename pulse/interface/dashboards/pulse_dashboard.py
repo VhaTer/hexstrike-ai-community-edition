@@ -9,9 +9,9 @@ from prefab_ui.components import (
     Badge, Card, CardContent, Column,
     DataTable, DataTableColumn, Div, ForEach,
     Grid, Icon, Metric, Muted, Progress,
-    Row, Separator, Text, Tooltip,
+    Row, Separator, Tab, Tabs, Text, Tooltip,
 )
-from prefab_ui.components.charts import Sparkline
+from prefab_ui.components.charts import ChartSeries, LineChart, PieChart, Sparkline
 from prefab_ui.rx import Rx
 
 from pulse.interface.dashboards._helpers import _fmt_rl_summary, _rl_variant, _NST_VARIANTS
@@ -179,6 +179,7 @@ TREND_MEASURES = Rx("trend_measurements").default(0)
 TREND_CPU_HIST = Rx("trend_cpu_history").default([])
 TREND_MEM_HIST = Rx("trend_mem_history").default([])
 TREND_DISK     = Rx("trend_disk_display").default("0%")
+TREND_SERIES   = Rx("trend_series").default([])
 rx_trend_cpu  = TREND_CPU_AVG
 rx_trend_mem  = TREND_MEM_AVG
 rx_trend_per  = TREND_PERIOD
@@ -186,6 +187,7 @@ rx_trend_meas = TREND_MEASURES
 rx_trend_cpu_hist = TREND_CPU_HIST
 rx_trend_mem_hist = TREND_MEM_HIST
 rx_trend_disk = TREND_DISK
+rx_trend_series = TREND_SERIES
 
 # Sessions
 SESS_ACTIVE     = Rx("sessions_active").default([])
@@ -226,6 +228,10 @@ MISSING_TOOLS = Rx("missing_tools").default([])
 MISSING_COUNT = Rx("missing_count").default(0)
 rx_missing_tools = MISSING_TOOLS
 rx_missing_count = MISSING_COUNT
+
+# Findings severity breakdown (PieChart)
+FINDINGS_SEV = Rx("findings_by_severity").default([])
+rx_findings_sev = FINDINGS_SEV
 
 _STATE_KEY_SOURCES: dict[str, str] = {
     # ── Overview (st["overview"]) ──────────────────────────────────────────
@@ -269,6 +275,7 @@ _STATE_KEY_SOURCES: dict[str, str] = {
     "surface_techs":         "surface['technologies']",
     # ── Findings / system ───────────────────────────────────────────────────
     "findings":              "st['findings']",
+    "findings_by_severity":  "derived: findings count by severity",
     "system":                "st['sys']",
     # ── Plan IDE ────────────────────────────────────────────────────────────
     "plan_target":           "plan['target']",
@@ -328,6 +335,7 @@ _STATE_KEY_SOURCES: dict[str, str] = {
     "trend_cpu_history":     "trends['cpu_history']",
     "trend_mem_history":     "trends['mem_history']",
     "trend_disk_display":    "trends['disk_display']",
+    "trend_series":          "derived: zip(cpu/mem history)",
     # ── Sessions ────────────────────────────────────────────────────────────
     "sessions_active":    "sessions['active']",
     "sessions_completed": "sessions['completed']",
@@ -396,6 +404,31 @@ def _build_ui_state(st: dict) -> dict:
     async_scans_summary = st["async_scans_summary"]
     nst = st.get("next_suggested_tool", {}) or {}
 
+    cpu_hist = trends.get("cpu_history", []) or []
+    mem_hist = trends.get("mem_history", []) or []
+    n_points = min(len(cpu_hist), len(mem_hist))
+    trend_series = [
+        {"idx": i, "cpu": cpu_hist[i], "mem": mem_hist[i]}
+        for i in range(n_points)
+    ]
+
+    _SEV_ORDER = ["critical", "high", "medium", "low", "info"]
+    sev_counts: dict[str, int] = {}
+    for f in findings:
+        if isinstance(f, dict):
+            sev = str(f.get("severity") or "info").lower()
+        else:
+            sev = "info"
+        sev_counts[sev] = sev_counts.get(sev, 0) + 1
+    findings_by_severity = [
+        {"severity": sev.title(), "count": count}
+        for sev, count in sorted(
+            sev_counts.items(),
+            key=lambda kv: (_SEV_ORDER.index(kv[0]) if kv[0] in _SEV_ORDER
+                            else len(_SEV_ORDER), kv[0]),
+        )
+    ]
+
     return {
         # Overview
         "version":               overview["version"],
@@ -438,6 +471,7 @@ def _build_ui_state(st: dict) -> dict:
         "surface_techs":         surface.get("technologies", []),
         # Findings
         "findings":              findings,
+        "findings_by_severity":  findings_by_severity,
         # System resources
         "system":                sys,
         # Plan IDE
@@ -498,6 +532,7 @@ def _build_ui_state(st: dict) -> dict:
         "trend_cpu_history":     trends.get("cpu_history", []),
         "trend_mem_history":     trends.get("mem_history", []),
         "trend_disk_display":    trends.get("disk_display", "0%"),
+        "trend_series":          trend_series,
         # Sessions
         "sessions_active":    sessions.get("active", []),
         "sessions_completed": sessions.get("completed", []),
@@ -534,7 +569,12 @@ def _get_intelligence():
 
 
 def pulse_dashboard(st: dict) -> PrefabApp:
-    """Open the Pulse dashboard (3+2+1 grid layout) from collected state (R5)."""
+    """Open the Pulse dashboard — 3-zone layout (S92 redesign).
+
+    Overview & Workflow (default view) / Findings / History. Header and
+    Scope stay as a global bar above the tabs; the NEXT TOOL bandeau and
+    footer stay global below them.
+    """
     overview = st["overview"]
 
     with Column(gap=0) as view:
@@ -572,359 +612,360 @@ def pulse_dashboard(st: dict) -> PrefabApp:
             Badge(f"{rx_scope_type}", variant="outline")
             Muted(f"{rx_scope_summary}")
 
-        # ── Grid 3 colonnes: Surface | Findings | Plan IDE ─────────────
-        with Row(gap=4, css_class="p-4 items-start"):
-            with Column(gap=2, css_class="flex-1"):
-                Muted("SURFACE", css_class="text-xs uppercase tracking-wider")
-                with Card():
-                    with CardContent(css_class="p-3"):
-                        with Column(gap=2):
-                            with Row(gap=2, align="center"):
-                                Badge(f"{rx_risk}", variant=rx_risk_var)
-                                Text(f"{rx_ports_display}", css_class="text-sm")
-                            with Row(gap=1, css_class="flex-wrap"):
-                                with ForEach("surface_ports") as p:
-                                    Badge(p.service or str(p.port), variant="outline")
-                            with Row(gap=1, css_class="flex-wrap"):
-                                with ForEach("surface_techs") as t:
-                                    Badge(t, variant="secondary")
+        # ── 3 zones: Overview & Workflow | Findings | History ──────────
+        with Tabs(value="overview", variant="line", css_class="px-2 pt-1"):
 
-            with Column(gap=2, css_class="flex-1"):
-                Muted("FINDINGS", css_class="text-xs uppercase tracking-wider")
+            # ── Zone 1 — Overview & Workflow ────────────────────────────
+            with Tab("Overview & Workflow", value="overview"):
+
+                # Grid 3 colonnes: Surface | Plan IDE | Active Tools
+                with Row(gap=4, css_class="p-4 items-start"):
+                    with Column(gap=2, css_class="flex-1"):
+                        Muted("SURFACE", css_class="text-xs uppercase tracking-wider")
+                        with Card():
+                            with CardContent(css_class="p-3"):
+                                with Column(gap=2):
+                                    with Row(gap=2, align="center"):
+                                        Badge(f"{rx_risk}", variant=rx_risk_var)
+                                        Text(f"{rx_ports_display}", css_class="text-sm")
+                                    with Row(gap=1, css_class="flex-wrap"):
+                                        with ForEach("surface_ports") as p:
+                                            Badge(p.service or str(p.port), variant="outline")
+                                    with Row(gap=1, css_class="flex-wrap"):
+                                        with ForEach("surface_techs") as t:
+                                            Badge(t, variant="secondary")
+
+                    with Column(gap=2, css_class="flex-1"):
+                        Muted("PLAN IDE", css_class="text-xs uppercase tracking-wider")
+                        Text(f"{rx_plan_summary}", css_class="text-sm text-muted")
+                        DataTable(
+                            columns=[
+                                DataTableColumn(key="num",          header="#"),
+                                DataTableColumn(key="tool",         header="Tool"),
+                                DataTableColumn(key="outcome_short", header="Outcome"),
+                                DataTableColumn(key="prob_display", header="Prob"),
+                                DataTableColumn(key="eta_display",  header="ETA"),
+                            ],
+                            rows=Rx("plan_steps"),
+                        )
+
+                    with Column(gap=2, css_class="flex-1"):
+                        Muted("ACTIVE TOOLS", css_class="text-xs uppercase tracking-wider")
+                        with Card():
+                            with CardContent(css_class="p-3"):
+                                with Column(gap=2):
+                                    with Row(gap=4):
+                                        Metric(label="Processes", value=Rx("active_processes"))
+                                        Metric(label="Workers",   value=Rx("active_workers"))
+                                        Metric(label="Queued",    value=Rx("active_queue"))
+                                    Text(f"{rx_active_sum}", css_class="text-sm text-muted")
+
+                        Separator(css_class="my-1")
+                        Muted("ASYNC SCANS", css_class="text-xs")
+                        with Column(gap=1, css_class="max-h-[200px] overflow-y-auto"):
+                            Muted(f"{rx_as_sum}", css_class="text-xs text-muted")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",    header="Tool"),
+                                    DataTableColumn(key="target",  header="Target"),
+                                    DataTableColumn(key="elapsed", header="Time"),
+                                    DataTableColumn(key="status",  header="Status"),
+                                ],
+                                rows=Rx("async_scans_running"),
+                            )
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",    header="Tool"),
+                                    DataTableColumn(key="target",  header="Target"),
+                                    DataTableColumn(key="elapsed", header="Time"),
+                                    DataTableColumn(key="status",  header="Status"),
+                                ],
+                                rows=Rx("async_scans_complete"),
+                            )
+
+                # ── System Trends (LineChart CPU/MEM) ──────────────────
+                Muted("SYSTEM TRENDS", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Row(gap=4, css_class="flex-wrap"):
+                        with Card():
+                            with CardContent(css_class="p-3"):
+                                with Row(gap=4):
+                                    Metric(label="CPU avg", value=Rx("trend_cpu_avg_display"))
+                                    Metric(label="MEM avg", value=Rx("trend_mem_avg_display"))
+                                    Metric(label="Period", value=Rx("trend_period_display"))
+                                    Metric(label="Measures", value=Rx("trend_measurements"))
+                    LineChart(
+                        data=Rx("trend_series"),
+                        series=[
+                            ChartSeries(data_key="cpu", label="CPU"),
+                            ChartSeries(data_key="mem", label="MEM"),
+                        ],
+                        x_axis="idx",
+                        height=140,
+                        show_legend=True,
+                    )
+
+                # ── Cache Status ────────────────────────────────────────
+                Muted("CACHE STATUS", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Row(gap=4, css_class="flex-wrap"):
+                        with Card():
+                            with CardContent(css_class="p-3"):
+                                with Row(gap=4):
+                                    Metric(label="Hits", value=Rx("cache_hits"))
+                                    Metric(label="Misses", value=Rx("cache_misses"))
+                                    Metric(label="Hit ratio", value=Rx("cache_hit_ratio_display"))
+                                    Metric(label="Size", value=Rx("cache_size"))
+                                    Metric(label="Max", value=Rx("cache_max_size"))
+                                    Metric(label="Util", value=Rx("cache_util_display"))
+                    Muted(f"{rx_cache_sum}", css_class="text-sm text-muted pt-1")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",       header="Tool"),
+                            DataTableColumn(key="cache_hits", header="Cache hits"),
+                            DataTableColumn(key="runs",       header="Runs"),
+                        ],
+                        rows=Rx("cache_by_tool"),
+                    )
+
+                # ── Cache Intelligence ──────────────────────────────────
+                Muted("CACHE INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    Muted(Rx("cache_ttl_summary"), css_class="text-sm text-muted")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="tool",               header="Tool"),
+                            DataTableColumn(key="hits",               header="Hits"),
+                            DataTableColumn(key="misses",             header="Misses"),
+                            DataTableColumn(key="hit_ratio_display",  header="Hit ratio"),
+                            DataTableColumn(key="current_ttl_display",header="TTL"),
+                        ],
+                        rows=Rx("cache_ttl_scores"),
+                    )
+
+                # ── Missing Tools ───────────────────────────────────────
+                Muted("MISSING TOOLS", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Row(gap=3, align="center"):
+                        Badge(f"{rx_missing_count} missing", variant="warning")
+                        Muted("tools without binary on PATH — use install_tool()", css_class="text-sm text-muted")
+                    DataTable(
+                        columns=[
+                            DataTableColumn(key="name",  header="Tool"),
+                            DataTableColumn(key="binary", header="Binary"),
+                            DataTableColumn(key="category", header="Category"),
+                            DataTableColumn(key="install_hint", header="Install hint"),
+                        ],
+                        rows=Rx("missing_tools"),
+                    )
+
+                # ── Rate Limit ──────────────────────────────────────────
+                Muted("RATE LIMIT", css_class="text-xs uppercase tracking-wider p-4")
+                with Row(gap=4, css_class="px-4 pb-4 items-start flex-wrap"):
+                    with Card():
+                        with CardContent(css_class="p-3"):
+                            with Column(gap=2):
+                                with Row(gap=3, align="center"):
+                                    Badge(f"{rx_rl_profile}", variant=rx_rl_var)
+                                    Muted(f"{rx_rl_conf_display}")
+                                with Row(gap=2, css_class="flex-wrap"):
+                                    Muted(f"{rx_rl_delay_display}")
+                                    Muted(f"\u00b7")
+                                    Muted(f"{rx_rl_threads} threads")
+                                    Muted(f"\u00b7")
+                                    Muted(f"timeout {rx_rl_to}s")
+                                Muted(f"{rx_rl_summary}", css_class="text-sm text-muted")
+                    with Card(css_class="flex-1"):
+                        with CardContent(css_class="p-3"):
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",     header="Tool"),
+                                    DataTableColumn(key="target",   header="Target"),
+                                    DataTableColumn(key="profile",  header="Profile"),
+                                    DataTableColumn(key="indicators", header="Triggers"),
+                                ],
+                                rows=Rx("rl_events"),
+                            )
+
+                # ── Intelligence ────────────────────────────────────────
+                Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
                 DataTable(
                     columns=[
-                        DataTableColumn(key="severity", header="Sev"),
-                        DataTableColumn(key="finding",  header="Finding"),
-                        DataTableColumn(key="score",    header="Sc."),
                         DataTableColumn(key="tool",     header="Tool"),
-                        DataTableColumn(key="details",  header="Details"),
+                        DataTableColumn(key="baseline", header="Baseline"),
+                        DataTableColumn(key="live",     header="Live"),
+                        DataTableColumn(key="blended",  header="Blended"),
+                        DataTableColumn(key="runs",     header="Runs"),
                     ],
-                    rows=Rx("findings"),
+                    rows=Rx("intelligence"),
                 )
 
-            with Column(gap=2, css_class="flex-1"):
-                Muted("PLAN IDE", css_class="text-xs uppercase tracking-wider")
-                Text(f"{rx_plan_summary}", css_class="text-sm text-muted")
-                DataTable(
-                    columns=[
-                        DataTableColumn(key="num",          header="#"),
-                        DataTableColumn(key="tool",         header="Tool"),
-                        DataTableColumn(key="outcome_short", header="Outcome"),
-                        DataTableColumn(key="prob_display", header="Prob"),
-                        DataTableColumn(key="eta_display",  header="ETA"),
-                    ],
-                    rows=Rx("plan_steps"),
-                )
-
-        Separator()
-
-        # ── Grid 2 colonnes: Historique | Active Tools ─────────────────
-        with Row(gap=4, css_class="p-4 items-start"):
-            with Column(gap=2, css_class="flex-1"):
-                Muted("HISTORY", css_class="text-xs uppercase tracking-wider")
-                DataTable(
-                    columns=[
-                        DataTableColumn(key="tool",              header="Tool"),
-                        DataTableColumn(key="target",            header="Target"),
-                        DataTableColumn(key="age",               header="When"),
-                        DataTableColumn(key="status",            header="\u2713"),
-                        DataTableColumn(key="execution_display", header="Time"),
-                    ],
-                    rows=Rx("history"),
-                )
-
-            with Column(gap=2, css_class="flex-1"):
-                Muted("ACTIVE TOOLS", css_class="text-xs uppercase tracking-wider")
-                with Card():
-                    with CardContent(css_class="p-3"):
-                        with Column(gap=2):
+                # ── Network I/O ─────────────────────────────────────────
+                Muted("NETWORK I/O", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Card():
+                        with CardContent(css_class="p-3"):
                             with Row(gap=4):
-                                Metric(label="Processes", value=Rx("active_processes"))
-                                Metric(label="Workers",   value=Rx("active_workers"))
-                                Metric(label="Queued",    value=Rx("active_queue"))
-                            Text(f"{rx_active_sum}", css_class="text-sm text-muted")
+                                Metric(label="Sent",     value=Rx("net_sent_display"))
+                                Metric(label="Received", value=Rx("net_recv_display"))
+                                Metric(label="Total",    value=Rx("net_total_display"))
 
-                Separator(css_class="my-1")
-                Muted("ASYNC SCANS", css_class="text-xs")
-                with Column(gap=1, css_class="max-h-[200px] overflow-y-auto"):
-                    Muted(f"{rx_as_sum}", css_class="text-xs text-muted")
+            # ── Zone 2 — Findings ───────────────────────────────────────
+            with Tab("Findings", value="findings"):
+
+                Muted("FINDINGS BY SEVERITY", css_class="text-xs uppercase tracking-wider p-4")
+                with Row(gap=4, css_class="px-4 pb-2 items-start flex-wrap"):
+                    with Card():
+                        with CardContent(css_class="p-3"):
+                            PieChart(
+                                data=Rx("findings_by_severity"),
+                                data_key="count",
+                                name_key="severity",
+                                height=180,
+                                inner_radius=50,
+                                show_legend=True,
+                            )
+
+                Muted("DETAILS", css_class="text-xs uppercase tracking-wider px-4 pt-2")
+                with Column(gap=2, css_class="px-4 pb-4"):
                     DataTable(
                         columns=[
-                            DataTableColumn(key="tool",    header="Tool"),
-                            DataTableColumn(key="target",  header="Target"),
-                            DataTableColumn(key="elapsed", header="Time"),
-                            DataTableColumn(key="status",  header="Status"),
-                        ],
-                        rows=Rx("async_scans_running"),
-                    )
-                    DataTable(
-                        columns=[
-                            DataTableColumn(key="tool",    header="Tool"),
-                            DataTableColumn(key="target",  header="Target"),
-                            DataTableColumn(key="elapsed", header="Time"),
-                            DataTableColumn(key="status",  header="Status"),
-                        ],
-                        rows=Rx("async_scans_complete"),
-                    )
-
-        Separator()
-
-        # ── Rate Limit ──────────────────────────────────────────────────
-        Muted("RATE LIMIT", css_class="text-xs uppercase tracking-wider p-4")
-        with Row(gap=4, css_class="px-4 pb-4 items-start flex-wrap"):
-            with Card():
-                with CardContent(css_class="p-3"):
-                    with Column(gap=2):
-                        with Row(gap=3, align="center"):
-                            Badge(f"{rx_rl_profile}", variant=rx_rl_var)
-                            Muted(f"{rx_rl_conf_display}")
-                        with Row(gap=2, css_class="flex-wrap"):
-                            Muted(f"{rx_rl_delay_display}")
-                            Muted(f"\u00b7")
-                            Muted(f"{rx_rl_threads} threads")
-                            Muted(f"\u00b7")
-                            Muted(f"timeout {rx_rl_to}s")
-                        Muted(f"{rx_rl_summary}", css_class="text-sm text-muted")
-            with Card(css_class="flex-1"):
-                with CardContent(css_class="p-3"):
-                    DataTable(
-                        columns=[
+                            DataTableColumn(key="severity", header="Sev"),
+                            DataTableColumn(key="finding",  header="Finding"),
+                            DataTableColumn(key="score",    header="Sc."),
                             DataTableColumn(key="tool",     header="Tool"),
-                            DataTableColumn(key="target",   header="Target"),
-                            DataTableColumn(key="profile",  header="Profile"),
-                            DataTableColumn(key="indicators", header="Triggers"),
+                            DataTableColumn(key="details",  header="Details"),
                         ],
-                        rows=Rx("rl_events"),
+                        rows=Rx("findings"),
                     )
 
-        Separator()
+            # ── Zone 3 — History ────────────────────────────────────────
+            with Tab("History", value="history"):
 
-        # ── Errors & Failures ────────────────────────────────────────────
-        Muted("ERRORS & FAILURES", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Row(gap=3, align="center"):
-                Badge(f"{rx_err_total} errors", variant="destructive")
-                Muted(f"{rx_err_sr} success")
-                Muted(f"{rx_err_sum}")
-            with Row(gap=4, css_class="items-start flex-wrap"):
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("By tool", css_class="text-xs")
+                # ── History (scans récents) ─────────────────────────────
+                Muted("HISTORY", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
                     DataTable(
                         columns=[
-                            DataTableColumn(key="tool",    header="Tool"),
-                            DataTableColumn(key="display", header="Err/Runs"),
+                            DataTableColumn(key="tool",              header="Tool"),
+                            DataTableColumn(key="target",            header="Target"),
+                            DataTableColumn(key="age",               header="When"),
+                            DataTableColumn(key="status",            header="\u2713"),
+                            DataTableColumn(key="execution_display", header="Time"),
                         ],
-                        rows=Rx("error_by_tool"),
+                        rows=Rx("history"),
                     )
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("Timeouts", css_class="text-xs")
+
+                # ── Errors & Failures ───────────────────────────────────
+                Muted("ERRORS & FAILURES", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Row(gap=3, align="center"):
+                        Badge(f"{rx_err_total} errors", variant="destructive")
+                        Muted(f"{rx_err_sr} success")
+                        Muted(f"{rx_err_sum}")
+                    with Row(gap=4, css_class="items-start flex-wrap"):
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("By tool", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",    header="Tool"),
+                                    DataTableColumn(key="display", header="Err/Runs"),
+                                ],
+                                rows=Rx("error_by_tool"),
+                            )
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("Timeouts", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",    header="Tool"),
+                                    DataTableColumn(key="display", header="To/Runs"),
+                                ],
+                                rows=Rx("timeout_by_tool"),
+                            )
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("Slowest tools", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",        header="Tool"),
+                                    DataTableColumn(key="avg_display", header="Avg"),
+                                    DataTableColumn(key="max_display", header="Max"),
+                                    DataTableColumn(key="runs",        header="Runs"),
+                                ],
+                                rows=Rx("slowest_tools"),
+                            )
+                    with Row(gap=2, css_class="pt-2"):
+                        Muted("By error type", css_class="text-xs")
                     DataTable(
                         columns=[
-                            DataTableColumn(key="tool",    header="Tool"),
-                            DataTableColumn(key="display", header="To/Runs"),
+                            DataTableColumn(key="type",  header="Error Type"),
+                            DataTableColumn(key="count", header="Count"),
                         ],
-                        rows=Rx("timeout_by_tool"),
+                        rows=Rx("error_by_type"),
                     )
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("Slowest tools", css_class="text-xs")
+                    with Row(gap=2, css_class="pt-2"):
+                        Muted("Recent errors", css_class="text-xs")
                     DataTable(
                         columns=[
-                            DataTableColumn(key="tool",        header="Tool"),
-                            DataTableColumn(key="avg_display", header="Avg"),
-                            DataTableColumn(key="max_display", header="Max"),
-                            DataTableColumn(key="runs",        header="Runs"),
+                            DataTableColumn(key="tool", header="Tool"),
+                            DataTableColumn(key="type", header="Type"),
+                            DataTableColumn(key="ts",   header="Timestamp"),
                         ],
-                        rows=Rx("slowest_tools"),
-                    )
-            with Row(gap=2, css_class="pt-2"):
-                Muted("By error type", css_class="text-xs")
-            DataTable(
-                columns=[
-                    DataTableColumn(key="type",  header="Error Type"),
-                    DataTableColumn(key="count", header="Count"),
-                ],
-                rows=Rx("error_by_type"),
-            )
-            with Row(gap=2, css_class="pt-2"):
-                Muted("Recent errors", css_class="text-xs")
-            DataTable(
-                columns=[
-                    DataTableColumn(key="tool", header="Tool"),
-                    DataTableColumn(key="type", header="Type"),
-                    DataTableColumn(key="ts",   header="Timestamp"),
-                ],
-                rows=Rx("recent_errors"),
-            )
-
-        Separator()
-
-        # ── Tool Performance ────────────────────────────────────────────
-        Muted("TOOL PERFORMANCE", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            Muted(f"{rx_perf_sum}", css_class="text-sm text-muted")
-            with Row(gap=4, css_class="items-start flex-wrap"):
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("Success rate", css_class="text-xs")
-                    DataTable(
-                        columns=[
-                            DataTableColumn(key="tool",        header="Tool"),
-                            DataTableColumn(key="rate_display", header="Rate"),
-                            DataTableColumn(key="runs",        header="Runs"),
-                            DataTableColumn(key="timeouts",    header="To"),
-                        ],
-                        rows=Rx("tool_performance"),
-                    )
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("Tools with timeouts", css_class="text-xs")
-                    DataTable(
-                        columns=[
-                            DataTableColumn(key="tool",    header="Tool"),
-                            DataTableColumn(key="display", header="To/Runs"),
-                        ],
-                        rows=Rx("perf_timeouts"),
+                        rows=Rx("recent_errors"),
                     )
 
-        Separator()
+                # ── Tool Performance ─────────────────────────────────────
+                Muted("TOOL PERFORMANCE", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    Muted(f"{rx_perf_sum}", css_class="text-sm text-muted")
+                    with Row(gap=4, css_class="items-start flex-wrap"):
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("Success rate", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",        header="Tool"),
+                                    DataTableColumn(key="rate_display", header="Rate"),
+                                    DataTableColumn(key="runs",        header="Runs"),
+                                    DataTableColumn(key="timeouts",    header="To"),
+                                ],
+                                rows=Rx("tool_performance"),
+                            )
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("Tools with timeouts", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="tool",    header="Tool"),
+                                    DataTableColumn(key="display", header="To/Runs"),
+                                ],
+                                rows=Rx("perf_timeouts"),
+                            )
 
-        # ── Missing Tools ────────────────────────────────────────────────
-        Muted("MISSING TOOLS", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Row(gap=3, align="center"):
-                Badge(f"{rx_missing_count} missing", variant="warning")
-                Muted("tools without binary on PATH — use install_tool()", css_class="text-sm text-muted")
-            DataTable(
-                columns=[
-                    DataTableColumn(key="name",  header="Tool"),
-                    DataTableColumn(key="binary", header="Binary"),
-                    DataTableColumn(key="category", header="Category"),
-                    DataTableColumn(key="install_hint", header="Install hint"),
-                ],
-                rows=Rx("missing_tools"),
-            )
+                # ── Sessions ─────────────────────────────────────────────
+                Muted("SESSIONS", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    Muted(f"{rx_sess_sum}", css_class="text-sm text-muted")
+                    with Row(gap=4, css_class="items-start flex-wrap"):
+                        with Column(gap=2, css_class="flex-1 min-w-[200px]"):
+                            Muted("Completed", css_class="text-xs")
+                            DataTable(
+                                columns=[
+                                    DataTableColumn(key="session_id",   header="Session"),
+                                    DataTableColumn(key="target",       header="Target"),
+                                    DataTableColumn(key="total_findings", header="Finds"),
+                                    DataTableColumn(key="age_display",  header="Age"),
+                                ],
+                                rows=Rx("sessions_completed"),
+                            )
 
-        Separator()
-
-        # ── Cache Status ────────────────────────────────────────────────
-        Muted("CACHE STATUS", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Row(gap=4, css_class="flex-wrap"):
-                with Card():
-                    with CardContent(css_class="p-3"):
-                        with Row(gap=4):
-                            Metric(label="Hits", value=Rx("cache_hits"))
-                            Metric(label="Misses", value=Rx("cache_misses"))
-                            Metric(label="Hit ratio", value=Rx("cache_hit_ratio_display"))
-                            Metric(label="Size", value=Rx("cache_size"))
-                            Metric(label="Max", value=Rx("cache_max_size"))
-                            Metric(label="Util", value=Rx("cache_util_display"))
-            Muted(f"{rx_cache_sum}", css_class="text-sm text-muted pt-1")
-            DataTable(
-                columns=[
-                    DataTableColumn(key="tool",       header="Tool"),
-                    DataTableColumn(key="cache_hits", header="Cache hits"),
-                    DataTableColumn(key="runs",       header="Runs"),
-                ],
-                rows=Rx("cache_by_tool"),
-            )
-
-        Separator()
-
-        # ── Cache Intelligence ───────────────────────────────────────────
-        Muted("CACHE INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            Muted(Rx("cache_ttl_summary"), css_class="text-sm text-muted")
-            DataTable(
-                columns=[
-                    DataTableColumn(key="tool",               header="Tool"),
-                    DataTableColumn(key="hits",               header="Hits"),
-                    DataTableColumn(key="misses",             header="Misses"),
-                    DataTableColumn(key="hit_ratio_display",  header="Hit ratio"),
-                    DataTableColumn(key="current_ttl_display",header="TTL"),
-                ],
-                rows=Rx("cache_ttl_scores"),
-            )
-
-        Separator()
-
-        # ── System Trends ───────────────────────────────────────────────
-        Muted("SYSTEM TRENDS", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Row(gap=4, css_class="flex-wrap"):
-                with Card():
-                    with CardContent(css_class="p-3"):
-                        with Row(gap=4):
-                            Metric(label="CPU avg", value=Rx("trend_cpu_avg_display"))
-                            Metric(label="MEM avg", value=Rx("trend_mem_avg_display"))
-                            Metric(label="Period", value=Rx("trend_period_display"))
-                            Metric(label="Measures", value=Rx("trend_measurements"))
-            with Row(gap=4, css_class="pt-2 flex-wrap"):
-                with Column(gap=1, css_class="flex-1 min-w-[200px]"):
-                    Muted("CPU", css_class="text-xs")
-                    Sparkline(data=Rx("trend_cpu_history"), height=24, variant="info", fill=True, curve="smooth")
-                with Column(gap=1, css_class="flex-1 min-w-[200px]"):
-                    Muted("Memory", css_class="text-xs")
-                    Sparkline(data=Rx("trend_mem_history"), height=24, variant="warning", fill=True, curve="smooth")
-
-        Separator()
-
-        # ── Sessions ────────────────────────────────────────────────────
-        Muted("SESSIONS", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            Muted(f"{rx_sess_sum}", css_class="text-sm text-muted")
-            with Row(gap=4, css_class="items-start flex-wrap"):
-                with Column(gap=2, css_class="flex-1 min-w-[200px]"):
-                    Muted("Completed", css_class="text-xs")
-                    DataTable(
-                        columns=[
-                            DataTableColumn(key="session_id",   header="Session"),
-                            DataTableColumn(key="target",       header="Target"),
-                            DataTableColumn(key="total_findings", header="Finds"),
-                            DataTableColumn(key="age_display",  header="Age"),
-                        ],
-                        rows=Rx("sessions_completed"),
-                    )
-
-        Separator()
-
-        # ── Confirmations ───────────────────────────────────────────────
-        Muted("CONFIRMATIONS", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Card():
-                with CardContent(css_class="p-3"):
-                    with Row(gap=4):
-                        Metric(label="Accepted", value=Rx("conf_accepted"))
-                        Metric(label="Denied",   value=Rx("conf_denied"))
-                        Metric(label="Skipped",  value=Rx("conf_skipped"))
-            Muted(f"{rx_conf_sum}", css_class="text-sm text-muted pt-1")
-
-        Separator()
-
-        # ── Network I/O ─────────────────────────────────────────────────
-        Muted("NETWORK I/O", css_class="text-xs uppercase tracking-wider p-4")
-        with Column(gap=2, css_class="px-4 pb-4"):
-            with Card():
-                with CardContent(css_class="p-3"):
-                    with Row(gap=4):
-                        Metric(label="Sent",     value=Rx("net_sent_display"))
-                        Metric(label="Received", value=Rx("net_recv_display"))
-                        Metric(label="Total",    value=Rx("net_total_display"))
-
-        Separator()
-
-        # ── Intelligence ───────────────────────────────────────────────
-        Muted("INTELLIGENCE", css_class="text-xs uppercase tracking-wider p-4")
-        DataTable(
-            columns=[
-                DataTableColumn(key="tool",     header="Tool"),
-                DataTableColumn(key="baseline", header="Baseline"),
-                DataTableColumn(key="live",     header="Live"),
-                DataTableColumn(key="blended",  header="Blended"),
-                DataTableColumn(key="runs",     header="Runs"),
-            ],
-            rows=Rx("intelligence"),
-        )
-
-        Separator()
+                # ── Confirmations ────────────────────────────────────────
+                Muted("CONFIRMATIONS", css_class="text-xs uppercase tracking-wider p-4")
+                with Column(gap=2, css_class="px-4 pb-4"):
+                    with Card():
+                        with CardContent(css_class="p-3"):
+                            with Row(gap=4):
+                                Metric(label="Accepted", value=Rx("conf_accepted"))
+                                Metric(label="Denied",   value=Rx("conf_denied"))
+                                Metric(label="Skipped",  value=Rx("conf_skipped"))
+                    Muted(f"{rx_conf_sum}", css_class="text-sm text-muted pt-1")
 
         # ── Next suggested tool ─────────────────────────────────────────
         with Row(gap=3, align="center", css_class="p-2 px-4 bg-muted/10 border-b flex-wrap"):

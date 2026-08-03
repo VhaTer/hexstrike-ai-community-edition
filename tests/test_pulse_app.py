@@ -801,6 +801,45 @@ class TestPulseDashboard:
         view = str(app.view)
         assert "NEXT TOOL" in view
 
+    def test_findings_severity_breakdown(self):
+        """S92: findings aggregated by severity in canonical order."""
+        st = pulse_app._collect_dashboard_state()
+        st["findings"] = [
+            {"severity": "high", "finding": "a"},
+            {"severity": "critical", "finding": "b"},
+            {"severity": "info", "finding": "c"},
+            {"severity": "high", "finding": "d"},
+        ]
+        ui = _build_ui_state(st)
+        assert ui["findings_by_severity"] == [
+            {"severity": "Critical", "count": 1},
+            {"severity": "High", "count": 2},
+            {"severity": "Info", "count": 1},
+        ]
+
+    def test_findings_severity_empty(self):
+        st = pulse_app._collect_dashboard_state()
+        st["findings"] = []
+        assert _build_ui_state(st)["findings_by_severity"] == []
+
+    def test_trend_series_zips_cpu_mem(self):
+        """S92: LineChart series derived from cpu/mem history."""
+        st = pulse_app._collect_dashboard_state()
+        st["trends"]["cpu_history"] = [1, 2, 3]
+        st["trends"]["mem_history"] = [4, 5, 6]
+        assert _build_ui_state(st)["trend_series"] == [
+            {"idx": 0, "cpu": 1, "mem": 4},
+            {"idx": 1, "cpu": 2, "mem": 5},
+            {"idx": 2, "cpu": 3, "mem": 6},
+        ]
+
+    def test_three_zone_layout_present(self):
+        """S92: dashboard is organized in 3 tabs."""
+        app = pulse_app.pulse_dashboard()
+        view = str(app.view)
+        for marker in ("Overview & Workflow", "Findings", "History"):
+            assert marker in view
+
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 
