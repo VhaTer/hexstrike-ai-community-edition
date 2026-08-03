@@ -655,9 +655,8 @@ def pulse_dashboard(st: dict) -> PrefabApp:
                             with CardContent(css_class="p-3"):
                                 with Column(gap=2):
                                     with Row(gap=4):
-                                        Metric(label="Processes", value=Rx("active_processes"))
-                                        Metric(label="Workers",   value=Rx("active_workers"))
-                                        Metric(label="Queued",    value=Rx("active_queue"))
+                                        Metric(label="Processes",   value=Rx("active_processes"))
+                                        Metric(label="Async scans", value=Rx("active_workers"))
                                     Text(f"{rx_active_sum}", css_class="text-sm text-muted")
 
                         Separator(css_class="my-1")
