@@ -89,7 +89,8 @@ Flags: `--json` (structured output), `-o FILE` (write output).
 ```
 python3 -m pulse.server.mcp_entry --transport http   # or ./hexstrike-pulse
 http://127.0.0.1:8888/mcp           # SSE endpoint
-http://127.0.0.1:8888/dashboard     # Web UI dashboard (requires `ui/` build)
+http://127.0.0.1:8888/web-dashboard  # Dashboard JSON
+http://127.0.0.1:8888/api/dashboard.json  # same data, plain JSON
 ```
 
 ### 3. MCP stdio (`pulse/server/mcp_entry.py`)

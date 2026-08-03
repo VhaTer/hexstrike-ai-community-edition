@@ -111,12 +111,12 @@ The agent runs nmap, whatweb, nuclei, and nikto in sequence, resolves findings, 
 
 ### Monitor
 
-Open `http://127.0.0.1:8888/dashboard` while scans run. 10 panels across 3 tabs:
+The Pulse dashboard is the Prefab UI opened via the `pulse_dashboard()` MCP tool while scans run. The same data is exposed as JSON on `http://127.0.0.1:8888/web-dashboard`. 3 zones:
 
 | Tab | Panels |
 |-----|--------|
-| **Overview** | Header, Scope, Surface, Findings, System Trends, Cache Status, Intelligence |
-| **Workflow** | Plan IDE, Active Tools, Async Scans, Missing Tools, Rate Limit |
+| **Overview & Workflow** | Header, Scope, Surface, Plan IDE, Active Tools, Async Scans, System Trends (CPU/MEM chart), Cache Status, Cache Intelligence, Missing Tools, Rate Limit, Intelligence, Network I/O |
+| **Findings** | Severity breakdown chart, Findings details |
 | **History** | History, Sessions, Errors & Failures, Tool Performance, Confirmations |
 
 ### Execute
