@@ -40,6 +40,7 @@ from config import _config as app_config
 from pulse.interface.server_setup import _scan_cache, _rate_limit_events, _optimizer, TOOL_TIMEOUTS
 from pulse.tools.null_context import NullContext
 from pulse.infrastructure.telemetry.operational_metrics import _op_metrics
+from pulse.infrastructure.execution.process_manager import ProcessManager
 from pulse.infrastructure.singletons import enhanced_process_manager, error_handler, get_decision_engine, get_target_store, get_tool_stats_store, get_ctf_manager
 from pulse.intelligence.exploit_rules import suggest_exploit, ESTIMATED_TIMES, compute_layer2_score
 from tool_registry import TOOLS
@@ -623,35 +624,71 @@ def get_plan(target: str | None = None, objective: str = "comprehensive") -> dic
 
 @app.tool()
 def get_active_tools() -> dict:
-    """Show currently running processes, worker pool stats, and resource usage.
+    """Show what is actually running: live commands, background scans, resources.
 
-    Returns active_processes count, active_workers, queue_size, pool_stats,
-    resource_usage, auto_scaling status, and a human-readable summary.
+    Data sources (all real):
+    - active_processes: subprocesses currently running, from the process
+      registry written by the command executor (one entry per live tool run)
+    - active_workers: background scans (run_async_tool) still in progress
+    - resource_usage: live CPU/memory/disk from the resource monitor
 
     No target required — shows system-wide process state.
-    Call before launching new scans to check if capacity is available.
-    Call when scan_background() tasks are running to monitor progress.
+    Call before launching new scans to check the machine is not overloaded,
+    and after run_async_tool()/scan_background() to monitor progress.
     Example: get_active_tools()
     """
     try:
-        stats = enhanced_process_manager.get_comprehensive_stats()
-        pool = stats.get("process_pool", {})
-        active = stats.get("active_processes", 0)
-        workers = pool.get("active_workers", 0)
-        queue = pool.get("queue_size", 0)
-        resource = stats.get("resource_usage", {})
+        registered = ProcessManager.list_active_processes()
+        running = {
+            pid: info
+            for pid, info in registered.items()
+            if info.get("status") == "running"
+        }
+        processes = [
+            {
+                "pid": pid,
+                "command": info.get("command", ""),
+                "status": info.get("status", ""),
+                "progress": round(info.get("progress", 0.0), 2),
+                "runtime": round(info.get("runtime", 0.0), 1),
+                "eta": round(info.get("eta", 0.0), 1),
+            }
+            for pid, info in sorted(running.items())
+        ]
+        with _async_scans_lock:
+            async_scans = [
+                {
+                    "scan_id": scan_id,
+                    "tool": info.get("tool", ""),
+                    "target": info.get("target", ""),
+                    "status": info.get("status", ""),
+                    "elapsed": round(time.time() - info.get("start_time", time.time()), 1),
+                }
+                for scan_id, info in _async_scans.items()
+                if info.get("status") in ("starting", "running")
+            ]
+        resource = enhanced_process_manager.get_comprehensive_stats().get("resource_usage", {})
         return {
-            "active_processes":  active,
-            "active_workers":    workers,
-            "queue_size":        queue,
-            "pool_stats":        pool,
-            "resource_usage":    resource,
-            "auto_scaling":      stats.get("auto_scaling_enabled", False),
-            "summary":           f"{active} active \u00b7 {workers} workers \u00b7 {queue} queued",
+            "active_processes": len(processes),
+            "active_workers": len(async_scans),
+            "queue_size": 0,
+            "processes": processes,
+            "async_scans": async_scans,
+            "resource_usage": resource,
+            "summary": (
+                f"{len(processes)} process(es) · {len(async_scans)} async scan(s)"
+                f" · CPU {resource.get('cpu_percent', '?')}% · RAM {resource.get('memory_percent', '?')}%"
+            ),
         }
     except Exception as e:
+        logger.debug(f"get_active_tools unavailable: {e}")
         return {
-            "active_processes": 0, "active_workers": 0, "queue_size": 0,
+            "active_processes": 0,
+            "active_workers": 0,
+            "queue_size": 0,
+            "processes": [],
+            "async_scans": [],
+            "resource_usage": {},
             "summary": f"Unavailable: {str(e)[:80]}",
         }
 

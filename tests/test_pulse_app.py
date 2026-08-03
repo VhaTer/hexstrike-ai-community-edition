@@ -458,13 +458,52 @@ class TestGetPlan:
 class TestGetActiveTools:
     def test_returns_dict_with_expected_keys(self):
         result = pulse_app.get_active_tools()
-        for key in ("active_processes", "active_workers", "queue_size", "summary"):
+        for key in ("active_processes", "active_workers", "queue_size",
+                    "processes", "async_scans", "resource_usage", "summary"):
             assert key in result
 
     def test_summary_format(self):
         result = pulse_app.get_active_tools()
         assert isinstance(result["summary"], str)
         assert len(result["summary"]) > 0
+
+    def test_counts_running_processes_only(self):
+        fake_registry = {
+            1111: {"pid": 1111, "command": "nmap -sV 10.0.0.1", "status": "running",
+                   "progress": 0.4, "runtime": 12.0, "eta": 8.0},
+            2222: {"pid": 2222, "command": "curl http://x", "status": "running",
+                   "progress": 0.0, "runtime": 3.0, "eta": 0.0},
+            3333: {"pid": 3333, "command": "done", "status": "terminated",
+                   "progress": 0.0, "runtime": 1.0, "eta": 0.0},
+        }
+        with patch("pulse.infrastructure.execution.process_manager.active_processes", fake_registry):
+            result = pulse_app.get_active_tools()
+        assert result["active_processes"] == 2
+        assert len(result["processes"]) == 2
+        assert all("process" not in p["command"] for p in result["processes"])
+        assert "2 process" in result["summary"]
+
+    def test_counts_running_async_scans_only(self):
+        now = time.time()
+        with pulse_app._async_scans_lock:
+            pulse_app._async_scans["scan_test1"] = {
+                "tool": "nmap", "target": "10.0.0.1", "status": "running",
+                "start_time": now - 5,
+            }
+            pulse_app._async_scans["scan_test2"] = {
+                "tool": "sqlmap", "target": "10.0.0.1", "status": "completed",
+                "start_time": now - 10,
+            }
+        try:
+            result = pulse_app.get_active_tools()
+        finally:
+            with pulse_app._async_scans_lock:
+                pulse_app._async_scans.pop("scan_test1", None)
+                pulse_app._async_scans.pop("scan_test2", None)
+        assert result["active_workers"] == 1
+        assert len(result["async_scans"]) == 1
+        assert result["async_scans"][0]["scan_id"] == "scan_test1"
+        assert result["async_scans"][0]["tool"] == "nmap"
 
 
 # ── get_history ────────────────────────────────────────────────────────────────
