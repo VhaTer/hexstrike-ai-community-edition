@@ -619,6 +619,51 @@ class TestCancelScan:
         finally:
             self._teardown(scan_id)
 
+    def test_thread_finalizes_cancelled_after_cancel(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_run(ctx, tool, params):
+            started.set()
+            release.wait(2)
+            return {"success": True, "output": "partial", "error": "", "returncode": 0}
+
+        with patch("pulse.interface.server_setup.run_security_tool", side_effect=fake_run):
+            result = pulse_app.run_async_tool(tool="nmap", target="10.0.0.1")
+            scan_id = result["scan_id"]
+            cancel = pulse_app.cancel_scan(scan_id)
+            assert cancel["status"] == "cancelled"
+            release.set()
+            time.sleep(0.5)
+            status = pulse_app.get_scan_status(scan_id)
+            assert status["status"] == "cancelled"
+            assert status["result"]["success"] is True
+        with pulse_app._async_scans_lock:
+            pulse_app._async_scans.pop(scan_id, None)
+
+    def test_cancel_before_thread_runs_skips_command(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_run(ctx, tool, params):
+            started.set()
+            release.wait(2)
+            return {"success": True, "output": "x", "error": "", "returncode": 0}
+
+        with patch("pulse.interface.server_setup.run_security_tool", side_effect=fake_run) as mock_run:
+            result = pulse_app.run_async_tool(tool="nmap", target="10.0.0.1")
+            scan_id = result["scan_id"]
+            pulse_app.cancel_scan(scan_id)
+            time.sleep(0.4)
+            status = pulse_app.get_scan_status(scan_id)
+            assert status["status"] == "cancelled"
+            if not started.is_set():
+                mock_run.assert_not_called()
+        release.set()
+        time.sleep(0.2)
+        with pulse_app._async_scans_lock:
+            pulse_app._async_scans.pop(scan_id, None)
+
 
 # ── get_history ────────────────────────────────────────────────────────────────
 
